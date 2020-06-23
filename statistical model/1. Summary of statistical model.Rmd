@@ -34,7 +34,7 @@ library(lme4)
 library(nlme)
 library(MuMIn)
 
-#Input data from Euler
+#Input data from Euler.
 CNdata <- read.csv(file="/cluster/work/climate/bestocke/data/Yunke_CNcycle/Statistical_sites/1_statistical_model.csv")
 leafCN3 <- read.csv(file="/cluster/work/climate/bestocke/data/Yunke_CNcycle/Statistical_sites/2_leafCN.csv")
 
