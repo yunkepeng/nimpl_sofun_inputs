@@ -34,9 +34,9 @@ Each elements were derived from different sources, and some of them may be resam
 ```{r}
 library(raster)
 
-soil <- raster('E:/final round/data/w001000.adf') # map input from the last 2015 version of ISRIC (Batjes 2015 ISRIC report)
+soil <- raster('/cluster/work/climate/bestocke/data/Yunke_CNcycle/Global_grids/Original/soilCN/w001000.adf') # map input from the last 2015 version of ISRIC (Batjes 2015 ISRIC report)
 
-Global_grid <- as.data.frame(read.csv(file="E:/climate/Global_cell.csv")) #Input global land grids (0.5 degree;N = 259200)
+Global_grid <- as.data.frame(read.csv(file="/cluster/work/climate/bestocke/data/Yunke_CNcycle/Global_grids/Original/soilCN/Global_cell.csv")) #Input global land grids (0.5 degree;N = 259200)
 
 Global_grid$ID <- c(1:259200) #create a list of number, just helping to form a raster then.
 
@@ -46,7 +46,7 @@ vec.soil.extract <-extract(soil,pointXY)
 data.soil.extract <-data.frame(pointXY,SUID=vec.soil.extract) 
 # These two steps are important, it will extract SUID information from soil map to our grids data, so that each our global grid will have a SUID, which will be further combined (merged) with soil C/N data then.
 
-ISRIC.data<-read.csv(file="E:/final round/HW30s_FULL.csv",header=TRUE,sep=";",dec = ".") # Now, input ISRIC database
+ISRIC.data<-read.csv(file="/cluster/work/climate/bestocke/data/Yunke_CNcycle/Global_grids/Original/soilCN/HW30s_FULL.csv",header=TRUE,sep=";",dec = ".") # Now, input ISRIC database
 
 data.soil.extract <- merge(data.soil.extract,ISRIC.data,by='SUID',all.x=TRUE) # merge site with soil variables by using SUID
 
@@ -79,7 +79,7 @@ library(raster)
 library(ncdf4)
 #set the path and filename
 
-ncfname <- paste ("E:/C-N cycling/Carbon allocation/672 sites analysis/stand age/GFAD_V1-1/", "GFAD_V1-1", ".nc", sep="")
+ncfname <- paste ("/cluster/work/climate/bestocke/data/Yunke_CNcycle/Global_grids/Original/age/", "GFAD_V1-1", ".nc", sep="")
 dname <- "age"
 
 #1. open a netCDF file and check variable
@@ -130,110 +130,3 @@ class(r)
 plot(r)
 
 ``` 
-#fAPAR comes first
-```{r}
-######fAPAR######
-ncpath <- "E:/C-N cycling/Carbon allocation/fAPAR/fAPAR HUANYUAN/"
-ncname <- "fAPAR3g_v2_1982_2016_FILLED"
-ncfname <- paste (ncpath, ncname, ".nc", sep="")
-dname <- "FAPAR_FILLED"
-
-# open a netCDF file and check variable
-ncin <- nc_open(ncfname)
-
-print(ncin)
-
-# 2.2 Get coordinate (including time variables)
-# Get longitude and latitude
-lon <- ncvar_get(ncin,"LON")
-nlon <- dim(lon) 
-head(lon)
-
-lat<-ncvar_get(ncin,"LAT")
-nlat<-dim(lat)
-head(lat)
-
-Time <- ncvar_get(ncin,"TIME_bnds") # monthly 1982-2016
-FAPAR <- ncvar_get(ncin,"FAPAR_FILLED")
-dim(Time)
-
-#rm(FAPAR)
-
-print(c(nlon,nlat))
-
-nc_close(ncin)
-
-#for fAPAR
-
-pre.vec.long <- as.vector(FAPAR)
-
-pre.mat <- matrix(pre.vec.long, nrow = nlon * nlat, ncol = 420) # 259200 * 420 (420 is 35 years)
-dim(pre.mat)
-
-lonlat <- expand.grid(lon, lat)
-
-#pre.df01 <- data.frame(cbind(lonlat, pre.mat))
-
-# 422 row = lon, lat, monthly data from 1982-2016
-# Now, select lat,lon and 1982-2011
-fAPAR1982_2011 <- pre.mat[,c(1:360)]
-dim(fAPAR1982_2011)
-
-final_fAPAR <- rowMeans(fAPAR1982_2011,na.rm = TRUE)
-summary(final_fAPAR)
-
-fAPAR_input <- as.data.frame(cbind(lonlat,final_fAPAR))
-names(fAPAR_input) <- c("lon","lat","fAPAR")
-
-#fAPAR_input is a dataframe, including 3 columns: lon, lat, age (age is our values)
-#1.convert dataframe to grids
-coordinates(fAPAR_input) <- ~lon+lat 
-gridded(fAPAR_input) <- TRUE
-
-#2. check grids information and convert it to raster
-class(fAPAR_input)
-str(fAPAR_input@data)
-
-r3 <- raster(fAPAR_input, "fAPAR") 
-
-#3. Have a look at global map
-class(r3)
-plot(r3)
-```
-
-#alpha
-
-```{r}
-library(raster)
-alphalist <- list.files(path = "E:/C-N cycling/Carbon allocation/672 sites analysis/alpha/",full.names = T) #Input alpha from a list of data frame from 1901 to 2016
-empty_alpha <- data.frame(matrix(NA)) 
-
-#calculate alpha within 30 years (1982-2011)
-for (i in 82:111){ #here 82:111 means 1982-2011
-  load(file = alphalist[82])
-  empty_alpha[1:259200,i-81] <- rowMeans(SP_result_monthly,na.rm = TRUE)
-}
-
-final_alpha <- rowMeans(empty_alpha,na.rm = TRUE)
-
-#alpha_input is a dataframe, including 3 columns: lon, lat, age (age is our values)
-alpha_input <- as.data.frame(cbind(lonlat,final_alpha))
-names(alpha_input) <- c("lon","lat","alpha")
-
-coordinates(alpha_input) <- ~lon+lat 
-gridded(alpha_input) <- TRUE
-
-#2. check grids information and convert it to raster
-class(alpha_input)
-str(alpha_input@data)
-
-r4 <- raster(alpha_input, "alpha") 
-
-#3. Have a look at global map
-class(r4)
-plot(r4)
-r4
-``` 
-
-
-
