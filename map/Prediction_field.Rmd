@@ -1,8 +1,8 @@
 ---
 output:
-  html_document: default
-  pdf_document: default
   word_document: default
+  pdf_document: default
+  html_document: default
 ---
 
 ---
@@ -34,9 +34,9 @@ The process below will provide original codes of soil C/N, stand age, fAPAR, alp
 ```{r}
 library(raster)
 
-soil <- raster('E:/final round/data/w001000.adf') # map input from the last 2015 version of ISRIC (Batjes 2015 ISRIC report)
+soil <- raster('/cluster/work/climate/bestocke/data/nimpl_sofun_inputs/map/Original_data/soilCN/w001000.adf') # map input from the last 2015 version of ISRIC (Batjes 2015 ISRIC report)
 
-Global_grid <- as.data.frame(read.csv(file="E:/climate/Global_cell.csv")) #Input global land grids (0.5 degree;N = 259200)
+Global_grid <- as.data.frame(read.csv(file="/cluster/work/climate/bestocke/data/nimpl_sofun_inputs/map/Original_data/soilCN/Global_cell.csv")) #Input global land grids (0.5 degree;N = 259200)
 
 Global_grid$ID <- c(1:259200) #create a list of number, just helping to form a raster then.
 
@@ -46,7 +46,7 @@ vec.soil.extract <-extract(soil,pointXY)
 data.soil.extract <-data.frame(pointXY,SUID=vec.soil.extract) 
 # These two steps are important, it will extract SUID information from soil map to our grids data, so that each our global grid will have a SUID, which will be further combined (merged) with soil C/N data then.
 
-ISRIC.data<-read.csv(file="E:/final round/HW30s_FULL.csv",header=TRUE,sep=";",dec = ".") # Now, input ISRIC database
+ISRIC.data<-read.csv(file="/cluster/work/climate/bestocke/data/nimpl_sofun_inputs/map/Original_data/soilCN/HW30s_FULL.csv",header=TRUE,sep=";",dec = ".") # Now, input ISRIC database
 
 data.soil.extract <- merge(data.soil.extract,ISRIC.data,by='SUID',all.x=TRUE) # merge site with soil variables by using SUID
 
@@ -61,6 +61,7 @@ ss2 <- ss1[,c(3,4,5)] # now,select lon, lat and CNrt only
 final_CN <-Reduce(function(x,y) merge(x = x, y = y, by = c("lon","lat"),all.x=TRUE), 
                    list(Global_grid,ss2)) #merged this with global grids (N = 259200)
 
+#convert dataframe to raster
 coordinates(final_CN) <- ~lon+lat 
 
 gridded(final_CN) <- TRUE
@@ -71,22 +72,19 @@ plot(rCNrt)
 ```
 
 
-
-
 #2. stand age
 ```{r}
 library(raster)
 library(ncdf4)
-#set the path and filename
 
-ncfname <- paste ("E:/C-N cycling/Carbon allocation/672 sites analysis/stand age/GFAD_V1-1/", "GFAD_V1-1", ".nc", sep="")
+#set the path and filename
+ncfname <- paste ("/cluster/work/climate/bestocke/data/nimpl_sofun_inputs/map/Original_data/age/", "GFAD_V1-1", ".nc", sep="")
 
 dname <- "age"
 
 #1. open a netCDF file and check variable
 ncin <- nc_open(ncfname)
-print(ncin)
-summary(ncin) #here ncin includes 4 pfts at 15 age classes
+print(ncin)#here ncin includes 4 pfts at 15 age classes
 
 #2. Get coordinate and value
 lon <- ncvar_get(ncin,"lon")
@@ -100,9 +98,8 @@ age <-ncvar_get(ncin,"age")
 nc_close(ncin)
 
 pre.vec.long <- as.vector(age)
-length(pre.vec.long)
 
-pre.mat <- matrix(pre.vec.long, nrow = nlon * nlat, ncol = 4*15) # 259200 * 420 - here it represents 4 PFTs and 15 age classes.
+pre.mat <- matrix(pre.vec.long, nrow = nlon * nlat, ncol = 4*15) # 259200 columns * 60 rows - here 60 represents 4 PFTs and 15 age classes.
 
 lonlat <- expand.grid(lon, lat)
 
@@ -116,18 +113,9 @@ lonlat$age <- rowSums(pre.mat[,1:4])*5+rowSums(pre.mat[,5:8])*15+rowSums(pre.mat
 names(lonlat) <- c("lon","lat","age")
 
 age_input <- as.data.frame(lonlat)
-
 coordinates(age_input) <- ~lon+lat 
 gridded(age_input) <- TRUE
-
-#2. check grids information and convert it to raster
-class(age_input)
-str(age_input@data)
-
 r <- raster(age_input, "age") 
-
-#3. Have a look at global map
-class(r)
 plot(r)
 
 ``` 
@@ -135,98 +123,62 @@ plot(r)
 ```{r}
 library(ncdf4)
 library(raster)
-ncfname <- paste ("E:/C-N cycling/Carbon allocation/fAPAR/fAPAR HUANYUAN/", "fAPAR3g_v2_1982_2016_FILLED", ".nc", sep="")
+ncfname <- paste ("/cluster/work/climate/bestocke/data/nimpl_sofun_inputs/map/Original_data/fAPAR/", "fAPAR3g_v2_1982_2016_FILLED", ".nc", sep="")
 dname <- "FAPAR_FILLED"
 
-# open a netCDF file and check variable
 ncin <- nc_open(ncfname)
+print(ncin) #here nc file includes 420 lists (35 yrs * 12 month)
 
-print(ncin)
-
-# 2.2 Get coordinate (including time variables)
-# Get longitude and latitude
 lon <- ncvar_get(ncin,"LON")
 nlon <- dim(lon) 
-head(lon)
 
 lat<-ncvar_get(ncin,"LAT")
 nlat <- dim(lat)
-head(lat)
 
-Time <- ncvar_get(ncin,"TIME_bnds") # monthly 1982-2016
 FAPAR <- ncvar_get(ncin,"FAPAR_FILLED")
-dim(Time)
-
-#rm(FAPAR)
-
-print(c(nlon,nlat))
-
 nc_close(ncin)
-
-#for fAPAR
 
 pre.vec.long <- as.vector(FAPAR)
 
-pre.mat <- matrix(pre.vec.long, nrow = nlon * nlat, ncol = 420) # 259200 * 420 (420 is 35 years)
+pre.mat <- matrix(pre.vec.long, nrow = nlon * nlat, ncol = 420) # 259200 * 420 (420 is 35 years: 1982-2016)
 
-lonlat <- expand.grid(lon, lat)
-
-# 422 rows = lon, lat, monthly data from 1982-2016, Now, select lat,lon and 1982-2011
-fAPAR1982_2011 <- pre.mat[,c(1:360)]
+fAPAR1982_2011 <- pre.mat[,c(1:360)] #extrat fAPAR from 1982-2011
 
 final_fAPAR <- rowMeans(fAPAR1982_2011,na.rm = TRUE)
-summary(final_fAPAR)
 
+lonlat <- expand.grid(lon, lat)
 fAPAR_input <- as.data.frame(cbind(lonlat,final_fAPAR))
 names(fAPAR_input) <- c("lon","lat","fAPAR")
 
-#fAPAR_input is a dataframe, including 3 columns: lon, lat, age (age is our values)
-#1.convert dataframe to grids
 coordinates(fAPAR_input) <- ~lon+lat 
 gridded(fAPAR_input) <- TRUE
-
-#2. check grids information and convert it to raster
-class(fAPAR_input)
-str(fAPAR_input@data)
-
 r3 <- raster(fAPAR_input, "fAPAR") 
-
-#3. Have a look at global map
-class(r3)
 plot(r3)
 ```
 #4. alpha
 
 ```{r}
 library(raster)
-alphalist <- list.files(path = "E:/C-N cycling/Carbon allocation/672 sites analysis/alpha/",full.names = T) #Input alpha from a list of data frame from 1901 to 2016
+alphalist <- list.files(path = "/cluster/work/climate/bestocke/data/nimpl_sofun_inputs/map/Original_data/alpha/",full.names = T) # here this file includes 116 data - that is the annual alpha from 1901 to 2016
+
 empty_alpha <- data.frame(matrix(NA)) 
 
 #calculate alpha within 30 years (1982-2011)
 for (i in 82:111){ #here 82:111 means 1982-2011
-  load(file = alphalist[82])
+  load(file = alphalist[i])
   empty_alpha[1:259200,i-81] <- rowMeans(SP_result_monthly,na.rm = TRUE)
 }
 
 final_alpha <- rowMeans(empty_alpha,na.rm = TRUE)
 
-#alpha_input is a dataframe, including 3 columns: lon, lat, age (age is our values)
-alpha_input <- as.data.frame(cbind(lonlat,final_alpha)) #here we kept using lonlat from fAPAR analysis above...
+alpha_input <- as.data.frame(cbind(lonlat,final_alpha)) 
 names(alpha_input) <- c("lon","lat","alpha")
 
 coordinates(alpha_input) <- ~lon+lat 
 gridded(alpha_input) <- TRUE
 
-#2. check grids information and convert it to raster
-class(alpha_input)
-str(alpha_input@data)
-
 r4 <- raster(alpha_input, "alpha") 
-
-#3. Have a look at global map
-class(r4)
 plot(r4)
-r4
 ``` 
 
 #5. PPFD (description and main calculation were provided)
@@ -242,41 +194,26 @@ The code below will represent the global map of final output:
 library(raster)
 library(ncdf4)
 
-ncfname <- paste ("E:/R code/CN MS/PhD/NC files/", "PPFD", ".nc", sep="")
+ncfname <- paste ("/cluster/work/climate/bestocke/data/nimpl_sofun_inputs/map/Original_data/PPFD/", "PPFD", ".nc", sep="")
 dname <- "PPFD"
-
-# open a netCDF file and check variable
 ncin <- nc_open(ncfname)
 
-print(ncin)
-
-# 2.2 Get coordinate (including time variables)
-# Get longitude and latitude
 lon <- ncvar_get(ncin,"lon")
 nlon <- dim(lon) 
-
 lat<-ncvar_get(ncin,"lat")
 nlat <- dim(lat)
-
 PPFD <- ncvar_get(ncin,"PPFD")
 
 nc_close(ncin)
 
 pre.vec.long <- as.vector(PPFD)
-
 lonlat <- expand.grid(lon, lat)
-
 PPFD_input <- as.data.frame(cbind(lonlat,pre.vec.long))
-
 names(PPFD_input) <- c("lon","lat","PPFD")
 
 coordinates(PPFD_input) <- ~lon+lat 
 gridded(PPFD_input) <- TRUE
-
 rPPFD <- raster(PPFD_input, "PPFD") 
-
-#3. Have a look at global map
-class(rPPFD)
 plot(rPPFD)
 
 ``` 
@@ -324,94 +261,62 @@ where Tg was calculated from Tmn and Tmx based on monthly average data (Peng et 
 library(raster)
 library(ncdf4)
 
-ncfname <- paste ("E:/R code/CN MS/PhD/NC files/", "Tg", ".nc", sep="")
+ncfname <- paste ("/cluster/work/climate/bestocke/data/nimpl_sofun_inputs/map/Original_data/Tg/", "Tg", ".nc", sep="")
 dname <- "Tg"
 
-# open a netCDF file and check variable
 ncin <- nc_open(ncfname)
 
-print(ncin)
-
-# 2.2 Get coordinate (including time variables)
-# Get longitude and latitude
 lon <- ncvar_get(ncin,"lon")
 nlon <- dim(lon) 
-
 lat<-ncvar_get(ncin,"lat")
 nlat <- dim(lat)
 
 Tg <- ncvar_get(ncin,"Tg")
-
 nc_close(ncin)
 
 pre.vec.long <- as.vector(Tg)
-
 lonlat <- expand.grid(lon, lat)
-
 Tg_input <- as.data.frame(cbind(lonlat,pre.vec.long))
-
 names(Tg_input) <- c("lon","lat","Tg")
 
 coordinates(Tg_input) <- ~lon+lat 
 gridded(Tg_input) <- TRUE
-
 rTg <- raster(Tg_input, "Tg") 
-
-#3. Have a look at global map
-class(rTg)
 plot(rTg)
 ``` 
 
 
 #7. vpd (description and main calculation were provided)
-vpd is vapor-pressure-deficient (kPa). We used the 30 yrs average data (1982-2011), which was originally derived from monthly data from CRU ts 4.01. See formula below:
+vpd is vapor-pressure-deficient (kPa). We used the 30 yrs average data (1982-2011), which was originally derived from monthly data from CRU ts 4.01. See formula below (Peng et al. 2020 New Phytologist):
 
 vpd <- 0.611*exp(17.27*(Tg)/((Tg)+237.3))-vap*0.1 
-
 where Tg (in celcius degree) was derived from above, and vap (hPa) was derived from CRU ts 4.01 monthly data. The code below shows the global map of final output.
-
 ```{r}
 library(raster)
 library(ncdf4)
-
-ncfname <- paste ("E:/R code/CN MS/PhD/NC files/", "vpd", ".nc", sep="")
+ncfname <- paste ("/cluster/work/climate/bestocke/data/nimpl_sofun_inputs/map/Original_data/vpd/", "vpd", ".nc", sep="")
 dname <- "vpd"
 
-# open a netCDF file and check variable
 ncin <- nc_open(ncfname)
 
-print(ncin)
-
-# 2.2 Get coordinate (including time variables)
-# Get longitude and latitude
 lon <- ncvar_get(ncin,"lon")
 nlon <- dim(lon) 
-
 lat<-ncvar_get(ncin,"lat")
 nlat <- dim(lat)
-
 vpd <- ncvar_get(ncin,"vpd")
 
 nc_close(ncin)
 
 pre.vec.long <- as.vector(vpd)
-
 lonlat <- expand.grid(lon, lat)
-
 vpd_input <- as.data.frame(cbind(lonlat,pre.vec.long))
-
 names(vpd_input) <- c("lon","lat","vpd")
 
 coordinates(vpd_input) <- ~lon+lat 
 gridded(vpd_input) <- TRUE
-
 rvpd <- raster(vpd_input, "vpd") 
-
-#3. Have a look at global map
-class(rvpd)
 plot(rvpd)
 ``` 
-
 #8. LMA (a resample method was pre-processed in advance, see text below)
 Here the SLA tiff. file was originally downloaded from TRY (see link on above). Then I have inputted this tiff file into ArcGIS, and then interpolating all global grids points (N = 259200) from the tiff map, using "Extract multi values to points" function. This will enable us to output a global grid dataframe (in csv), that includes LMA values from 720*360 grids.
 
@@ -419,7 +324,7 @@ Here the SLA tiff. file was originally downloaded from TRY (see link on above). 
 library(raster)
 library(ncdf4)
 
-SLA_extracted <- read.csv(file="E:/C-N cycling/Carbon allocation/672 sites analysis/TRY Global map/SLA_export.csv") #This dataframe outputted from ArcGIS, including FID, lon, lat, Elevation, SLA (mg/mm)
+SLA_extracted <- read.csv(file="/cluster/work/climate/bestocke/data/nimpl_sofun_inputs/map/Original_data/LMA/SLA_export.csv") #This dataframe outputted from ArcGIS, including FID, lon, lat, Elevation, SLA (mg/mm)
 SLA_extracted2 <- subset(SLA_extracted,SLA_3km_v1>0) #remove NA or negative values
 
 SLA_extracted2$LMA <- 1000/SLA_extracted2$SLA_3km_v1 #mg/mm -> g/m2
@@ -429,11 +334,10 @@ SLA_extracted3 <- SLA_extracted2[,c(2,3,6)] #only select lon, lat and LMA (g/m2)
 names(lonlat) <- c("lon","lat") #here lonlat was derived from previous coordinates data, which can be continuously used
 
 final_lma <-Reduce(function(x,y) merge(x = x, y = y, by = c("lon","lat"),all.x=TRUE), 
-                        list(lonlat,SLA_extracted3))
+                        list(lonlat,SLA_extracted3)) #combined with global grids
+
 coordinates(final_lma) <- ~lon+lat 
-
 gridded(final_lma) <- TRUE
-
 rLMA <- raster(final_lma, "LMA") 
 plot(rLMA)
 

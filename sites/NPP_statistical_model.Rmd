@@ -35,8 +35,8 @@ library(nlme)
 library(MuMIn)
 
 #Input data from Euler.
-CNdata <- read.csv(file="/cluster/work/climate/bestocke/data/Yunke_CNcycle/Statistical_sites/1_statistical_model.csv")
-leafCN3 <- read.csv(file="/cluster/work/climate/bestocke/data/Yunke_CNcycle/Statistical_sites/2_leafCN.csv")
+CNdata <- read.csv(file="/cluster/work/climate/bestocke/data/nimpl_sofun_inputs/sites/NPP.csv")
+leafCN3 <- read.csv(file="/cluster/work/climate/bestocke/data/nimpl_sofun_inputs/sites/leafCN.csv")
 
 #remove one NA value (there is one sample when TNPP_1 > GPP)
 
