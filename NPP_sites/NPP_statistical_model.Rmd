@@ -1,14 +1,14 @@
 ---
 output:
-  html_document: default
-  pdf_document: default
   word_document: default
+  pdf_document: default
+  html_document: default
 ---
 
 ---
 title: "Statistical models for C-N cycles"
 author: "Yunke Peng"
-date: "June 21, 2020"
+date: "June 25, 2020"
 output: html_document
 ---
 
@@ -34,9 +34,9 @@ library(lme4)
 library(nlme)
 library(MuMIn)
 
-#Input data from Euler.
-CNdata <- read.csv(file="/cluster/work/climate/bestocke/data/nimpl_sofun_inputs/sites/NPP.csv")
-leafCN3 <- read.csv(file="/cluster/work/climate/bestocke/data/nimpl_sofun_inputs/sites/leafCN.csv")
+#Input data
+CNdata <- read.csv(file= "/cluster/work/climate/bestocke/data/nimpl_sofun_inputs/sites/NPP.csv")
+leafCN <- read.csv(file="/cluster/work/climate/bestocke/data/nimpl_sofun_inputs/sites/leafCN.csv")
 
 #remove one NA value (there is one sample when TNPP_1 > GPP)
 
@@ -64,6 +64,26 @@ summary(NPPleaf_model)
 r.squaredGLMM(NPPleaf_model)
 
 #Statistical model 4: Leaf C/N 
+
+#First, we need to keep consistent for Genus speices (some data has divided Genus and species into 2 columns, while some data has include "Genus species" in 1 column) --> The consistent name was in final_species below.
+for (i in 1:nrow(leafCN)){
+  if (is.na(leafCN$species2[i]) == TRUE){
+    leafCN$final_species[i]<- leafCN$species[i]} else { 
+      leafCN$final_species[i]<- paste(leafCN$species[i],sep=" ",leafCN$species2[i])} 
+}
+
+#Second, Remove outliers
+leafCN2 <- subset(leafCN,Vcmax.25>0&Vcmax.25<300&cn>1&cn<500&lma>0&lma<700)
+
+
+#Third, we are interested in the site-species average data (which aggregates to one value in the same species at the same site)
+Vcmax.25 <- aggregate(Vcmax.25~sites+final_species,leafCN2,mean)
+cn <- aggregate(cn~sites+final_species,leafCN2,mean)
+lma <- aggregate(lma~sites+final_species,leafCN2,mean)
+
+leafCN3<-Reduce(function(x,y) merge(x = x, y = y, by = c("sites","final_species"),all.x=TRUE), 
+           list(Vcmax.25,cn,lma))
+
 leafCN_model <- lmer(log(cn)~log(lma)+log(Vcmax.25)+(1|final_species)+(1|sites),data=leafCN3)
 
 summary(leafCN_model)
@@ -72,4 +92,3 @@ r.squaredGLMM(leafCN_model)
 
 ```
 
- 

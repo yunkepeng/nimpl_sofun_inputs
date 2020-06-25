@@ -13,6 +13,16 @@
 
 #### Variables
 * final_species: Genus species 
-* Vcmax.25 (umol/m2/s): Maximum rate of carboxylation capacity
+* Vcmax.25 (umol/m2/s): Maximum rate of carboxylation capacity at 25 degree celcius
+* Vcmax.Tg (umol/m2/s): Maximum rate of carboxylation capacity measured at leaf temperature or growth tempearture
+* c%: leaf C percentage
+* n%: leaf N percentage
 * cn (unitless): leaf carbon to nitrogen ratio
 * lma (g/m2): leaf mass-per-area
+* narea (g/m2): leaf nitrogen-per-area
+* parea (g/m2): leaf phosphorus-per-area
+* tleaf (degree celcius): leaf temperature
+* Source: Original sources
+* species/species2: Some data are "Genus species" contained in one column, while some are contained in two columns. They were keeping consistent in first step of relevant analysis in Rmd.
+
+###### Some outliers were excluded in advance, see Rmd code.
