@@ -123,7 +123,7 @@ plot(r)
 ```{r}
 library(ncdf4)
 library(raster)
-ncfname <- paste ("~/data/nimpl_sofun_inputs/map/Original_data/fAPAR/", "fAPAR3g_v2_1982_2016_FILLED", ".nc", sep="")
+ncfname <- paste ("~/data/fAPAR/fAPAR3g_v2/", "fAPAR3g_v2_1982_2016_FILLED", ".nc", sep="")
 dname <- "FAPAR_FILLED"
 
 ncin <- nc_open(ncfname)
