@@ -34,9 +34,9 @@ The process below will provide original codes of soil C/N, stand age, fAPAR, alp
 ```{r}
 library(raster)
 
-soil <- raster('~/data/nimpl_sofun_inputs/map/Original_data/soilCN/ISRIC_raster/w001000.adf') # map input from the last 2015 version of ISRIC (Batjes 2015 ISRIC report)
+soil <- raster('~/data/nimpl_ISRIC/data/raster/w001000.adf') # map input from the last 2015 version of ISRIC (Batjes 2015 ISRIC report)
 
-Global_grid <- as.data.frame(read.csv(file="~/data/nimpl_sofun_inputs/map/Original_data/soilCN/Global_cell.csv")) #Input global land grids (0.5 degree;N = 259200)
+Global_grid <- as.data.frame(read.csv(file="~/data/nimpl_ISRIC/data/Global_cell.csv")) #Input global land grids (0.5 degree;N = 259200)
 
 Global_grid$ID <- c(1:259200) #create a list of number, just helping to form a raster then.
 
@@ -46,7 +46,7 @@ vec.soil.extract <-extract(soil,pointXY)
 data.soil.extract <-data.frame(pointXY,SUID=vec.soil.extract) 
 # These two steps are important, it will extract SUID information from soil map (.adf) to our grids data, so that each our global grid will have a unique SUID, which will be further combined (merged) with soil C/N data then.
 
-ISRIC.data<-read.csv(file="~/data/nimpl_sofun_inputs/map/Original_data/soilCN/HW30s_FULL.csv",header=TRUE,sep=";",dec = ".") # Now, input ISRIC database
+ISRIC.data<-read.csv(file="~/data/nimpl_ISRIC/data/HW30s_FULL.csv",header=TRUE,sep=";",dec = ".") # Now, input ISRIC database
 
 data.soil.extract <- merge(data.soil.extract,ISRIC.data,by='SUID',all.x=TRUE) # merge site with soil variables by using SUID
 
@@ -78,7 +78,7 @@ library(raster)
 library(ncdf4)
 
 #set the path and filename
-ncfname <- paste ("~/data/nimpl_sofun_inputs/map/Original_data/age/", "GFAD_V1-1", ".nc", sep="")
+ncfname <- paste ("~/data/nimpl_GFAD/", "GFAD_V1-1", ".nc", sep="")
 
 dname <- "age"
 
@@ -176,7 +176,7 @@ plot(r3)
 
 ```{r}
 library(raster)
-alphalist <- list.files(path = "~/data/nimpl_sofun_inputs/map/Original_data/alpha/",full.names = T) # here this file includes 116 data - that is the annual alpha from 1901 to 2016
+alphalist <- list.files(path = "~/data/alpha/",full.names = T) # here this file includes 116 data - that is the annual alpha from 1901 to 2016
 
 empty_alpha <- data.frame(matrix(NA)) 
 
@@ -211,7 +211,7 @@ The code below will represent the global map of final output:
 library(raster)
 library(ncdf4)
 
-ncfname <- paste ("~/data/nimpl_sofun_inputs/map/Original_data/PPFD/", "PPFD", ".nc", sep="")
+ncfname <- paste ("~/data/nimpl_sofun_inputs/Final_ncfile/", "PPFD", ".nc", sep="")
 dname <- "PPFD"
 ncin <- nc_open(ncfname)
 
@@ -278,7 +278,7 @@ where Tg was calculated from Tmn and Tmx based on monthly average data (Peng et 
 library(raster)
 library(ncdf4)
 
-ncfname <- paste ("~/data/nimpl_sofun_inputs/map/Original_data/Tg/", "Tg", ".nc", sep="")
+ncfname <- paste ("~/data/nimpl_sofun_inputs/Final_ncfile/", "Tg", ".nc", sep="")
 dname <- "Tg"
 
 ncin <- nc_open(ncfname)
@@ -311,7 +311,7 @@ where Tg (in celcius degree) was derived from above, and vap (hPa) was derived f
 ```{r}
 library(raster)
 library(ncdf4)
-ncfname <- paste ("~/data/nimpl_sofun_inputs/map/Original_data/vpd/", "vpd", ".nc", sep="")
+ncfname <- paste ("~/data/nimpl_sofun_inputs/Final_ncfile/", "vpd", ".nc", sep="")
 dname <- "vpd"
 
 ncin <- nc_open(ncfname)
@@ -340,7 +340,7 @@ Here the SLA tiff. file was originally downloaded from TRY (see link on above). 
 library(raster)
 library(ncdf4)
 
-SLA_extracted <- read.csv(file="~/data/nimpl_sofun_inputs/map/Original_data/LMA/SLA_export.csv") #This dataframe outputted from ArcGIS, including FID, lon, lat, Elevation, SLA (mg/mm)
+SLA_extracted <- read.csv(file="~/data/nimpl_TRY_maps/SLA_export.csv") #This dataframe outputted from ArcGIS, including FID, lon, lat, Elevation, SLA (mg/mm)
 SLA_extracted2 <- subset(SLA_extracted,SLA_3km_v1>0) #remove NA or negative values
 
 SLA_extracted2$LMA <- 1000/SLA_extracted2$SLA_3km_v1 #mg/mm -> g/m2
