@@ -1,0 +1,102 @@
+---
+output:
+  html_document: default
+  pdf_document: default
+  word_document: default
+---
+
+---
+title: "Output of global mapping in C-N cycle"
+author: "Yunke Peng"
+date: "July 27 2020"
+output: html_document
+---
+
+## Introduction about Global mapping
+
+Codes below are global maps of C-N cycling, including:
+ * annualGPP: Annual gross-primary-production (gC/m2/yr)
+ * annualvcmax25: Annual maximum carboxylation capacity (umol/m2/s)
+ * npp: net-primary-production (gC/m2/yr)
+ * anpp: aboveground net-primary-production (gC/m2/yr)
+ * bnpp: belowground net-primary-production (gC/m2/yr)
+ * lnpp: Leaf net-primary production (gC/m2/yr)
+ * wnpp: wood net-primary production (gC/m2/yr)
+ * leafcn: leaf carbon-to-nitrogen ratio 
+ * lnf: leaf nitrogen flux (gN/m2/yr)
+ * wnf: wood nitrogen flux (gN/m2/yr)
+ * bnf: belowgruond nitrogen flux (gN/m2/yr)
+
+#Output map plot
+
+The function below provides outputing map. The input can be changed through variable above: annualGPP, annualVcmax25, npp......
+
+The work path should be re-set if re-analyed by other users.
+```{r}
+library(raster)
+library(ncdf4)
+
+name <- "annualvcmax25" #annualgpp, annualvcmax25, npp, anpp, bnpp, lnpp, wnpp, leafcn, lnf, wnf, bnf
+max <- 999999 #this number presents the max value we would like to subset. 
+
+outputdata <- function(name,max){
+  #-----------------------------------------------------------------------
+  # Input: name: variable (annualgpp, annualvcmax25, npp, anpp, bnpp, lnpp, wnpp, leafcn, lnf, wnf, bnf)
+  # Input: max: maximum value in the map (999999 as default; e.g. can be 50 if leafcn was inputted)
+  #-----------------------------------------------------------------------
+  ncin <- nc_open(paste ("D:/PhD/output/new/c3/", "global.2004.a." ,name, ".nc", sep=""))
+  #ncin <- nc_open(paste ("~/data/sofun_outputs/output_nc/global/", "global.2004.a." ,name, ".nc", sep=""))
+  lon <- ncvar_get(ncin,"lon")
+  lat<-ncvar_get(ncin,"lat")
+  variable <- ncvar_get(ncin,name)
+  nc_close(ncin)
+  
+  variabelist <- as.vector(variable)
+  lonlat <- expand.grid(lon, lat)
+  output_final <- as.data.frame(cbind(lonlat,variabelist))
+  names(output_final) <- c("lon","lat",name)
+  output_final2 <- subset(output_final,output_final[,3]<max) # to make map easy to follow, it subset a reasonable value here.
+  coordinates(output_final2) <- ~lon+lat 
+  gridded(output_final2) <- TRUE
+  rmap <- raster(output_final2, name) 
+  plot(rmap,main=name)
+  return(output_final)
+  #-----------------------------------------------------------------------
+  # Output: plot(rmap): the presentation of global map (after subsetting max of data)
+  # Output: output_final: the output data (259200 * 3) including lon, lat and value
+  #-----------------------------------------------------------------------
+}
+
+annualgpp <- outputdata("annualgpp",999999) # C3 only
+summary(annualgpp)
+
+annualvcmax25 <- outputdata("annualvcmax25",999999)
+summary(annualvcmax25)
+
+npp <- outputdata("npp",999999)
+summary(npp)
+
+anpp <- outputdata("anpp",999999)
+summary(anpp)
+
+bnpp <- outputdata("bnpp",999999)
+summary(bnpp)
+
+lnpp <- outputdata("lnpp",999999)
+summary(lnpp)
+
+wnpp <- outputdata("wnpp",999999)
+summary(wnpp)
+
+leafcn <- outputdata("leafcn",50) # here some problem still exists (leafcn with very high value).
+summary(leafcn)
+
+lnf <- outputdata("lnf",999999)
+summary(lnf)
+
+wnf <- outputdata("wnf",999999)
+summary(wnf)
+
+bnf <- outputdata("bnf",999999)
+summary(bnf)
+```
