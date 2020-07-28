@@ -6,7 +6,7 @@ output:
 ---
 
 ---
-title: "Output of global mapping in C-N cycle"
+title: "Output of global mapping in C-N cycle: c3"
 author: "Yunke Peng"
 date: "July 27 2020"
 output: html_document
@@ -15,23 +15,35 @@ output: html_document
 ## Introduction about Global mapping
 
 Codes below are global maps of C-N cycling, including:
- * annualGPP: Annual gross-primary-production (gC/m2/yr)
- * annualvcmax25: Annual maximum carboxylation capacity (umol/m2/s)
- * npp: net-primary-production (gC/m2/yr)
- * anpp: aboveground net-primary-production (gC/m2/yr)
- * bnpp: belowground net-primary-production (gC/m2/yr)
- * lnpp: Leaf net-primary production (gC/m2/yr)
- * wnpp: wood net-primary production (gC/m2/yr)
- * leafcn: leaf carbon-to-nitrogen ratio 
- * lnf: leaf nitrogen flux (gN/m2/yr)
- * wnf: wood nitrogen flux (gN/m2/yr)
- * bnf: belowgruond nitrogen flux (gN/m2/yr)
+
+annualGPP: Annual gross-primary-production (gC/m2/yr)
+
+annualvcmax25: Annual maximum carboxylation capacity (umol/m2/s)
+
+npp: net-primary-production (gC/m2/yr)
+
+anpp: aboveground net-primary-production (gC/m2/yr)
+
+bnpp: belowground net-primary-production (gC/m2/yr)
+
+lnpp: Leaf net-primary production (gC/m2/yr)
+
+wnpp: wood net-primary production (gC/m2/yr)
+
+leafcn: leaf carbon-to-nitrogen ratio 
+
+lnf: leaf nitrogen flux (gN/m2/yr)
+
+wnf: wood nitrogen flux (gN/m2/yr)
+
+bnf: belowgruond nitrogen flux (gN/m2/yr)
 
 #Output map plot
 
 The function below provides outputing map. The input can be changed through variable above: annualGPP, annualVcmax25, npp......
 
-The work path should be re-set if re-analyed by other users.
+The work path should be re-set if re-analyed by other users (see ncin in function).
+
 ```{r}
 library(raster)
 library(ncdf4)
@@ -67,7 +79,7 @@ outputdata <- function(name,max){
   #-----------------------------------------------------------------------
 }
 
-annualgpp <- outputdata("annualgpp",999999) # C3 only
+annualgpp <- outputdata("annualgpp",999999) # C3c4
 summary(annualgpp)
 
 annualvcmax25 <- outputdata("annualvcmax25",999999)
