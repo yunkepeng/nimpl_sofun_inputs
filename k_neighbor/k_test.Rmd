@@ -40,8 +40,8 @@ outputdata <- function(name,max){
   # Input: name: variable (LMA, Tg, alpha, PPFD, lat)
   # Input: max: maximum value in the map (9999 as default; if omitting NA VALUES then it should be < 9999 (dummy))
   #-----------------------------------------------------------------------
-  #ncin <- nc_open(paste ("D:/PhD/nc/new/cdo/", name, ".nc", sep=""))
-  ncin <- nc_open(paste ("~/data/nimpl_sofun_inputs/map/Final_ncfile/" ,name, ".nc", sep=""))
+  ncin <- nc_open(paste ("D:/PhD/nc/new/cdo/", name, ".nc", sep=""))
+  #ncin <- nc_open(paste ("~/data/nimpl_sofun_inputs/map/Final_ncfile/" ,name, ".nc", sep=""))
   lon <- ncvar_get(ncin,"lon")
   lat<-ncvar_get(ncin,"lat")
   variable <- ncvar_get(ncin,name)
@@ -98,8 +98,6 @@ summary(training_data)
 summary(testing_data)
 
 # 3. knn training
-blueprint <- recipe(LMA ~ Tg+ alpha +PPFD +lat, data = training_data)
-
 cv <- trainControl(
   method = "cv", 
   number = 10
@@ -107,43 +105,37 @@ cv <- trainControl(
 
 # Create a hyperparameter grid search
 hyper_grid <- expand.grid(
-  k = floor(seq(1, 10, length.out = 10))
+  k = floor(seq(5, 20, length.out = 15))
 )
 
-knn_grid <- train(
-  blueprint, 
-  data = training_data, 
-  method = "knn", 
-  trControl = cv, 
-  tuneGrid = hyper_grid
-)
+knn_fit <- train(LMA ~., data = training_data,
+                 method = "knn",
+                 trControl=cv,
+                 preProcess = c("center", "scale"),
+                 tuneGrid = hyper_grid)
 
-knn_grid # now it suggested k = 10
+knn_fit # it indicated k =11 as the best design, with R2=0.501, RMSE=12.15
 
-ggplot(knn_grid)
+# output prediction data and add it in testing_data
+test_pred <- predict(knn_fit,newdata=testing_data)
+testing_data$LMA <- test_pred
 
-#Test 1 - leading to NA results - see difference in recipe()
+#rbind, and merge back with lon.
+final <- rbind(training_data,testing_data)
 
-blueprint <- recipe(LMA ~ Tg+ alpha +PPFD +lat, data = training_data)
+lon_data <- merge2[,c("lon","lat","Tg","alpha","PPFD")]
 
-ratio_recipe <- blueprint %>%
-  step_knnimpute(all_predictors(), neighbors = 10)
+final2 <-Reduce(function(x,y) merge(x = x, y = y, by = c("lat","Tg","alpha","PPFD"),all.x=TRUE), 
+                list(final,lon_data))
 
-ratio_recipe2 <- prep(ratio_recipe, training = training_data)
+#form final3 dataframe as final output, and plot
+final3 <- final2[,c("lon","lat","LMA")]
 
-imputed <- bake(ratio_recipe2, testing_data)
-imputed
+coordinates(final3) <- ~lon+lat 
+gridded(final3) <- TRUE
+rmap <- raster(final3, "LMA") 
+plot(rmap)
 
-#Test 2 - leading to available results - see difference in recipe()
-
-blueprint <- recipe(Tg ~ LMA +lat+PPFD+alpha, data = training_data)
-
-ratio_recipe <- blueprint %>%
-  step_knnimpute(all_predictors(), neighbors = 10)
-
-ratio_recipe2 <- prep(ratio_recipe, training = training_data)
-
-imputed <- bake(ratio_recipe2, testing_data)
-imputed
+#After this, this will be outputed as nc file in R, and then processed by CDO-processing in Euler (to make coordinates consistent), and finally saved in "~/data/nimpl_sofun_inputs/map/Final_ncfile/newLMA.nc" in order to update our prediction field in yunkebranch.
 
 ```
