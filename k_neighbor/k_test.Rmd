@@ -136,6 +136,28 @@ gridded(final3) <- TRUE
 rmap <- raster(final3, "LMA") 
 plot(rmap)
 
-#After this, this will be outputed as nc file in R, and then processed by CDO-processing in Euler (to make coordinates consistent), and finally saved in "~/data/nimpl_sofun_inputs/map/Final_ncfile/newLMA.nc" in order to update our prediction field in yunkebranch.
+#5. merge it with 259200 lon/lat dataframe, convert NA to 9999, and then output to nc files
+
+merge_all <- merge1[,c("lon","lat")]
+dim(merge_all)
+dim(final3)
+
+final4 <-Reduce(function(x,y) merge(x = x, y = y, by = c("lon","lat"),all.x=TRUE), 
+                list(merge_all,final3))
+summary(final4)
+
+final4[is.na(final4)] <- 9999
+
+coordinates(final4) <- ~lon+lat 
+gridded(final4) <- TRUE
+rLMA <- raster(final4, "LMA") 
+
+d <- writeRaster(rLMA, paste0("D:/PhD/nc/new/cdo/","newLMA.nc"),
+                 format = "CDF", overwrite = TRUE, varname = "LMA", 
+                 varunit = "g/m2", longname = "Leaf-mass-per-area", 
+                 xname = "lon", yname = "lat")
+
+
+#After this, this was outputed as nc file in R, and then will be processed by CDO-processing in Euler (to make coordinates consistent), and finally saved in "~/data/nimpl_sofun_inputs/map/Final_ncfile/newLMA.nc" in order to update our prediction field (LMA) in yunkebranch.
 
 ```
