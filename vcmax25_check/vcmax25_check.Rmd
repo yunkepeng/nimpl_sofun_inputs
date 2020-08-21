@@ -1,0 +1,213 @@
+---
+output:
+  html_document: default
+  pdf_document: default
+  word_document: default
+---
+
+---
+title: "Check vcmax25 from SOFUN and compare it with vcmax25 from Peng et al. (unpublished)"
+author: "Yunke Peng"
+date: "Aug 21 2020"
+output: html_document
+---
+
+## Introduction about Vcmax25
+
+Here our predicted Vcmax25 nc file were 20 years output from sofun/yunekbranch_units. And we have considered both versions: (1) weighted-sum method of GPP (2) max daily vcmax25. We will attempt to check and compare its extracted site value with a database from Peng et al. unpublished. Within this database, we had vcmax25 from 276 sites globally. We would like to compare with its observations and predictions, to see how best our sofun method was developed recently...
+
+The output plot (figure) mainly includes four components:
+
+Fig.1a, 1b - Global mapping of Vcmax25 using weighted-sum or Max methods from sofun/yunkebranch_units, in the year 1991-2010.
+
+Fig.2a, 2b, 2c - Predicted site Vcmax25 vs. observed site Vcmax25. 2a was using Predictions from Peng et al. unpublished; 2b was using weighted-sum method, 2c was using max method.
+
+Fig.3a - Predicted weight-sum site Vcmax25  vs. Predicted site Vcmax25 from Peng et al.. 
+
+Fig.3b - Predicted max site Vcmax25  vs. Predicted site Vcmax25 from Peng et al.. 
+
+Fig.4a - Predicted site Vcmax25 from weighted-sum method  vs. observed site Vcmax25 in high elevation sites (z > 2km)
+
+Fig.4b - Predicted site Vcmax25 from max method  vs. observed site Vcmax25 in high elevation sites (z > 2km)
+
+```{r}
+library(raster)
+library(ncdf4)
+library(spgwr)  
+
+######Test 1: Vcmax25 using weighted sum method 
+#1. input nc files for vcmax25 over 20 yrs.
+name <- "vcmax25"
+max <- 999999 #this number presents the max value we would like to subset. 
+
+outputdata <- function(name,year,min,max,path){
+  #-----------------------------------------------------------------------
+  # Input: name: variable vcmax25
+  # Input: min,max: minimum and maximum value in the map.
+  #-----------------------------------------------------------------------
+  ncin <- nc_open(paste (path, "global.",year,".a." ,name, ".nc", sep=""))
+  #ncin <- nc_open(paste ("~/data/sofun_outputs/output_nc/global/", "global.2004.a." ,name, ".nc", sep=""))
+  lon <- ncvar_get(ncin,"lon")
+  lat<-ncvar_get(ncin,"lat")
+  variable <- ncvar_get(ncin,name)
+  nc_close(ncin)
+  
+  variabelist <- as.vector(variable)
+  lonlat <- expand.grid(lon, lat)
+  output_final <- as.data.frame(cbind(lonlat,variabelist))
+  names(output_final) <- c("lon","lat",name)
+  output_final2 <- subset(output_final,output_final[,3]>min & output_final[,3]<max) # to make map easy to follow, it subset a reasonable value here.
+  coordinates(output_final2) <- ~lon+lat 
+  gridded(output_final2) <- TRUE
+  rmap <- raster(output_final2, name) 
+  #plot(rmap,main=name)
+  return(output_final)
+  #-----------------------------------------------------------------------
+  # Output: plot(rmap): the presentation of global map (after subsetting max of data)
+  # Output: output_final: the output data (259200 * 3) including lon, lat and value
+  #-----------------------------------------------------------------------
+}
+
+#2. output them in a dataframe (dim: 259200 rows * 20 years)
+vcmax25_20yrs <- data.frame(matrix(NA))
+
+for (i in 1991:2010){
+  vcmax25_20yrs[1:259200,i-1991+1] <- outputdata("vcmax25",i,-999999,999999,"D:/PhD/output/vcmax25/weight/")[,3]
+}
+
+#3. convert unit from mol/m2/s to umol/m2/s
+vcmax25_final <- (vcmax25_20yrs)*1000000
+
+#4. construct coordinates (lon, lat)
+lonlat <- outputdata("vcmax25",i,-999999,999999,"D:/PhD/output/vcmax25/weight/")[,1:2]
+
+#5. calculate vcmax25 average of 20yrs, cbind, rename and plot map
+vcmax25_weightedsum <- cbind(lonlat,rowMeans(vcmax25_final,na.rm = TRUE))
+names(vcmax25_weightedsum) <- c("lon","lat","vcmax25")
+
+coordinates(vcmax25_weightedsum) <- ~lon+lat 
+gridded(vcmax25_weightedsum) <- TRUE
+rweighted <- raster(vcmax25_weightedsum, "vcmax25") 
+plot(rweighted)
+title("Fig.1a Vcmax25 using 'weighted-sum GPP' method in 1991-2010 (umol m-2 s-1) ")
+
+######Test 2: Vcmax25 using max daily vcmax25
+vcmax25max_20yrs <- data.frame(matrix(NA)) # for final sites climate data
+for (i in 1991:2010){
+  vcmax25max_20yrs[1:259200,i-1991+1] <- outputdata("vcmax25",i,-999999,999999,"D:/PhD/output/vcmax25/max/")[,3]
+}
+
+vcmax25finalmax <- vcmax25max_20yrs*1000000
+vcmax25_max <- cbind(lonlat,rowMeans(vcmax25finalmax,na.rm = TRUE))
+names(vcmax25_max) <- c("lon","lat","vcmax25")
+coordinates(vcmax25_max) <- ~lon+lat 
+gridded(vcmax25_max) <- TRUE
+rmax <- raster(vcmax25_max, "vcmax25") 
+plot(rmax)
+title("Fig.1b Vcmax25 using daily maximum vcmax25 of year in 1991-2010 (umol m-2 s-1) ")
+
+#6. applying geographically weighted regression (gwr) to extract site vcmax25 from grids data
+i <- 1 # sites started from 1 to n.
+a <- 1.5 # how many distance (in degrees) to be considered when interpolating values in gwr. This value has been examined in advance, and considered as the optimum value (with highest R2).
+
+#merge weighted-sum vcmax25 with 0.5*0.5 grid elevation
+vcmax25_weightedsum <- cbind(lonlat,rowMeans(vcmax25_final,na.rm = TRUE))
+names(vcmax25_weightedsum) <- c("lon","lat","vcmax25")
+
+elev <- read.csv(file="D:/PhD/yunkebranch_units/vc25/elev.csv")#include elevation data of 0.5 grids
+vcmax25_input1 <- merge(vcmax25_weightedsum,elev,by=c("lat","lon"),all.x=TRUE) #merge with z
+names(vcmax25_input1) <- c("lat","lon","vcmax25","z")
+
+#merge max vcmax25 with 0.5*0.5 grid elevation
+vcmax25_max <- cbind(lonlat,rowMeans(vcmax25finalmax,na.rm = TRUE))
+vcmax25_input2 <- merge(vcmax25_max,elev,by=c("lat","lon"),all.x=TRUE)
+names(vcmax25_input2) <- c("lat","lon","vcmax25","z")
+
+#7. input site vcmax25 from Global Vcmax25 MS paper (Peng et al. unpublished).
+sites_vc25 <- read.csv(file="D:/PhD/yunkebranch_units/vc25/vc25_sitemean.csv")
+head(sites_vc25) #lon, lat, Elevation, obs_vcmax25, pred_vcmax25 (umol/m2/s)
+samples <- sites_vc25[,1:3] #this only includes x,y,z now, which is prepared for gwr then.
+names(samples) <- c("lon","lat","z")
+
+# create empty list and dataframe for gwr
+mylist <- vector(mode = "list", length = nrow(sites_vc25)) # for specifying gridded data at certain degrees
+mylist2 <- vector(mode = "list", length = nrow(sites_vc25)) # for interpolating sites
+site_vcmax25 <- data.frame(matrix(NA)) # for final sites climate data
+
+# prepare for gridded vcmax25 only > 0. 
+vcmax25_input1 <- subset(vcmax25_input1,vcmax25>0)
+
+#apply weighted sums
+for (i in c(1:28,33:276)){ # 4 sites here were indicating NA that stops the gwr, omitting them now.
+  mylist[[i]]<- subset(vcmax25_input1,lon>(samples[i,1]-a)&lon<(samples[i,1]+a)&lat>(samples[i,2]-a)&lat<(samples[i,2]+a))
+  coordinates(mylist[[i]]) <- c("lon","lat")
+  gridded(mylist[[i]]) <- TRUE
+  mylist2[[i]] <- samples[i,1:3]
+  coordinates(mylist2[[i]]) <- c("lon","lat")
+  samples$vcmax25_weighted[i] <- (gwr(vcmax25 ~ z, mylist[[i]], bandwidth = 1.06, fit.points = mylist2[[i]],predictions=TRUE))$SDF$pred
+  #print(i)
+}
+
+#apply max (same above)
+vcmax25_input2 <- subset(vcmax25_input2,vcmax25>0)
+samples2 <- sites_vc25[,1:3] 
+names(samples2) <- c("lon","lat","z")
+site_vcmax25 <- data.frame(matrix(NA)) # for final sites climate data
+
+mylist <- vector(mode = "list", length = nrow(sites_vc25)) # for specifying gridded data at certain degrees
+mylist2 <- vector(mode = "list", length = nrow(sites_vc25)) # for sites
+
+for (i in 1:276){
+  mylist[[i]]<- subset(vcmax25_input2,lon>(samples2[i,1]-a)&lon<(samples2[i,1]+a)&lat>(samples2[i,2]-a)&lat<(samples2[i,2]+a))
+  coordinates(mylist[[i]]) <- c("lon","lat")
+  gridded(mylist[[i]]) <- TRUE
+  mylist2[[i]] <- samples2[i,1:3]
+  coordinates(mylist2[[i]]) <- c("lon","lat")
+  samples2$vcmax25_max[i] <- (gwr(vcmax25 ~ z, mylist[[i]], bandwidth = 1.06, fit.points = mylist2[[i]],predictions=TRUE))$SDF$pred
+  #print(i)
+}
+
+all_vcmax25 <- cbind(sites_vc25,samples[,c("vcmax25_weighted")],samples2[,c("vcmax25_max")])
+names(all_vcmax25) <- c("lon","lat","Elevation","obs_vcmax25","pred_vcmax25_Peng","pred_vcmax25_weightsum","pred_vcmax25_max")
+
+
+#8. now the dataframe consists of everything we need
+#(1) firstly, check and plot three predictions (peng et al., weighted-sum, max) vs. observation 
+plot(pred_vcmax25_Peng~obs_vcmax25,data=all_vcmax25)
+title("Fig.2a Predicted Vcmax25 from (Peng et al) vs. observed Vcmax25 (R2 = 0.29)")
+summary(lm(pred_vcmax25_Peng~obs_vcmax25,data=all_vcmax25)) # using Peng et al. unpublished prediction: R2 = 0.29
+
+plot(pred_vcmax25_weightsum~obs_vcmax25,data=all_vcmax25)
+title("Fig.2b Weighted sum Vcmax25 vs. observed Vcmax25 (R2 = 0.25)")
+summary(lm(pred_vcmax25_weightsum~obs_vcmax25,data=all_vcmax25)) # using weighted-sum vcmax25 from SOFUN R2 = 0.25
+
+plot(pred_vcmax25_max~obs_vcmax25,data=all_vcmax25)
+title("Fig.2c Max Vcmax25 vs. observed Vcmax25 (R2 = 0.31)")
+summary(lm(pred_vcmax25_max~obs_vcmax25,data=all_vcmax25)) # using max vcmax25 from SOFUN:R2 = 0.31
+
+
+#(2) Comparsion between weighted or max vcmax25 and Peng et al. predicted Vcmax25
+plot(pred_vcmax25_weightsum~pred_vcmax25_Peng,data=all_vcmax25)
+title("Fig.3a Weighted-sum Vcmax25 vs. Predicted Vcmax25 from Peng et al (R2 = 0.87)")
+summary(lm(pred_vcmax25_weightsum~pred_vcmax25_Peng,data=all_vcmax25))
+
+plot(pred_vcmax25_max~pred_vcmax25_Peng,data=all_vcmax25)
+title("Fig.3b Max Vcmax25 vs. Predicted Vcmax25 from Peng et al (R2 = 0.85)")
+summary(lm(pred_vcmax25_max~pred_vcmax25_Peng,data=all_vcmax25))
+
+
+#(3) Comparsion for sites at high elevation (z > 2km) to check our magnitude of prediction
+
+#subset high elevation to compare
+high_elev <- subset(all_vcmax25,Elevation > 2000)
+dim(high_elev)
+
+plot(pred_vcmax25_weightsum~obs_vcmax25,data=high_elev,xlim=c(0,250),ylim=c(0,250))
+title("Fig.4a Weighted Sum Vcmax25 vs. Observed Vcmax25 in >2km sites R2 = 0.33")
+summary(lm(pred_vcmax25_weightsum~obs_vcmax25,data=high_elev)) # R2 = 0.32
+
+plot(pred_vcmax25_max~obs_vcmax25,data=high_elev,xlim=c(0,250),ylim=c(0,250))
+title("Fig.4b Max Vcmax25 vs. Observed Vcmax25 in >2km sites R2 = 0.39")
+summary(lm(pred_vcmax25_max~obs_vcmax25,data=high_elev)) # R2 = 0.39
+
+```
