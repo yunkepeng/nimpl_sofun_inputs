@@ -34,6 +34,7 @@ Fig.4b - Predicted site Vcmax25 from max method  vs. observed site Vcmax25 in hi
 library(raster)
 library(ncdf4)
 library(spgwr)  
+library(visreg)
 
 ######Test 1: Vcmax25 using weighted sum method 
 #1. input nc files for vcmax25 over 20 yrs.
@@ -105,6 +106,7 @@ gridded(vcmax25_max) <- TRUE
 rmax <- raster(vcmax25_max, "vcmax25") 
 plot(rmax)
 title("Fig.1b Vcmax25 using daily maximum vcmax25 of year in 1991-2010 (umol m-2 s-1) ")
+
 
 #6. applying geographically weighted regression (gwr) to extract site vcmax25 from grids data
 i <- 1 # sites started from 1 to n.
@@ -209,5 +211,21 @@ summary(lm(pred_vcmax25_weightsum~obs_vcmax25,data=high_elev)) # R2 = 0.32
 plot(pred_vcmax25_max~obs_vcmax25,data=high_elev,xlim=c(0,250),ylim=c(0,250))
 title("Fig.4b Max Vcmax25 vs. Observed Vcmax25 in >2km sites R2 = 0.39")
 summary(lm(pred_vcmax25_max~obs_vcmax25,data=high_elev)) # R2 = 0.39
+
+#9. check model bias (prediction - observation) vs. latitude
+summary(all_vcmax25$pred_vcmax25_max)
+
+#9.1 prediction using Peng et al., --> no bias
+summary(lm(pred_vcmax25_Peng-obs_vcmax25 ~ lat, data=all_vcmax25)) # r2 = 0.001, p-value = 0.58 
+
+#9.2 prediction using weightedsum method --> underestimation in high lat
+bias_weighted <- lm(pred_vcmax25_weightsum-obs_vcmax25 ~ lat, data=all_vcmax25)
+summary(bias_weighted)# r2 = 0.02, negative, p-value = 0.01 
+visreg(bias_weighted,"lat",ylab="Bias of weighted-sum Vcmax25")
+
+#9.3 prediction using max method --> overestimation in high lat
+bias_max <- lm(pred_vcmax25_max-obs_vcmax25 ~ lat, data=all_vcmax25)
+summary(bias_max)# r2 = 0.04, positive, p-value = 0.001
+visreg(bias_max,"lat",ylab="Bias of max Vcmax25")
 
 ```
