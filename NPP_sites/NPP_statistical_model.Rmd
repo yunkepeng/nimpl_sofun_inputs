@@ -1,94 +1,188 @@
 ---
 output:
-  word_document: default
-  pdf_document: default
   html_document: default
+  pdf_document: default
+  word_document: default
 ---
 
 ---
 title: "Statistical models for C-N cycles"
 author: "Yunke Peng"
-date: "June 25, 2020"
+date: "Sep 16, 2020"
 output: html_document
 ---
 
 ###The analysis below shows four statistical models separately
 
-##### 1. TNPP_model - The logit function of (TNPP_1/GPP) predicted by soil C:N, age, alpha and observed fAPAR
+#### 1. TNPP_model - The logit function of (TNPP_1/GPP) predicted by measured soil C:N, measured age, alpha and observed fAPAR
 
-##### 2. ANPP_model - The logit function of (ANPP_2/GPP) predicted by soil C:N, age, alpha and observed fAPAR
+#### 2. ANPP_model - The logit function of (ANPP_2/GPP) predicted by measured soil C:N,measured age, alpha and observed fAPAR
 
-##### 3. NPPleaf_model - The logit function of (NPP.foliage/ANPP_2) predidicted by PPFD, Tg and vpd
+#### 3. NPPleaf_model - The logit function of (NPP.foliage/ANPP_2) predidicted by PPFD, Tg and vpd
 
-##### 4. leafCN_model - The log function of leaf C/N ratio predicted by LMA and Vcmax.25
-
-### They were all using mixed-effects model. For first three models, it considered (1|site) as the only random factor. For the last model, it considered both (1|site) and (1|species) as random factors.
+### They were all using mixed-effects model. it considered (1|site) as the only random factor. 
 
 ### The coefficient generated in summary below will be used in next-step: global mapping of C and N cycle.
 
-### For data sources, units, and basic information of input please refer to README.
+### For data sources, units, and basic information of input please refer to README in relevant location in Euler.
+
+### The climate data of all 672 samples were saved in ~/data/NPP_Yunke/climate
 
 ```{r}
-#Package
 library(lme4)
 library(nlme)
+library(lmerTest)
+library("PerformanceAnalytics")
 library(MuMIn)
 
-#Input data
-CNdata <- read.csv(file= "/cluster/work/climate/bestocke/data/nimpl_sofun_inputs/sites/NPP.csv")
-leafCN <- read.csv(file="/cluster/work/climate/bestocke/data/nimpl_sofun_inputs/sites/leafCN.csv")
+###1. Input original data file from NPP_SaraVicca, NPP_Malhi, NPP_Keith, and NPP_Forc
+#NPP_SaraVicca <- read.csv(file="~/data/NPP_Yunke/NPP_SaraVicca/NPP_SaraVicca.csv")
+#NPP_Malhi <- read.csv(file="~/data/NPP_Yunke/NPP_Malhi/NPP_Malhi.csv")
+#NPP_Keith <- read.csv(file="~/data/NPP_Yunke/NPP_Keith/NPP_Keith.csv")
+#NPP_Forc <- read.csv(file="~/data/NPP_Yunke/NPP_ForC/NPP_ForC.csv")
 
-#remove one NA value (there is one sample when TNPP_1 > GPP)
 
-CNdata2 <- subset(CNdata, GPP - TNPP_1 >0)
+NPP_SaraVicca <- read.csv(file="D:/PhD/nimpl_sofun_inputs/Data/NPP/NPP_SaraVicca/NPP_SaraVicca.csv")
+NPP_Malhi <- read.csv(file="D:/PhD/nimpl_sofun_inputs/Data/NPP/NPP_Malhi/NPP_Malhi.csv")
+NPP_Keith <- read.csv(file="D:/PhD/nimpl_sofun_inputs/Data/NPP/NPP_Keith/NPP_Keith.csv")
+NPP_Forc <- read.csv(file="D:/PhD/nimpl_sofun_inputs/Data/NPP/NPP_Forc/NPP_Forc.csv")
 
-#Statistical model 1: Total NPP/GPP
-TNPP_model <- lmer(log((TNPP_1/GPP)/(1-(TNPP_1/GPP)))~log(CN)+log(agee)+alpha+observedfAPAR+(1|site),data=CNdata2)
+NPP_all <- rbind(NPP_SaraVicca,NPP_Malhi,NPP_Keith,NPP_Forc)
 
-summary(TNPP_model)
 
-r.squaredGLMM(TNPP_model)
+###2. Input climate and environmental data
+#### tmn(minimum temperature, celcius degree), tmx(maximum temperature, celcuis degree), radi (shortwave solar radiation, w/m2),vap (vapor pressure, hPa), alphalist3 (alpha derived from SPLASH), CaGlobal (Pa).
+#### Those site-based climate data were derived from geographically weighted regressions (gwr) methods in R. An example code was given in "https://github.com/yunkepeng/gwr".
+#### Data sources: tmn, tmx, vap, pre (from CRU ts 4.01, see: https://crudata.uea.ac.uk/cru/data/hrg/cru_ts_4.01/), radi (from WFDEI, see http://www.eu-watch.org/gfx_content/documents/README-WFDEI%20(v2016).pdf), alpha from SPLASH-based products (see Euler:~/data/alpha/data_orig).
+#### All climate data were obtained from measurement year only, the measurement year is available at NPP_all$Begin_year and NPP_all$End_year
 
-#Statistical model 2: Aboveground NPP/GPP
-ANPP_model <- lmer(log((ANPP_2/GPP)/(1-(ANPP_2/GPP)))~log(CN)+log(agee)+alpha+observedfAPAR+(1|site),data=CNdata)
+#tmn <- read.csv(file="~/data/NPP_Yunke/climate/tmnlist3.csv")
+#tmx <- read.csv(file="~/data/NPP_Yunke/climate/tmxlist3.csv")
+#vap <- read.csv(file="~/data/NPP_Yunke/climate/vaplist3.csv")
+#radi<- read.csv(file="~/data/NPP_Yunke/climate/radlist3.csv")
+#alphalist3 <- read.csv(file="~/data/NPP_Yunke/climate/alphalist3.csv")
+#CaGlobal <- read.csv(file="~/data/NPP_Yunke/climate/CaGlobal.csv")
+#pre <- read.csv(file="~/data/NPP_Yunke/climate/prelist3.csv")
 
-summary(ANPP_model)
+tmn <- read.csv(file="D:/PhD/nimpl_sofun_inputs/Data/climate/tmnlist3.csv")
+tmx <- read.csv(file="D:/PhD/nimpl_sofun_inputs/Data/climate/tmxlist3.csv")
+vap <- read.csv(file="D:/PhD/nimpl_sofun_inputs/Data/climate/vaplist3.csv")
+radi<- read.csv(file="D:/PhD/nimpl_sofun_inputs/Data/climate/radlist3.csv")
+alphalist3 <- read.csv(file="D:/PhD/nimpl_sofun_inputs/Data/climate/alphalist3.csv")
+CaGlobal <- read.csv(file="D:/PhD/nimpl_sofun_inputs/Data/climate/CaGlobal.csv")
+pre <- read.csv(file="D:/PhD/nimpl_sofun_inputs/Data/climate/prelist3.csv")
 
-r.squaredGLMM(ANPP_model)
+elev <- NPP_all$z
+lat <- NPP_all$lat
+lon <- NPP_all$lon
 
-#Statistical model 3: NPP allocated to leaf/Aboveground NPP
-NPPleaf_model <- lmer(log((NPP.foliage/ANPP_2)/(1-(NPP.foliage/ANPP_2)))~log(PPFD)+Tg+log(vpd)+(1|site),data=CNdata)
-
-summary(NPPleaf_model)
-
-r.squaredGLMM(NPPleaf_model)
-
-#Statistical model 4: Leaf C/N 
-
-#First, we need to keep consistent for Genus speices (some data has divided Genus and species into 2 columns, while some data has include "Genus species" in 1 column) --> The consistent name was in final_species below.
-for (i in 1:nrow(leafCN)){
-  if (is.na(leafCN$species2[i]) == TRUE){
-    leafCN$final_species[i]<- leafCN$species[i]} else { 
-      leafCN$final_species[i]<- paste(leafCN$species[i],sep=" ",leafCN$species2[i])} 
+###3. climate data calculation (on monthly basis, which means, 12 cols in total)
+####(1) Tg (growth temperature)
+Tg_cal <- function(tmn,tmx){
+  #-----------------------------------------------------------------------
+  # Input:   ¦Ä (s;solar delclination), 12 month constant values
+  # Input:   tmn, in monthly or daily degrees
+  # Input:   tmx, in monthly or daily degrees
+  # Input:   lat, in degrees
+  # Output:  Tg,  in monthly or daily degrees
+  # Features: Converts growth temperature from tmn to tmx
+  #-----------------------------------------------------------------------
+  s1 <- -20.205
+  s2 <- -12.65
+  s3 <- -1.95
+  s4 <- 9.45
+  s5 <- 18.35
+  s6 <- 22.55
+  s7 <- 20.75
+  s8 <- 13.45
+  s9 <- 2.9
+  s10 <- -8.45
+  s11 <- -17.85
+  s12 <- -22.355
+  s <- c(s1,s2,s3,s4,s5,s6,s7,s8,s9,s10,s11,s12)
+  x <-data.frame(matrix(nrow = nrow(NPP_all),ncol=ncol(tmn))) ##create x dataframe: nrow=No. of sites, ncol=timestep
+  Tg <-data.frame(matrix(nrow = nrow(NPP_all),ncol=ncol(tmn)))##see above
+  
+  for (i in 1:ncol(tmn)){
+    
+    x[,i]<- -tan(pi*lat/180)*tan(s[i]*pi/180)
+    Tg[,i]<-tmx[,i]*(0.5+(1-x[,i]^2)^(0.5)/(2*acos(x[,i])))+ tmn[,i]*(0.5-(1-x[,i]^2)^(0.5)/(2*acos(x[,i])))
+    
+  }
+  Tg[Tg<0] <-NA
+  Tg[Tg =="NaN"] <- NA
+  return(Tg)
 }
+Tg <- Tg_cal(tmn,tmx) # monthly Tg in ¡æ
+Tg_K <- Tg+273.15     # monthly Tg in K
 
-#Second, Remove outliers
-leafCN2 <- subset(leafCN,Vcmax.25>0&Vcmax.25<300&cn>1&cn<500&lma>0&lma<700)
+####(2) Pressure, Ca, vpd
+pressure <- 101325*(1-0.0065*elev/288.15)^(9.80665*0.028963/8.31447/0.0065) #pressure in Pa
+Ca <- as.list.data.frame(pressure*CaGlobal/1000000) ##Ca in Pa
+vpd <- 0.611*exp(17.27*(Tg_K-273.15)/((Tg_K-273.15)+237.3))-vap*0.1      #monthly vpd in KPa
 
+####(3) PPFD
+PPFD <- radi*0.5*4.6 + Tg - Tg # here " + Tg - Tg " means we only need PPFD at growing season, and this will remove the month when Tg is NA.
 
-#Third, we are interested in the site-species average data (which aggregates to one value in the same species at the same site)
-Vcmax.25 <- aggregate(Vcmax.25~sites+final_species,leafCN2,mean)
-cn <- aggregate(cn~sites+final_species,leafCN2,mean)
-lma <- aggregate(lma~sites+final_species,leafCN2,mean)
+####(4) observed fAPAR derived from measured LAI, based on Beer's law
+NPP_all$observedfAPAR <- 1-(1/exp(NPP_all$LAI*0.5))
 
-leafCN3<-Reduce(function(x,y) merge(x = x, y = y, by = c("sites","final_species"),all.x=TRUE), 
-           list(Vcmax.25,cn,lma))
+###4. calculate average of climate data, and attach into NPP_all dataframe.
 
-leafCN_model <- lmer(log(cn)~log(lma)+log(Vcmax.25)+(1|final_species)+(1|sites),data=leafCN3)
+NPP_all$vpd <- rowMeans(vpd,na.rm = TRUE) 
+NPP_all$Tg <- rowMeans(Tg,na.rm = TRUE)
+NPP_all$PPFD <- rowMeans(PPFD,na.rm = TRUE)
+NPP_all$alpha <- rowMeans(alphalist3,na.rm = TRUE)
+###5. merge MEASURED soil (orginally provided from Sara Vicca)
+####(1) For our purpose, we only need CN, pH, age
 
-summary(leafCN_model)
+#soil <-read.csv(file="~/data/NPP_Yunke/NPP_SaraVicca/orig/soil.csv")
+soil <-read.csv(file="D:/PhD/nimpl_sofun_inputs/Data/NPP/NPP_SaraVicca/orig/soil.csv")
+soil2 <- soil[,c(1,2,3,42,43,77)]
+names(soil2)<-c("site","lon","lat","CN","pH","age")
 
-r.squaredGLMM(leafCN_model)
+####(2) we na.omit() each variable, and merge them separately.
+CN <- na.omit(soil2[,c(1,4)])
+final_sites1 <- merge(NPP_all,CN,by=c("site"),all.x=TRUE)
+pH <- na.omit(soil2[,c(1,5)])
+final_sites2 <- merge(final_sites1,pH,by=c("site"),all.x=TRUE)
+
+###6. merge MEASURED management-type and stand-age data (the csv was derived from original data of Sara Vicca).
+####(1) merge management type into dataframe. Management types (M: Managed, UM: unmanaged, RD: Recently disturbed, FI: Fertilized, NA: unknown).
+
+#manage_age <-read.csv(file="~/data/NPP_Yunke/NPP_SaraVicca/orig/age_and_management.csv") # first two cols were sitename and management data, last two cols were sitename and stand-age data.
+manage_age <-read.csv(file="D:/PhD/nimpl_sofun_inputs/Data/NPP/NPP_SaraVicca/orig/age_and_management.csv") # first two cols were sitename and management data, last two cols were sitename and stand-age data.
+manage <-manage_age[1:159,1:2]
+names(manage) <- c("site","management")
+final_sites3 <- merge(final_sites2,manage,by=c("site"),all.x=TRUE)
+
+####(2) merge stand-age data into dataframe. There might be more than 1 sample measured in a site (as collected from different sources). So we need to aggregate them firstly.
+agee <- na.omit(manage_age[,3:4])
+names(agee) <- c("site","age")
+agee2 <- aggregate(age~site,data=agee,mean)
+final_sites4 <- merge(final_sites3,agee2,by=c("site"),all.x=TRUE)
+
+###6.add pft data derived from orginal data provided from Sara Vicca
+
+#Evergreen <- read.csv(file="~/data/NPP_Yunke/NPP_SaraVicca/orig/pft.csv")
+Evergreen <- read.csv(file="D:/PhD/nimpl_sofun_inputs/Data/NPP/NPP_SaraVicca/orig/pft.csv")
+Evergreen2 <- Evergreen[,c(4:5)]
+
+final_sites5 <- merge(final_sites4,Evergreen2,by=c("site"),all.x=TRUE)
+summary(final_sites5)
+
+####7. Output of analyses
+######(1) NPP/GPP function
+######Predictors: Measured soil C/N, Measured stand-age(yrs), alpha (from SPLASH) and observed fAPAR (calculated from measured LAI based on Beer's law).
+summary(lmer(log((TNPP_1/GPP)/(1-(TNPP_1/GPP)))~log(CN)+log(age)+alpha+observedfAPAR+(1|site),data=final_sites5))
+
+######(2) ANPP/GPP function
+######Predictors: Measured soil C/N, Measured stand-age(yrs), alpha (from SPLASH) and observed fAPAR (calculated from measured LAI based on Beer's law).
+summary(lmer(log((ANPP_2/GPP)/(1-(ANPP_2/GPP)))~log(CN)+log(age)+alpha+observedfAPAR+(1|site),data=final_sites5))
+
+######(3) NPP.foliage/ANPP function
+summary(lmer(log((NPP.foliage/ANPP_2)/(1-(NPP.foliage/ANPP_2)))~log(PPFD)+Tg+log(vpd)+(1|site),data=final_sites5))
+
 
 ```
 

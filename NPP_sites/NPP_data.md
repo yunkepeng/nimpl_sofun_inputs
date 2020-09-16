@@ -2,15 +2,19 @@
 ## Statistical models for carbon allocation and N cycle
 ### Author: Yunke Peng
 
-###### The data has provided a global dataset of carbon allocations (at different compartments), plant functional traits, soil traits and climate variables. It includes 672 samples, 200 sites overall.
+###### The data has provided a global dataset of carbon allocations (at different compartments), plant functional traits, soil traits and climate variables. It includes 672 samples, 200 sites overall. The variable name and unit below, are relevant to these four csv, beacuse we used these 4 csv as a start of NPP statistical model analysis.
+* NPP_SaraVicca <- read.csv(file="~/data/NPP_Yunke/NPP_SaraVicca/NPP_SaraVicca.csv")
+* NPP_Malhi <- read.csv(file="~/data/NPP_Yunke/NPP_Malhi/NPP_Malhi.csv")
+* NPP_Keith <- read.csv(file="~/data/NPP_Yunke/NPP_Keith/NPP_Keith.csv")
+* NPP_Forc <- read.csv(file="~/data/NPP_Yunke/NPP_ForC/NPP_ForC.csv")
+
+###### within ~/data/NPP_Yunke, NPP_statistical_model.Rmd shows how NPP/GPP, ANPP/GPP, ANPP-foliage/ANPP was predicted, based on input site-based carbon allocation, climate and soil data. Then, for subfiles: climate/ included all necessary climate input of samples, as predicted from geographically weighted regressions in R. NPP_Forc/; NPP_Keith/; NPP_Malhi/; NPP_Saravicca/ included 4 NPP original data sources. Within each of them, it has included orig/ that stores original data, and also included code or readme detailing how original data was restructered or subsetted, before the start-up of NPP model. Then, four csv files above, are the dataframe that prepared as a start-up of NPP models.
 
 ###### The original reference of dataset included: 
 * Terra A-P project database (organized by Dr. Sara Vicca and updated by Dr. Keith Bloomfield; non-public)
 * Malhi et al. 2011 Phil. Trans. R. Soc. B. (public available)
 * Malhi et al. 2017 New Phytologist (public available)
 * ForC dataset -  https://github.com/forc-db/ForC (public available)
-
-###### Pre-processing: In NPP/GPP analysis, there was one sample (see site: TRU08) indicating higher TNPP_1 (total NPP) than GPP, which is not reasonable. This sample was therefore considered as NA in this analysis. 
 
 ### Variables
 #### Measured biomass production
@@ -50,26 +54,15 @@
 #### Measured leaf traits
 * LAI (/): Measured Leaf-area-index 
 * observedfAPAR (/): Measured fAPAR (derived from measured LAI using Beer's law where k = 0.5)
-* lma_original_final (g/m2): Measured leaf-mass-per-area
 
 #### Preidiction field
 * alpha (/): The ratio of actual evaportranspiration transport (AET) to potential evaportranspiration transport (PET) derived from SPLASH
-* fAPAR2 (/): fAPAR obtained from MODIS data 
-* finalfAPAR (/): fAPAR primarily derived from observedfAPAR and alternatively from fAPAR2
 * vpd (kPa): vapor-pressure-deficient, derived from CRU ts 4.01 at growth season in measurement year.
 * Tg (°C): Growth-temperature, derived from CRU ts 4.01 (tmx, tmin) at growth season in measurement year
 * PPFD (umol/m2/s): Time-integrated monthly instantaneous PPFD, averaged over the 24-hour period at growth season in measurement year
-* PPFD2 (umol/m2/s): Total values of PPFD in the whole year
-* new_ppfd (umol/m2/s): PPFD derived from measured radiation data at local climate station.
-* cwd (mm/month): cumulative water deficit derived from 20 years dataset (Assisted by Dr. Beni Stocker).
-* Forest (characteristics): Plant functional types (PFTs) derived from MODIS.
-* lma_3km_v1 (g/m2): leaf-mass-per-area derived from Global Traits Map
-* LPC_3km_mgg (mg/g): leaf P per mass derived from Global Traits Map
-* LNC_3km_mgg (mg/g): leaf N per mass derived from Global Traits Map
-* lma_final (g/m2): leaf-mass-per-area primarily from mesurement and alternatively from Global Traits Map.
 
 #### Measured other traits
 * CN (/): Measured soil C per mass in relative to soil N per mass
 * pH (/): Measured soil pH
 * management (/): Management types (M: Managed, UM: unmanaged, RD: Recently disturbed, FI: Fertilized, NA: unknown)
-* agee (yrs): Measured stand-age 
+* age (yrs): Measured stand-age 
