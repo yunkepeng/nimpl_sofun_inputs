@@ -1,0 +1,123 @@
+---
+output:
+  html_document: default
+  pdf_document: default
+  word_document: default
+---
+
+---
+title: "C/N ratio for stem, root and leaf"
+author: "Yunke Peng"
+date: "Sep 16, 2020"
+output: html_document
+---
+
+###The analysis below includes stem C/N, root C/N and leaf C/N
+
+#### 1. root C/N data derived from TRY database. We used its average as a constant in nimpl project.
+
+#### 2. wood C/N data derived from TRY database. We used its average as a constant in nimpl project.
+
+#### 3. leaf Carea, Narea, Vcmax25, LMA data from a large global dataset. Sources and details please see ~/data/CN_leaf/README. Within this code, we (1) construct a robust statistical model of Narea ~ Vcmax25 + LMA, based on site-species data - it is a mixed-effects model by considering site and species as the random factor of intercept (2) obtain global average of Cmass from this dataset. With the help of this, we are able to work on leaf C/N model in nimpl project.
+
+
+```{r}
+#1. Install package
+require(data.table)
+library(maps)
+library(lme4)
+library(MuMIn)
+library(lmerTest)
+
+#2. Input Fine-root data from TRY database, plot map, and obtain mean of root C/N which was finally used in nimpl project.
+#Fineroot <- read.csv(file="~/data/CN_root/fineroot_cn.csv")
+Fineroot <- read.csv(file="D:/PhD/nimpl_sofun_inputs/Data/CN_root/fineroot_cn.csv")
+
+lon <- subset(Fineroot,DataName=="Longitude")
+lat <- subset(Fineroot,DataName=="Latitude")
+rootcn <- subset(Fineroot,TraitID == 167 |TraitID == 2057 |TraitID == 2313|TraitID == 489) # select fine-root C/N
+
+lon2 <- lon[,c("ObservationID","OrigValueStr")]
+lat2 <- lat[,c("ObservationID","OrigValueStr")]
+rootcn2 <- rootcn[,c("ObservationID","OrigValueStr")]
+
+rootcn3 <-Reduce(function(x,y) merge(x = x, y = y, by = c("ObservationID"),all.x=TRUE), 
+                list(rootcn2,lon2,lat2))
+rootcn3$rootcn <- as.numeric(rootcn3[,2])
+rootcn3$lon <- as.numeric(rootcn3[,3])
+rootcn3$lat <- as.numeric(rootcn3[,4])
+
+rootcn4 <- rootcn3[,c("ObservationID","rootcn","lon","lat")]
+
+map("world", fill=TRUE, col="white", bg="white", ylim=c(-60, 90), mar=c(1,0,0,1))
+points(rootcn4$lon,rootcn4$lat, col="red", pch=16,cex=1.5)
+
+# we used this value in nimpl project, see sofun yunkebranch_unit branch, params_std/params_nimpl.dat
+mean(rootcn4$rootcn)
+
+
+#3. Input Fine-wood data from TRY database, plot map, and obtain mean of wood C/N which was finally used in nimpl project.
+#woodcn <- read.csv(file="~/data/CN_wood/wood_cn.csv")
+woodcn <- read.csv(file="D:/PhD/nimpl_sofun_inputs/Data/CN_wood/wood_cn.csv")
+
+#check N. of sites
+points(woodcn$lon,woodcn$lat, col="blue", pch=16,cex=1.5)
+#here red are sites for root c/n, blue are sites for wood c/n
+dim(aggregate(OrigValueStr~lon+lat,data=woodcn,mean))
+
+mean(woodcn$OrigValueStr)
+
+
+#4. leaf C/N analyses.
+
+#Input leaf C, leaf N, LMA, Vcmax25 dataset. The dataset is a comintation of 5 original data sources, for details please see README.
+#leafCN <- read.csv(file="~/data/CN_leaf/final_leafCN.csv")
+leafCN <- read.csv(file="D:/PhD/nimpl_sofun_inputs/Data/CN_leaf/final_leafCN.csv")
+
+# making species name consistent
+for (i in 1:nrow(leafCN)){
+  if (is.na(leafCN$species2[i]) == TRUE){
+    leafCN$final_species[i]<- leafCN$species[i]} else { 
+      leafCN$final_species[i]<- paste(leafCN$species[i],sep=" ",leafCN$species2[i])} 
+}
+
+# remove unreasonable outliers
+leafCN2 <- subset(leafCN,Vcmax.25>0&Vcmax.25<300&cn>1&cn<100&lma>0&lma<700)
+dim(leafCN2) # 2559 samples overall
+
+#generating site-species average data, and merge them
+Vcmax.25 <- aggregate(Vcmax.25~sites+final_species,leafCN2,mean)
+narea <- aggregate(narea~sites+final_species,leafCN2,mean)
+lma <- aggregate(lma~sites+final_species,leafCN2,mean)
+
+leafCN3<-Reduce(function(x,y) merge(x = x, y = y, by = c("sites","final_species"),all.x=TRUE), 
+                list(Vcmax.25,narea,lma))
+
+a1 <- lmer(narea~-1 +lma+Vcmax.25+(1|final_species)+(1|sites),data=leafCN3)
+summary(a1)
+r.squaredGLMM(a1)
+
+#Site-species coefficients (R2 = 0.47)
+#Nstructural = 0.01201
+#Nrubisco = 0.007493
+
+# We eventually plan to use site-species coefficients as our final coefficients used in nimpl project.
+
+#For Peng et al. 2020 New Phytologist, coefficients were on below. Just for a comparison.
+#Nstructural = 0.012
+#Nrubisco = 0.010
+
+#Now, we also need to know average of Cmass in global individuals dataset, and considered it as a constant in nimpl project.
+leafCN2$cmass <- (leafCN2$narea/leafCN2$lma)*leafCN2$cn
+mean(leafCN2$cmass)
+#mean of global individuals dataset = 0.4638
+
+#finally, our coefficients were:
+#Nstructural = 0.01201
+#Nrubisco = 0.007493
+#cmass = 0.4638
+#root c/n = 42
+#wood c/n = 97
+
+```
+
