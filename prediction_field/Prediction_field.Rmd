@@ -141,7 +141,6 @@ ncfname <- paste ("E:/C-N cycling/Carbon allocation/fAPAR/fAPAR HUANYUAN/", "fAP
 dname <- "FAPAR_FILLED"
 
 ncin <- nc_open(ncfname)
-print(ncin) #here nc file includes 420 lists (35 yrs * 12 month)
 
 lon <- ncvar_get(ncin,"LON")
 nlon <- dim(lon) 
@@ -241,7 +240,8 @@ plot(rPPFD)
 #6. Tg (description and main calculation were provided)
 Tg is growth temperature (degree celcius). We used the 30 yrs average data (1982-2011), which was originally derived from monthly maximum temperature (Tmx) and minimum temperature (Tmn) from CRU ts 4.01. See formula below:
 
-Tg_cal <- function(tmn,tmx){
+```{r}
+#Tg_cal <- function(tmn,tmx){
   #-----------------------------------------------------------------------
   # Input:   sai (s; solar delclination), 12 month constant values
   # Input:   tmn, in monthly or daily degrees
@@ -250,34 +250,33 @@ Tg_cal <- function(tmn,tmx){
   # Output:  Tg,  in monthly or daily degrees
   # Features: Converts growth temperature from tmn, tmx, lon
   #-----------------------------------------------------------------------
-  s1 <- -20.205
-  s2 <- -12.65
-  s3 <- -1.95
-  s4 <- 9.45
-  s5 <- 18.35
-  s6 <- 22.55
-  s7 <- 20.75
-  s8 <- 13.45
-  s9 <- 2.9
-  s10 <- -8.45
-  s11 <- -17.85
-  s12 <- -22.355
-  s <- c(s1,s2,s3,s4,s5,s6,s7,s8,s9,s10,s11,s12)
-  x <-data.frame(matrix(nrow = 259200,ncol=12)) ##create x dataframe: nrow=No. of sites, ncol=monthly step
-  Tg <-data.frame(matrix(nrow = 259200,ncol=12))##see above
-  
-  for (i in 1:12){
-  x[,i]<- -tan(pi*lat/180)*tan(s[i]*pi/180)
-  Tg[,i]<-tmx[,i]*(0.5+(1-x[,i]^2)^(0.5)/(2*acos(x[,i])))+ tmn[,i]*(0.5-(1-x[,i]^2)^(0.5)/(2*acos(x[,i])))
-    }
-  Tg[Tg<0] <-NA
-  Tg[Tg =="NaN"] <- NA
-  return(Tg)
-}
+#  s1 <- -20.205
+#  s2 <- -12.65
+#  s3 <- -1.95
+#  s4 <- 9.45
+#  s5 <- 18.35
+#  s6 <- 22.55
+#  s7 <- 20.75
+#  s8 <- 13.45
+#  s9 <- 2.9
+#  s10 <- -8.45
+#  s11 <- -17.85
+#  s12 <- -22.355
+#  s <- c(s1,s2,s3,s4,s5,s6,s7,s8,s9,s10,s11,s12)
+#  x <-data.frame(matrix(nrow = 259200,ncol=12)) ##create x dataframe: nrow=No. of sites, ncol=monthly step
+#  Tg <-data.frame(matrix(nrow = 259200,ncol=12))##see above
+#  
+#  for (i in 1:12){
+#  x[,i]<- -tan(pi*lat/180)*tan(s[i]*pi/180)
+#  Tg[,i]<-tmx[,i]*(0.5+(1-x[,i]^2)^(0.5)/(2*acos(x[,i])))+ tmn[,i]*(0.5-(1-x[,i]^2)^(0.5)/(2*acos(x[,i])))
+#    }
+#  Tg[Tg<0] <-NA
+#  Tg[Tg =="NaN"] <- NA
+#  return(Tg)
+#}
 
-where Tg was calculated from Tmn and Tmx based on monthly average data (Peng et al. 2020 submitted to GCB).The code below will represent the global map of final output:
+#where Tg was calculated from Tmn and Tmx based on monthly average data (Peng et al. 2020 submitted to #GCB).The code below will represent the global map of final output:
 
-```{r}
 library(raster)
 library(ncdf4)
 #ncfname <- paste ("~/data/nimpl_sofun_inputs/Final_ncfile/", "Tg", ".nc", sep="")
