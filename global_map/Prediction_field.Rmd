@@ -1,14 +1,14 @@
 ---
 output:
-  word_document: default
-  pdf_document: default
   html_document: default
+  pdf_document: default
+  word_document: default
 ---
 
 ---
 title: "Global input for all prediction field"
 author: "Yunke Peng"
-date: "June 24 2020"
+date: "Sep 17 2020"
 output: html_document
 ---
 
@@ -30,13 +30,15 @@ The process below will provide original codes of soil C/N, stand age, fAPAR, alp
 
 
 #1. soil C/N
-The original stand age file was available at "~/data/ISRIC/data_orig/", then after scripts below and after CDO processing (for correcting coordinates), the 0.5 degree file used in global simulation is available at: "~/data/ISRIC/data_halfdeg/CNrt.nc" and "~/data/sofun_inputs/Final_ncfile/CNrt.nc"
+
 ```{r}
 library(raster)
 
-soil <- raster('~/data/ISRIC/data_orig/data/raster/w001000.adf') # map input from the last 2015 version of ISRIC (Batjes 2015 ISRIC report)
+#soil <- raster('~/data/ISRIC/data_orig/data/raster/w001000.adf')
+soil <- raster('E:/final round/data/w001000.adf') # map input from the last 2015 version of ISRIC (Batjes 2015 ISRIC report)
 
-Global_grid <- as.data.frame(read.csv(file="~/data/ISRIC/data_orig/data/Global_cell.csv")) #Input global land grids (0.5 degree;N = 259200)
+#Global_grid <- as.data.frame(read.csv(file="~/data/ISRIC/data_orig/data/Global_cell.csv")) 
+Global_grid <- as.data.frame(read.csv(file="E:/climate/Global_cell.csv")) #Input global land grids (0.5 degree;N = 259200)
 
 Global_grid$ID <- c(1:259200) #create a list of number, just helping to form a raster then.
 
@@ -44,9 +46,9 @@ pointXY<-SpatialPointsDataFrame(Global_grid[,c('lon','lat')], data=data.frame(un
 
 vec.soil.extract <-extract(soil,pointXY) 
 data.soil.extract <-data.frame(pointXY,SUID=vec.soil.extract) 
-# These two steps are important, it will extract SUID information from soil map (.adf) to our grids data, so that each our global grid will have a unique SUID, which will be further combined (merged) with soil C/N data then.
+# These two steps are important, it will extract SUID information from soil map to our grids data, so that each our global grid will have a SUID, which will be further combined (merged) with soil C/N data then.
 
-ISRIC.data<-read.csv(file="~/data/ISRIC/data_orig/data/HW30s_FULL.csv",header=TRUE,sep=";",dec = ".") # Now, input ISRIC database
+ISRIC.data<-read.csv(file="E:/final round/HW30s_FULL.csv",header=TRUE,sep=";",dec = ".") # Now, input ISRIC database
 
 data.soil.extract <- merge(data.soil.extract,ISRIC.data,by='SUID',all.x=TRUE) # merge site with soil variables by using SUID
 
@@ -60,7 +62,6 @@ ss2 <- ss1[,c(3,4,5)] # now,select lon, lat and CNrt only
 
 final_CN <-Reduce(function(x,y) merge(x = x, y = y, by = c("lon","lat"),all.x=TRUE), 
                    list(Global_grid,ss2)) #merged this with global grids (N = 259200)
-
 #convert dataframe to raster
 coordinates(final_CN) <- ~lon+lat 
 
@@ -69,16 +70,28 @@ gridded(final_CN) <- TRUE
 rCNrt <- raster(final_CN, "CNrt") 
 plot(rCNrt)
 
+#please note that, after this object, we need two more steps (1) converting all NA values to 9999 so that it will not cause FPE, (2) after output nc file we additionally performing a CDO processing in Euler - running the code cdo remapbil,gridfile_halfdeg.txt input.nc output.nc
+# the code below is not for running, just to show the first step above, about converting NA to 9999 and output nc file. Same in all other prediction fields below.
+
+#final_CN <-Reduce(function(x,y) merge(x = x, y = y, by = c("lon","lat"),all.x=TRUE),list(Global_grid,ss2))
+#final_CN[is.na(final_CN)] <- 9999
+#coordinates(final_CN) <- ~lon+lat 
+#gridded(final_CN) <- TRUE
+#rCNrt <- raster(final_CN, name) 
+#d <- writeRaster(rCNrt, paste0("D:/PhD/nc/new/","CNrt.nc"),format = "CDF", overwrite = TRUE, varname = "CNrt", varunit = "unitless", longname = "soil cn ratio", xname = "lon", yname = "lat")
+
+
 ```
 
+
 #2. stand age
-The original stand age file was available at "~/data/GFAD/data_orig/GFAD_V1-1.nc", then after scripts below and after CDO processing (for correcting coordinates), the 0.5 degree file used in global simulation is available at: "~/data/GFAD/data_halfdeg/age.nc" and "~/data/sofun_inputs/Final_ncfile/age.nc"
 ```{r}
 library(raster)
 library(ncdf4)
 
 #set the path and filename
-ncfname <- paste ("~/data/GFAD/data_orig/", "GFAD_V1-1", ".nc", sep="")
+#ncfname <- paste ("~/data/GFAD/data_orig/", "GFAD_V1-1", ".nc", sep="")
+ncfname <- paste ("E:/C-N cycling/Carbon allocation/672 sites analysis/stand age/GFAD2/", "GFAD_V1-1", ".nc", sep="")
 
 dname <- "age"
 
@@ -103,28 +116,7 @@ pre.mat <- matrix(pre.vec.long, nrow = nlon * nlat, ncol = 4*15) # 259200 column
 
 lonlat <- expand.grid(lon, lat)
 
-#On below, we do not calculate weight-mean, but calculate stand age from the maximum value at each grid.
-
-#lonlat$age <- rowSums(pre.mat[,1:4])*5+rowSums(pre.mat[,5:8])*15+rowSums(pre.mat[,9:12])*25+rowSums(pre.mat[,13:16])*35+rowSums(pre.mat[,17:20])*45+rowSums(pre.mat[,21:24])*55+rowSums(pre.mat[,25:28])*65+rowSums(pre.mat[,29:32])*75+rowSums(pre.mat[,33:36])*85+rowSums(pre.mat[,37:40])*95+rowSums(pre.mat[,41:44])*105+rowSums(pre.mat[,45:48])*115+rowSums(pre.mat[,49:52])*125+rowSums(pre.mat[,53:56])*135+rowSums(pre.mat[,57:60])*145
-
-i <- 1
-for (i in (1:259200)){
-  if (sum(pre.mat[i,57:60])>0){lonlat$age[i]<- 145} else { #here we extracted each grid from its maximum value
-    if (sum(pre.mat[i,53:56])>0){lonlat$age[i]<- 135}else { #when any fraction data is available...
-      if (sum(pre.mat[i,49:52])>0){lonlat$age[i]<- 125}else {
-        if (sum(pre.mat[i,45:48])>0){lonlat$age[i]<- 115}else {
-          if (sum(pre.mat[i,41:44])>0){lonlat$age[i]<- 105}else {
-            if (sum(pre.mat[i,37:40])>0){lonlat$age[i]<- 95}else {
-              if (sum(pre.mat[i,33:36])>0){lonlat$age[i]<- 85}else {
-                if (sum(pre.mat[i,29:32])>0){lonlat$age[i]<- 75}else {
-                  if (sum(pre.mat[i,25:28])>0){lonlat$age[i]<- 65}else {
-                    if (sum(pre.mat[i,21:24])>0){lonlat$age[i]<- 55}else {
-                      if (sum(pre.mat[i,17:20])>0){lonlat$age[i]<- 45}else {
-                        if (sum(pre.mat[i,13:16])>0){lonlat$age[i]<- 35}else {
-                          if (sum(pre.mat[i,9:12])>0){lonlat$age[i]<- 25}else {
-                            if (sum(pre.mat[i,5:8])>0){lonlat$age[i]<- 15}else {
-                              if (sum(pre.mat[i,1:4])>0){lonlat$age[i]<- 5}else {lonlat$age[i]<-NA
-                              }}}}}}}}}}}}}}}}
+lonlat$age <- rowSums(pre.mat[,1:4])*5+rowSums(pre.mat[,5:8])*15+rowSums(pre.mat[,9:12])*25+rowSums(pre.mat[,13:16])*35+rowSums(pre.mat[,17:20])*45+rowSums(pre.mat[,21:24])*55+rowSums(pre.mat[,25:28])*65+rowSums(pre.mat[,29:32])*75+rowSums(pre.mat[,33:36])*85+rowSums(pre.mat[,37:40])*95+rowSums(pre.mat[,41:44])*105+rowSums(pre.mat[,45:48])*115+rowSums(pre.mat[,49:52])*125+rowSums(pre.mat[,53:56])*135+rowSums(pre.mat[,57:60])*145
 
 
 names(lonlat) <- c("lon","lat","age")
@@ -138,11 +130,14 @@ plot(r)
 ``` 
 
 #3. fAPAR
-The original stand age file was available at "~/data/fAPAR/fAPAR3g_v2/", then after scripts below and after CDO processing (for correcting coordinates), the 0.5 degree file used in global simulation is available at: "~/data/nimpl_sofun_inputs/map/Final_ncfile/fAPAR.nc" and "~/data/nimpl_sofun_inputs/Final_ncfile/fAPAR.nc"
+
 ```{r}
 library(ncdf4)
 library(raster)
-ncfname <- paste ("~/data/fAPAR/fAPAR3g_v2/", "fAPAR3g_v2_1982_2016_FILLED", ".nc", sep="")
+
+#ncfname <- paste ("~/data/fAPAR/fAPAR3g_v2/", "fAPAR3g_v2_1982_2016_FILLED", ".nc", sep="")
+
+ncfname <- paste ("E:/C-N cycling/Carbon allocation/fAPAR/fAPAR HUANYUAN/", "fAPAR3g_v2_1982_2016_FILLED", ".nc", sep="")
 dname <- "FAPAR_FILLED"
 
 ncin <- nc_open(ncfname)
@@ -173,13 +168,18 @@ coordinates(fAPAR_input) <- ~lon+lat
 gridded(fAPAR_input) <- TRUE
 r3 <- raster(fAPAR_input, "fAPAR") 
 plot(r3)
+
 ```
+
 #4. alpha
-The original stand age file was available at "~/data/alpha/data_orig/", then after scripts below and after CDO processing (for correcting coordinates), the 0.5 degree file used in global simulation is available at: "~/data/alpha/data_halfdeg/alpha.nc" and "~/data/nimpl_sofun_inputs/Final_ncfile/alpha.nc"
+
 ```{r}
 library(raster)
-alphalist <- list.files(path = "~/data/alpha/data_orig/",full.names = T) # here this file includes 116 data - that is the annual alpha from 1901 to 2016
+#alphalist <- list.files(path = "~/data/alpha/data_orig/",full.names = T) # here this file includes 116 data - that is the annual alpha from 1901 to 2016
 
+alphalist <- list.files(path = "E:/C-N cycling/Carbon allocation/672 sites analysis/alpha/",full.names = T)
+
+#Input alpha from a list of data frame from 1901 to 2016 (list 116)
 empty_alpha <- data.frame(matrix(NA)) 
 
 #calculate alpha within 30 years (1982-2011)
@@ -198,6 +198,7 @@ gridded(alpha_input) <- TRUE
 
 r4 <- raster(alpha_input, "alpha") 
 plot(r4)
+
 ``` 
 
 #5. PPFD (description and main calculation were provided)
@@ -209,12 +210,11 @@ where Solar radiation was converted to incident PPFD assuming a flux : energy ra
 
 The code below will represent the global map of final output:
 
-The final nc file (0.5 degree file) after CDO processing was saved at "~/data/nimpl_sofun_inputs/Final_ncfile/PPFD.nc"
 ```{r}
 library(raster)
 library(ncdf4)
-
-ncfname <- paste ("~/data/nimpl_sofun_inputs/Final_ncfile/", "PPFD", ".nc", sep="")
+#ncfname <- paste ("~/data/nimpl_sofun_inputs/Final_ncfile/", "PPFD", ".nc", sep="")
+ncfname <- paste ("E:/R code/CN MS/PhD/NC files/", "PPFD", ".nc", sep="")
 dname <- "PPFD"
 ncin <- nc_open(ncfname)
 
@@ -237,6 +237,7 @@ rPPFD <- raster(PPFD_input, "PPFD")
 plot(rPPFD)
 
 ``` 
+
 #6. Tg (description and main calculation were provided)
 Tg is growth temperature (degree celcius). We used the 30 yrs average data (1982-2011), which was originally derived from monthly maximum temperature (Tmx) and minimum temperature (Tmn) from CRU ts 4.01. See formula below:
 
@@ -276,12 +277,11 @@ Tg_cal <- function(tmn,tmx){
 
 where Tg was calculated from Tmn and Tmx based on monthly average data (Peng et al. 2020 submitted to GCB).The code below will represent the global map of final output:
 
-The final nc file (0.5 degree file) after CDO processing was saved at "~/data/nimpl_sofun_inputs/Final_ncfile/Tg.nc"
 ```{r}
 library(raster)
 library(ncdf4)
-
-ncfname <- paste ("~/data/nimpl_sofun_inputs/Final_ncfile/", "Tg", ".nc", sep="")
+#ncfname <- paste ("~/data/nimpl_sofun_inputs/Final_ncfile/", "Tg", ".nc", sep="")
+ncfname <- paste ("E:/R code/CN MS/PhD/NC files/", "Tg", ".nc", sep="")
 dname <- "Tg"
 
 ncin <- nc_open(ncfname)
@@ -304,17 +304,20 @@ gridded(Tg_input) <- TRUE
 rTg <- raster(Tg_input, "Tg") 
 plot(rTg)
 ``` 
+
+
 #7. vpd (description and main calculation were provided)
 vpd is vapor-pressure-deficient (kPa). We used the 30 yrs average data (1982-2011), which was originally derived from monthly data from CRU ts 4.01. See formula below (Peng et al. 2020 New Phytologist):
 
 vpd <- 0.611*exp(17.27*(Tg)/((Tg)+237.3))-vap*0.1 
+
 where Tg (in celcius degree) was derived from above, and vap (hPa) was derived from CRU ts 4.01 monthly data. The code below shows the global map of final output.
 
-The final nc file (0.5 degree file) after CDO processing was saved at "~/data/nimpl_sofun_inputs/Final_ncfile/vpd.nc"
 ```{r}
 library(raster)
 library(ncdf4)
-ncfname <- paste ("~/data/nimpl_sofun_inputs/Final_ncfile/", "vpd", ".nc", sep="")
+#ncfname <- paste ("~/data/nimpl_sofun_inputs/Final_ncfile/", "vpd", ".nc", sep="")
+ncfname <- paste ("E:/R code/CN MS/PhD/NC files/", "vpd", ".nc", sep="")
 dname <- "vpd"
 
 ncin <- nc_open(ncfname)
@@ -337,13 +340,16 @@ gridded(vpd_input) <- TRUE
 rvpd <- raster(vpd_input, "vpd") 
 plot(rvpd)
 ``` 
+
 #8. LMA (a resample method was pre-processed in advance, see text below)
-Here the all tiff. file was originally downloaded from TRY (see link on above). The original data of SLA was saved as "~/data/TRY_maps/data_orig/SLA_3km_v1.tif". Then I have inputted this tif file into ArcGIS, and  interpolating all global grids points (720*360 grids) from the 3km tiff map, using "Extract multi values to points" function. This will enable us to output a global grid dataframe (in csv format), which exactly includes LMA values from 720*360 grids (i.e. N = 259200). The output csv is available in "~/data/TRY_maps/SLA_export.csv". This csv was then processed at codes below (for correcting units), and then processed by a CDO function in Euler for correcting coordinates. After all this, the final nc file used for prediction field is now available at "~/data/TRY_maps/data_halfdeg/LMA.nc" and "~/data/nimpl_sofun_inputs/map/Final_ncfile/LMA.nc"
+Here the SLA tiff. file was originally downloaded from TRY (see link on above). Then I have inputted this tiff file into ArcGIS, and then interpolating all global grids points (N = 259200) from the tiff map, using "Extract multi values to points" function. This will enable us to output a global grid dataframe (in csv), that includes LMA values from 720*360 grids.
+
 ```{r}
 library(raster)
 library(ncdf4)
+#SLA_extracted <- read.csv(file="~/data/TRY_maps/SLA_export.csv") #This dataframe outputted from ArcGIS, including FID, lon, lat, Elevation, SLA (mg/mm)
 
-SLA_extracted <- read.csv(file="~/data/TRY_maps/SLA_export.csv") #This dataframe outputted from ArcGIS, including FID, lon, lat, Elevation, SLA (mg/mm)
+SLA_extracted <- read.csv(file="E:/C-N cycling/Carbon allocation/672 sites analysis/TRY Global map/SLA_export.csv") #This dataframe outputted from ArcGIS, including FID, lon, lat, Elevation, SLA (mg/mm)
 SLA_extracted2 <- subset(SLA_extracted,SLA_3km_v1>0) #remove NA or negative values
 
 SLA_extracted2$LMA <- 1000/SLA_extracted2$SLA_3km_v1 #mg/mm -> g/m2
@@ -360,14 +366,54 @@ gridded(final_lma) <- TRUE
 rLMA <- raster(final_lma, "LMA") 
 plot(rLMA)
 
-#after this, we could output rLMA as a nc file using code below, and then after using CDO function in Euler, we will eventually generate final nc file used for global simulation.
-
-
-``` 
-#NC files generation
-After finishing map at each vairable, we can directly outputing such object (e.g. rLMA, rvpd, rTg...) to nc file, using WriteRaster function in r. An example code outputnig rLMA is on below:
-d <- writeRaster(rLMA, paste0("~/nimpl_sofun_inputs/map/Final_ncfile","LMA.nc"),
+d <- writeRaster(rLMA, paste0("E:/R code/CN MS/PhD/NC files/","LMA_test.nc"),
                  format = "CDF", overwrite = TRUE, varname = "LMA", 
                  varunit = "g/m2", longname = "Leaf-mass-per-area (TRY gloabl traits map)", 
                  xname = "lon", yname = "lat")
-After this step, we need to have CDO processing so that flipped lat/lon problem would not occur. Then final nc files used in global simulation were all available at "~/data/nimpl_sofun_inputs/map/Final_ncfile/"
+
+
+``` 
+
+
+#9. c3/c4 percentage map
+
+```{r}
+library(raster)
+library(ncdf4)
+
+#Now, input file after resampled from ArcGIS (extract multi values from raster)
+c4 <- read.csv(file="D:/PhD/Project 1/Data/ISLSCP_C4/export_c4.csv") #This dataframe outputted from ArcGIS, including lon, lat, Elevation, c4 percentage (%)
+summary(c4)
+
+c4a <- subset(c4,c4_percent>=0) #remove NA or negative values
+
+c4a$c4 <- c4a$c4_percent/100 #convert percentage to fraction (0-1)
+
+c4_final <- c4a[,c(1,2,4)] #only select lon, lat and LMA (g/m2)
+
+names(lonlat) <- c("lon","lat")
+
+c4_output <-Reduce(function(x,y) merge(x = x, y = y, by = c("lon","lat"),all.x=TRUE), 
+                        list(lonlat,c4_final)) #combined with global grids
+
+coordinates(c4_output) <- ~lon+lat 
+gridded(c4_output) <- TRUE
+rC4 <- raster(c4_output, "c4") 
+plot(rC4)
+
+#d <- writeRaster(rC4, paste0("E:/R code/CN MS/PhD/NC files/","c4_final.nc"),
+#                 format = "CDF", overwrite = TRUE, varname = "c4", 
+#                 varunit = "fraction", longname = "fraction of c4 plants", 
+#                 xname = "lon", yname = "lat")
+
+
+``` 
+
+
+#NC files generation
+After finishing map at each vairable, we can directly outputing such object (e.g. rLMA above) to nc file, using WriteRaster function in r. An example code outputnig rLMA is on below:
+
+d <- writeRaster(rLMA, paste0("E:/R code/CN MS/PhD/NC files/","LMA.nc"),
+                 format = "CDF", overwrite = TRUE, varname = "LMA", 
+                 varunit = "g/m2", longname = "Leaf-mass-per-area (TRY gloabl traits map)", 
+                 xname = "lon", yname = "lat")
