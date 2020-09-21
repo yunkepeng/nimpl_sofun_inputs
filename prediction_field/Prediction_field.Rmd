@@ -232,8 +232,6 @@ r <- raster(final2, "age_used")
 plot(r) 
 
 
-
-
 ``` 
 
 #3. fAPAR

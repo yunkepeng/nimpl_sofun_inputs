@@ -1,0 +1,123 @@
+---
+output:
+  html_document: default
+  pdf_document: default
+  word_document: default
+---
+
+---
+title: "Check GPP from sofun/yunkebranch_units (C3 or C3+C4) and compare it with GMD GPP"
+author: "Yunke Peng"
+date: "Sep 21 2020"
+output: html_document
+---
+
+## GPP data description
+
+Here the first map shows GMD GPP (fAPAR3g, 2000-2016). The second map shows GPP outputted from nimpl/yunkebranch_units/ (npft = 1, lGr3 = .TRUE.) in SOFUN simulation in Euler. Then the figure represents its comparison, supported by summary of linear regression. It clear shows some outliers (when GMD gpp has data while nimpl gpp = 0). I have indicated those sits in map at the end. I guess it is due to function: mprime = m**2 - kc**(2.0/3.0) * (m**(4.0/3.0)), then due to mprime < 0, it set mprime = 0, therefore gpp = 0. We need to solve this...
+
+
+```{r}
+library(raster)
+library(ncdf4)
+library(maps)
+
+#1. Input GMD GPP (fAPAR3g, 2000-2016)
+# downloaded from /cluster/work/climate/bestocke/data/sofun_outputs/output_nc_global/global_BRC_fAPAR3g_v2_2000_2016.a.gpp.nc
+
+name <- "gpp"
+ncin <- nc_open(paste ("D:/PhD/nimpl_sofun_inputs/Data/GPP/GMD/", "global_BRC_fAPAR3g_v2_2000_2016.a.gpp.nc", sep=""))
+
+lon <- ncvar_get(ncin,"lon")
+lat<-ncvar_get(ncin,"lat")
+gpp <- ncvar_get(ncin,name)
+time <- ncvar_get(ncin,"time")
+nc_close(ncin)
+
+pre.vec.long <- as.vector(gpp)
+pre.mat <- matrix(pre.vec.long, nrow = 259200, ncol = 17)
+
+lonlat <- expand.grid(lon, lat)
+gpp_final <- as.data.frame(cbind(lonlat,pre.mat[,5]))
+names(gpp_final) <- c("lon","lat","gpp")
+gpp_gmd <- gpp_final
+
+coordinates(gpp_final) <- ~lon+lat 
+gridded(gpp_final) <- TRUE
+rage <- raster(gpp_final, name) 
+plot(rage)
+title("GMD GPP (fapar3g, 2000-2016)")
+
+
+######2. output nimpl/yunkebranch_units/ GPP (npft = 1, lGr3 = .TRUE.)
+# create a function for output multiple years nc file map
+outputdata <- function(name,year,min,max,path){
+  #-----------------------------------------------------------------------
+  # Input: name: variable vcmax25
+  # Input: min,max: minimum and maximum value in the map.
+  #-----------------------------------------------------------------------
+  ncin <- nc_open(paste (path, "global.",year,".a." ,name, ".nc", sep=""))
+  #ncin <- nc_open(paste ("~/data/sofun_outputs/output_nc/global/", "global.20xx.a." ,name, ".nc", sep=""))
+  lon <- ncvar_get(ncin,"lon")
+  lat<-ncvar_get(ncin,"lat")
+  variable <- ncvar_get(ncin,name)
+  nc_close(ncin)
+  
+  variabelist <- as.vector(variable)
+  lonlat <- expand.grid(lon, lat)
+  output_final <- as.data.frame(cbind(lonlat,variabelist))
+  names(output_final) <- c("lon","lat",name)
+  output_final2 <- subset(output_final,output_final[,3]>min & output_final[,3]<max) # to make map easy to follow, it subset a reasonable value here.
+  coordinates(output_final2) <- ~lon+lat 
+  gridded(output_final2) <- TRUE
+  rmap <- raster(output_final2, name) 
+  #plot(rmap,main=name)
+  return(output_final)
+  #-----------------------------------------------------------------------
+  # Output: plot(rmap): the presentation of global map (after subsetting max of data)
+  # Output: output_final: the output data (259200 * 3) including lon, lat and value
+  #-----------------------------------------------------------------------
+}
+
+#output them in a dataframe (dim: 259200 rows * 20 years)
+#outputted GPP saved in Euler /cluster/home/yunpeng/sofun_outputs/output_nc_global
+
+gpp_17years <- data.frame(matrix(NA))
+
+for (i in 2000:2016){
+  gpp_17years[1:259200,i-2000+1] <- outputdata("gpp",i,-999999,999999,"D:/PhD/nimpl_sofun_inputs/Data/GPP/c3/")[,3]
+}
+
+lonlat <- outputdata("gpp",i,-999999,999999,"D:/PhD/nimpl_sofun_inputs/Data/GPP/c3/")[,1:2]
+
+gpp_c3 <- cbind(lonlat,rowMeans(gpp_17years,na.rm = TRUE))
+
+names(gpp_c3) <- c("lon","lat","gpp")
+
+gpp_c3data <- gpp_c3
+
+coordinates(gpp_c3) <- ~lon+lat 
+gridded(gpp_c3) <- TRUE
+rgpp1 <- raster(gpp_c3, "gpp") 
+plot(rgpp1)
+title("GPP from nimpl/yunkebranch_units/ (npft = 1, lGr3 = .TRUE.)")
+
+
+gpp_gmd_c3 <- cbind(gpp_gmd,gpp_c3data[,3])
+names(gpp_gmd_c3) <- c("lon","lat","gpp_gmd","gpp_nimpl_c3")
+
+######3. gmd gpp vs. nimpl c3 gpp
+plot(gpp_gmd~gpp_nimpl_c3,data=gpp_gmd_c3)
+title("GMD GPP vs. nimpl/yunkebranch_units c3 GPP")
+summary(lm(gpp_gmd~gpp_nimpl_c3,data=gpp_gmd_c3))
+
+problem_grid <- subset(gpp_gmd_c3,gpp_nimpl_c3 == 0 & gpp_gmd>0)
+
+dim(problem_grid)
+summary(problem_grid)
+
+map("world", fill=TRUE, col="white", bg="white", ylim=c(-90, 90),xlim=c(-180,180))
+points(problem_grid$lon,problem_grid$lat, col="red", pch=16,cex=1.5)
+title("Problem sites")
+
+```
