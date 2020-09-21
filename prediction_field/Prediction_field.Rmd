@@ -88,44 +88,151 @@ plot(rCNrt)
 ```{r}
 library(raster)
 library(ncdf4)
-
+library(dplyr)
 #set the path and filename
 #ncfname <- paste ("~/data/GFAD/data_orig/", "GFAD_V1-1", ".nc", sep="")
 ncfname <- paste ("E:/C-N cycling/Carbon allocation/672 sites analysis/stand age/GFAD2/", "GFAD_V1-1", ".nc", sep="")
-
-dname <- "age"
-
 #1. open a netCDF file and check variable
 ncin <- nc_open(ncfname)
-print(ncin)#here ncin includes 4 pfts at 15 age classes
 
 #2. Get coordinate and value
 lon <- ncvar_get(ncin,"lon")
 nlon <- dim(lon) 
-
 lat<-ncvar_get(ncin,"lat")
 nlat<-dim(lat)
-
 age <-ncvar_get(ncin,"age")
-
 nc_close(ncin)
 
 pre.vec.long <- as.vector(age)
-
 pre.mat <- matrix(pre.vec.long, nrow = nlon * nlat, ncol = 4*15) # 259200 columns * 60 rows - here 60 represents 4 PFTs and 15 age classes.
 
 lonlat <- expand.grid(lon, lat)
-
 lonlat$age <- rowSums(pre.mat[,1:4])*5+rowSums(pre.mat[,5:8])*15+rowSums(pre.mat[,9:12])*25+rowSums(pre.mat[,13:16])*35+rowSums(pre.mat[,17:20])*45+rowSums(pre.mat[,21:24])*55+rowSums(pre.mat[,25:28])*65+rowSums(pre.mat[,29:32])*75+rowSums(pre.mat[,33:36])*85+rowSums(pre.mat[,37:40])*95+rowSums(pre.mat[,41:44])*105+rowSums(pre.mat[,45:48])*115+rowSums(pre.mat[,49:52])*125+rowSums(pre.mat[,53:56])*135+rowSums(pre.mat[,57:60])*145
-
-
 names(lonlat) <- c("lon","lat","age")
 
 age_input <- as.data.frame(lonlat)
+summary(age_input)
+dim(age_input)
+
+
 coordinates(age_input) <- ~lon+lat 
 gridded(age_input) <- TRUE
 r <- raster(age_input, "age") 
-plot(r)
+plot(r) # now it shows an empty grid in lower AUS, also in some other regions. We need to interpolate them based on local median value.
+
+#Input continent map
+#ncfname <- paste ("~/data/landmasks/", "masks_20120709.srex_mask_SREX_masks_all.05deg.time", ".nc", sep="")
+ncfname <- paste ("D:/PhD/nimpl_sofun_inputs/Data/srex/", "srex-region-masks_20120709.srex_mask_SREX_masks_all.05deg.time-invariant", ".nc", sep="")
+ncin <- nc_open(ncfname)
+
+lon <- ncvar_get(ncin,"lon")
+nlon <- dim(lon) 
+lat<-ncvar_get(ncin,"lat")
+nlat <- dim(lat)
+area <- ncvar_get(ncin,"srex_mask")
+nc_close(ncin)
+
+area1 <- as.vector(area)
+
+lonlat <- expand.grid(lon, lat)
+continent_input <- as.data.frame(cbind(lonlat,area1))
+names(continent_input) <- c("lon","lat","area")
+
+#merge continents and age
+continent_age <- merge(continent_input, age_input, by=c("lon","lat"), all.x = T, sort=F )
+
+
+#Input fAPAR, and merge it with continent_age, and convert fAPAR's NA grid to age's NA grid
+#ncfname <- paste ("~/data/fAPAR/fAPAR3g_v2/", "fAPAR3g_v2_1982_2016_FILLED", ".nc", sep="")
+ncfname <- paste ("E:/C-N cycling/Carbon allocation/fAPAR/fAPAR HUANYUAN/", "fAPAR3g_v2_1982_2016_FILLED", ".nc", sep="")
+dname <- "FAPAR_FILLED"
+
+ncin <- nc_open(ncfname)
+
+lon <- ncvar_get(ncin,"LON")
+nlon <- dim(lon) 
+
+lat<-ncvar_get(ncin,"LAT")
+nlat <- dim(lat)
+
+FAPAR <- ncvar_get(ncin,"FAPAR_FILLED")
+nc_close(ncin)
+
+pre.vec.long <- as.vector(FAPAR)
+
+pre.mat <- matrix(pre.vec.long, nrow = nlon * nlat, ncol = 420) # 259200 * 420 (420 is 35 years: 1982-2016)
+
+fAPAR1982_2011 <- pre.mat[,c(1:360)] #extrat fAPAR from 1982-2011
+
+final_fAPAR <- rowMeans(fAPAR1982_2011,na.rm = TRUE)
+
+lonlat <- expand.grid(lon, lat)
+fAPAR_input <- as.data.frame(cbind(lonlat,final_fAPAR))
+names(fAPAR_input) <- c("lon","lat","fAPAR")
+summary(fAPAR_input)
+
+continent_age_fAPAR <- merge(continent_age, fAPAR_input, by=c("lon","lat"), all.x = T, sort=F )
+
+for (i in 1:nrow(continent_age_fAPAR)){
+  if (is.na(continent_age_fAPAR$fAPAR[i]) == TRUE){
+    continent_age_fAPAR$new_age[i]<- NA} else { 
+      continent_age_fAPAR$new_age[i]<- continent_age_fAPAR$age[i]} 
+}
+
+continent_age_fAPAR2 <- continent_age_fAPAR[,c("lon","lat","new_age")]
+
+coordinates(continent_age_fAPAR2) <- ~lon+lat 
+gridded(continent_age_fAPAR2) <- TRUE
+r <- raster(continent_age_fAPAR2, "new_age") 
+plot(r) #we will start working from this map! Because it actually clarfies which grid stand-age = NA, which grid stand-age = 0.
+
+#Now, start interpolating each continent's NA grids as mean value of local continent
+age_final <- continent_age_fAPAR[,c("lon","lat","area","new_age")]
+summary(age_final)
+
+mylist <- vector(mode = "list", length =25) # for specifying gridded data at certain degrees
+
+for (i in c(1:8,10:24)){ # area 9 and 25 did not have such problem (missing data of stand-age; i.e. age = 0)
+  empty_age <- filter(age_final, area == i & new_age == 0) #find missing grids (new_age ==0, classfied as missing data)
+  available_age <- filter(age_final, area == i & new_age > 0) #find non-missing grids and calculate mean
+  empty_age$final_age <- mean(available_age$new_age)
+  mylist[[i]] <- empty_age
+  print(i)
+}
+
+all_age <- as.data.frame(do.call(rbind, mylist))
+dim(all_age)
+
+#South AUS (area = 26), however, was interpolated by area =25 's mean stand-age value
+
+South_AUS_empty_age <- filter(age_final, area == 26 & new_age == 0) 
+North_AUS_available_age <- filter(age_final, area == 25 & new_age > 0)
+South_AUS_empty_age$final_age <- mean(North_AUS_available_age$new_age)
+
+all_age2 <- rbind(all_age,South_AUS_empty_age)
+
+all_age3 <- all_age2[,c("lon","lat","final_age")]
+
+summary(continent_age_fAPAR)
+
+final <- merge(continent_age_fAPAR, all_age3, by=c("lon","lat"), all.x = T, sort=F )
+dim(final)
+
+for (i in 1:nrow(final)){
+  if (is.na(final$final_age[i]) == TRUE){
+    final$age_used[i] <- final$new_age[i]} else {
+      final$age_used[i] <- final$final_age[i]} 
+}
+
+final2 <- final[,c("lon","lat","age_used")]
+
+coordinates(final2) <- ~lon+lat 
+gridded(final2) <- TRUE
+r <- raster(final2, "age_used") 
+plot(r) 
+
+
+
 
 ``` 
 
