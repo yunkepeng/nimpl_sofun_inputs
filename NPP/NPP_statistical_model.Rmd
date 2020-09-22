@@ -46,7 +46,7 @@ NPP_SaraVicca <- read.csv(file="D:/PhD/nimpl_sofun_inputs/Data/NPP/NPP_SaraVicca
 NPP_Malhi <- read.csv(file="D:/PhD/nimpl_sofun_inputs/Data/NPP/NPP_Malhi/NPP_Malhi.csv")
 NPP_Keith <- read.csv(file="D:/PhD/nimpl_sofun_inputs/Data/NPP/NPP_Keith/NPP_Keith.csv")
 #The original data of Forc was avaialable at "~/data/NPP_Yunke/NPP_ForC/orig/", then after a pre-processing code (for merging and removing repeated sites; because there had some repeated sites to Sara Vicca and Keith's dataset), and after manually structuring variable order and name, the output file that directly used in this project is at below (NPP_Forc).
-#The pre-processing code of Forc was available at "D:/PhD/nimpl_sofun_inputs/Data/NPP/NPP_ForC/NPP_Forc_preprocessing.Rmd" and also available in yunkepeng github: nimpl_sofun_input/NPP/NPP_Forc_preprocessing.Rmd.
+#The pre-processing code of Forc was available at "D:/PhD/nimpl_sofun_inputs/nimpl_sofun_inputs/NPP/NPP_Forc_preprocessing.Rmd" and also available in yunkepeng github: nimpl_sofun_input/NPP/NPP_Forc_preprocessing.Rmd.
 NPP_Forc <- read.csv(file="D:/PhD/nimpl_sofun_inputs/Data/NPP/NPP_Forc/NPP_Forc.csv")
 
 NPP_all <- rbind(NPP_SaraVicca,NPP_Malhi,NPP_Keith,NPP_Forc)
