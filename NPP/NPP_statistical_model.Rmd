@@ -58,21 +58,22 @@ NPP_all <- rbind(NPP_SaraVicca,NPP_Malhi,NPP_Keith,NPP_Forc)
 #### Data sources: tmn, tmx, vap, pre (from CRU ts 4.01, see: https://crudata.uea.ac.uk/cru/data/hrg/cru_ts_4.01/), radi (from WFDEI, see http://www.eu-watch.org/gfx_content/documents/README-WFDEI%20(v2016).pdf), alpha from SPLASH-based products (see Euler:~/data/alpha/data_orig).
 #### All climate data were obtained from measurement year only, the measurement year is available at NPP_all$Begin_year and NPP_all$End_year
 
-#tmn <- read.csv(file="~/data/NPP_Yunke/climate/tmnlist3.csv")
-#tmx <- read.csv(file="~/data/NPP_Yunke/climate/tmxlist3.csv")
-#vap <- read.csv(file="~/data/NPP_Yunke/climate/vaplist3.csv")
-#radi<- read.csv(file="~/data/NPP_Yunke/climate/radlist3.csv")
-#alphalist3 <- read.csv(file="~/data/NPP_Yunke/climate/alphalist3.csv")
-#CaGlobal <- read.csv(file="~/data/NPP_Yunke/climate/CaGlobal.csv")
-#pre <- read.csv(file="~/data/NPP_Yunke/climate/prelist3.csv")
+#tmn <- read.csv(file="~/data/NPP_Yunke/climate/climate.csv")[,1:12] #monthly degree celcius
+#tmx <- read.csv(file="~/data/NPP_Yunke/climate/climate.csv")[,13:24] #monthly degree celcius
+#vap <- read.csv(file="~/data/NPP_Yunke/climate/climate.csv")[,25:36] #monthly hPa
+#pre <- read.csv(file="~/data/NPP_Yunke/climate/climate.csv")[,37:48] #monthly mm/month
+#radi<- read.csv(file="~/data/NPP_Yunke/climate/climate.csv")[,49:60] #monthly w/m2
+#alphalist3 <- read.csv(file="~/data/NPP_Yunke/climate/climate.csv")$alpha
+#CaGlobal <- read.csv(file="~/data/NPP_Yunke/climate/climate.csv")$Ca #ppm
 
-tmn <- read.csv(file="D:/PhD/nimpl_sofun_inputs/Data/climate/tmnlist3.csv")
-tmx <- read.csv(file="D:/PhD/nimpl_sofun_inputs/Data/climate/tmxlist3.csv")
-vap <- read.csv(file="D:/PhD/nimpl_sofun_inputs/Data/climate/vaplist3.csv")
-radi<- read.csv(file="D:/PhD/nimpl_sofun_inputs/Data/climate/radlist3.csv")
-alphalist3 <- read.csv(file="D:/PhD/nimpl_sofun_inputs/Data/climate/alphalist3.csv")
-CaGlobal <- read.csv(file="D:/PhD/nimpl_sofun_inputs/Data/climate/CaGlobal.csv")
-pre <- read.csv(file="D:/PhD/nimpl_sofun_inputs/Data/climate/prelist3.csv")
+# for workflow of climate data please have a look at yunkepeng github: nimpl_sofun_inputs/climate/, or in Euler's README: "~/data/NPP_Yunke/climate/"
+tmn <- read.csv(file="D:/PhD/nimpl_sofun_inputs/Data/climate/climate.csv")[,1:12] #monthly degree celcius
+tmx <- read.csv(file="D:/PhD/nimpl_sofun_inputs/Data/climate/climate.csv")[,13:24] #monthly degree celcius
+vap <- read.csv(file="D:/PhD/nimpl_sofun_inputs/Data/climate/climate.csv")[,25:36] #monthly hPa
+pre <- read.csv(file="D:/PhD/nimpl_sofun_inputs/Data/climate/climate.csv")[,37:48] #monthly mm/month
+radi<- read.csv(file="D:/PhD/nimpl_sofun_inputs/Data/climate/climate.csv")[,49:60] #monthly w/m2
+alphalist3 <- read.csv(file="D:/PhD/nimpl_sofun_inputs/Data/climate/climate.csv")$alpha
+CaGlobal <- read.csv(file="D:/PhD/nimpl_sofun_inputs/Data/climate/climate.csv")$Ca #ppm
 
 elev <- NPP_all$z
 lat <- NPP_all$lat
@@ -134,7 +135,7 @@ NPP_all$observedfAPAR <- 1-(1/exp(NPP_all$LAI*0.5))
 NPP_all$vpd <- rowMeans(vpd,na.rm = TRUE) 
 NPP_all$Tg <- rowMeans(Tg,na.rm = TRUE)
 NPP_all$PPFD <- rowMeans(PPFD,na.rm = TRUE)
-NPP_all$alpha <- rowMeans(alphalist3,na.rm = TRUE)
+NPP_all$alpha <- alphalist3
 ###5. merge MEASURED soil (orginally provided from Sara Vicca)
 ####(1) For our purpose, we only need CN, pH, age
 
