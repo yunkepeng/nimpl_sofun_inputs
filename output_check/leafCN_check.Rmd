@@ -1,0 +1,124 @@
+---
+output:
+  html_document: default
+  pdf_document: default
+  word_document: default
+---
+
+---
+title: "Check leaf CN from sofun/yunkebranch_units (C3+C4) and compare it with site-based leaf C/N"
+author: "Yunke Peng"
+date: "Sep 21 2020"
+output: html_document
+---
+
+## leaf C/N description
+
+Here...
+
+```{r}
+library(raster)
+library(ncdf4)
+library(maps)
+library(spgwr)
+#1. Input leaf C/N nc file outputted from sofun/yunkebranch_units  (npf2 = 1; lGr3, lGr4 = .TRUE.)
+
+# originally downloaded from "~/data/sofun_outputs/output_nc/global/global.20xx.a.leafcn.nc
+
+
+# create a function for output multiple years nc file map
+outputdata <- function(name,year,min,max,path){
+  #-----------------------------------------------------------------------
+  # Input: name: variable vcmax25
+  # Input: min,max: minimum and maximum value in the map.
+  #-----------------------------------------------------------------------
+  ncin <- nc_open(paste (path, "global.",year,".a.",name,".nc", sep=""))
+  #ncin <- nc_open(paste ("~/data/sofun_outputs/output_nc/global/", "global.20xx.a." ,name, ".nc", sep=""))
+  lon <- ncvar_get(ncin,"lon")
+  lat<-ncvar_get(ncin,"lat")
+  variable <- ncvar_get(ncin,name)
+  nc_close(ncin)
+  
+  variabelist <- as.vector(variable)
+  lonlat <- expand.grid(lon, lat)
+  output_final <- as.data.frame(cbind(lonlat,variabelist))
+  names(output_final) <- c("lon","lat",name)
+  output_final2 <- subset(output_final,output_final[,3]>min & output_final[,3]<max) # to make map easy to follow, it subset a reasonable value here.
+  coordinates(output_final2) <- ~lon+lat 
+  gridded(output_final2) <- TRUE
+  rmap <- raster(output_final2, name) 
+  #plot(rmap,main=name)
+  return(output_final)
+  #-----------------------------------------------------------------------
+  # Output: plot(rmap): the presentation of global map (after subsetting max of data)
+  # Output: output_final: the output data (259200 * 3) including lon, lat and value
+  #-----------------------------------------------------------------------
+}
+
+#output them in a dataframe (dim: 259200 rows * n years)
+#outputted GPP saved in Euler /cluster/home/yunpeng/sofun_outputs/output_nc_global
+
+leafcn_12years <- data.frame(matrix(NA))
+
+for (i in 2007:2018){
+  leafcn_12years[1:259200,i-2007+1] <- outputdata("leafcn",i,-999999,999999,"D:/PhD/nimpl_sofun_inputs/Data/output_CN_leaf/")[,3]}
+
+lonlat <- outputdata("leafcn",i,-999999,999999,"D:/PhD/nimpl_sofun_inputs/Data/output_CN_leaf/")[,1:2]
+
+leafcn <- cbind(lonlat, 1/rowMeans(leafcn_12years,na.rm = TRUE) ) #convert n/c to c/n
+
+names(leafcn) <- c("lon","lat","leafcn")
+
+leafcn_data <- leafcn
+
+coordinates(leafcn) <- ~lon+lat 
+gridded(leafcn) <- TRUE
+rleafcn1 <- raster(leafcn, "leafcn") 
+plot(rleafcn1)
+title("leaf C/N from nimpl/yunkebranch_units/ (npft = 2; lGr3, lGr4 = .TRUE.)")
+
+#2. now, let's input observed leaf C/N data across sites and species (that used in statistical modelling before).
+#leafCN <- read.csv(file="~/data/CN_leaf/final_leafCN.csv")
+
+leafCN <- read.csv(file="D:/PhD/nimpl_sofun_inputs/Data/CN_leaf/final_leafCN.csv")
+
+# make species consitent
+for (i in 1:nrow(leafCN)){
+  if (is.na(leafCN$species2[i]) == TRUE){
+    leafCN$final_species[i]<- leafCN$species[i]} else { 
+      leafCN$final_species[i]<- paste(leafCN$species[i],sep=" ",leafCN$species2[i])} 
+}
+
+# remove unreasonable outliers
+leafCN2 <- subset(leafCN,Vcmax.25>0&Vcmax.25<300&cn>1&cn<100&lma>0&lma<700)
+
+# site-mean leaf C/N
+leafCN_sitemean <- aggregate(cn~lat+lon+Elevation,leafCN2,mean)
+summary(leafCN_sitemean)
+dim(leafCN_sitemean)
+names <- c("lat","lon","z","leafcn")
+
+#3. And then extract its site-value from map above (based on gwr), and finally compare its R2
+#(1)input elevation file
+elev <- read.csv(file="E:/R code/CN MS/elevation_full.csv")
+leafcn_data2 <- cbind(leafcn_data,elev[,3])
+names(leafcn_data2) <- c("lon","lat","leafcn","z")
+leafcn_data3 <- subset(leafcn_data2,leafcn>0)
+
+mylist <- vector(mode = "list", length = nrow(leafCN_sitemean))
+mylist2 <- vector(mode = "list", length = nrow(leafCN_sitemean))
+final1 <- data.frame(matrix(NA)) 
+
+a <- 1.5
+
+for (i in 1:nrow(leafCN_sitemean)){
+  mylist[[i]]<- subset(leafcn_data3,lon>(leafCN_sitemean[i,2]-a)&lon<(leafCN_sitemean[i,2]+a)&lat>(leafCN_sitemean[i,1]-a)&lat<(leafCN_sitemean[i,1]+a))
+  coordinates(mylist[[i]]) <- c("lon","lat")
+  gridded(mylist[[i]]) <- TRUE
+  mylist2[[i]] <- leafCN_sitemean[i,1:3]
+  coordinates(mylist2[[i]]) <- c("lon","lat")
+  final1[i,1] <- (gwr(leafcn ~ z, mylist[[i]], bandwidth = 1.06, fit.points = mylist2[[i]],predictions=TRUE))$SDF$pred
+  print(i)
+}
+
+```
