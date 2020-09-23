@@ -89,9 +89,12 @@ plot(rCNrt)
 library(raster)
 library(ncdf4)
 library(dplyr)
+library(maps)
+
 #set the path and filename
 #ncfname <- paste ("~/data/GFAD/data_orig/", "GFAD_V1-1", ".nc", sep="")
 ncfname <- paste ("E:/C-N cycling/Carbon allocation/672 sites analysis/stand age/GFAD2/", "GFAD_V1-1", ".nc", sep="")
+
 #1. open a netCDF file and check variable
 ncin <- nc_open(ncfname)
 
@@ -114,13 +117,12 @@ age_input <- as.data.frame(lonlat)
 summary(age_input)
 dim(age_input)
 
-
 coordinates(age_input) <- ~lon+lat 
 gridded(age_input) <- TRUE
 r <- raster(age_input, "age") 
-plot(r) # now it shows an empty grid in lower AUS, also in some other regions. We need to interpolate them based on local median value.
+plot(r) # now it shows an empty grid in lower AUS, also in some other regions. We need to interpolate them based on local mean value.
 
-#Input continent map
+#2. Input continent map
 #ncfname <- paste ("~/data/landmasks/", "masks_20120709.srex_mask_SREX_masks_all.05deg.time", ".nc", sep="")
 ncfname <- paste ("D:/PhD/nimpl_sofun_inputs/Data/srex/", "srex-region-masks_20120709.srex_mask_SREX_masks_all.05deg.time-invariant", ".nc", sep="")
 ncin <- nc_open(ncfname)
@@ -140,11 +142,11 @@ names(continent_input) <- c("lon","lat","area")
 
 #merge continents and age
 continent_age <- merge(continent_input, age_input, by=c("lon","lat"), all.x = T, sort=F )
+summary(continent_age)
 
-
-#Input fAPAR, and merge it with continent_age, and convert fAPAR's NA grid to age's NA grid
+#3. Input fAPAR, and merge it with continent_age, and convert fAPAR's NA grid to those age = NA
 #ncfname <- paste ("~/data/fAPAR/fAPAR3g_v2/", "fAPAR3g_v2_1982_2016_FILLED", ".nc", sep="")
-ncfname <- paste ("E:/C-N cycling/Carbon allocation/fAPAR/fAPAR HUANYUAN/", "fAPAR3g_v2_1982_2016_FILLED", ".nc", sep="")
+ncfname <- paste ("D:/PhD/nimpl_sofun_inputs/Data/fAPAR/", "fAPAR3g_v2_1982_2016_FILLED", ".nc", sep="")
 dname <- "FAPAR_FILLED"
 
 ncin <- nc_open(ncfname)
@@ -164,15 +166,19 @@ pre.mat <- matrix(pre.vec.long, nrow = nlon * nlat, ncol = 420) # 259200 * 420 (
 
 fAPAR1982_2011 <- pre.mat[,c(1:360)] #extrat fAPAR from 1982-2011
 
-final_fAPAR <- rowMeans(fAPAR1982_2011,na.rm = TRUE)
+final_fAPAR <- rowMeans(fAPAR1982_2011,na.rm = TRUE) # calculate means
 
 lonlat <- expand.grid(lon, lat)
 fAPAR_input <- as.data.frame(cbind(lonlat,final_fAPAR))
 names(fAPAR_input) <- c("lon","lat","fAPAR")
 summary(fAPAR_input)
 
+#here we merge fAPAR with age and continent data.
 continent_age_fAPAR <- merge(continent_age, fAPAR_input, by=c("lon","lat"), all.x = T, sort=F )
+summary(continent_age_fAPAR)
+dim(continent_age_fAPAR)
 
+#when fAPAR = NA, then those grid's age also = NA. After this, age = 0 only had one possibility, that is, missing data. We will subset them later on and replace them to mean value of local continent.
 for (i in 1:nrow(continent_age_fAPAR)){
   if (is.na(continent_age_fAPAR$fAPAR[i]) == TRUE){
     continent_age_fAPAR$new_age[i]<- NA} else { 
@@ -184,11 +190,12 @@ continent_age_fAPAR2 <- continent_age_fAPAR[,c("lon","lat","new_age")]
 coordinates(continent_age_fAPAR2) <- ~lon+lat 
 gridded(continent_age_fAPAR2) <- TRUE
 r <- raster(continent_age_fAPAR2, "new_age") 
-plot(r) #we will start working from this map! Because it actually clarfies which grid stand-age = NA, which grid stand-age = 0.
+plot(r) #we will start working from this map! Because it actually clarfies which grid stand-age = NA (in white), which grid stand-age has missed data (which temporaily considered = 0, and shown in grey, will be interpolated soon) .
 
-#Now, start interpolating each continent's NA grids as mean value of local continent
+
+
+#4. Now, start interpolating each continent's missing data (when age = 0) as mean value of local continent
 age_final <- continent_age_fAPAR[,c("lon","lat","area","new_age")]
-summary(age_final)
 
 mylist <- vector(mode = "list", length =25) # for specifying gridded data at certain degrees
 
@@ -213,10 +220,8 @@ all_age2 <- rbind(all_age,South_AUS_empty_age)
 
 all_age3 <- all_age2[,c("lon","lat","final_age")]
 
-summary(continent_age_fAPAR)
-
-final <- merge(continent_age_fAPAR, all_age3, by=c("lon","lat"), all.x = T, sort=F )
-dim(final)
+#5. merge new interpolated subset of age dataframe into last complete dataframe, and generating findal data to be used.
+final <- merge(continent_age_fAPAR, all_age3, by=c("lon","lat"), all.x = T,sort = T)
 
 for (i in 1:nrow(final)){
   if (is.na(final$final_age[i]) == TRUE){
@@ -225,12 +230,53 @@ for (i in 1:nrow(final)){
 }
 
 final2 <- final[,c("lon","lat","age_used")]
+names(final2) <- c("lon","lat","age")
+
+final_data <- final2
 
 coordinates(final2) <- ~lon+lat 
 gridded(final2) <- TRUE
-r <- raster(final2, "age_used") 
+r <- raster(final2, "age") 
+#here is our final map!
 plot(r) 
 
+#6. convert dataframe to nc file as input in nimpl project
+summary(final_data)
+outlier <- (subset(final_data,age ==0))
+dim(outlier)
+map("world", fill=TRUE, col="white", bg="white", ylim=c(-90, 90),xlim = c(-180,180), mar=c(1,0,0,1))
+points(outlier$lon,outlier$lat, col="red", pch=16,cex=1.5)
+
+# it seems to still show 407 grids = 0 (normally in edge or sea). They may not be covered by fAPAR and continent grids from previous analysis, let's just simply assume them as NA.
+
+final_data$age[final_data$age == 0] <- NA
+
+summary(final_data)
+#now final_data is ready to be used, let's firstly change its lat, lon order correctly, then convert all NA to 9999
+
+final_data2 <- final_data[order(final_data[,2],final_data[,1]),]
+
+final_data2[is.na(final_data2)] <- 9999
+
+#output age
+coordinates(final_data2) <- ~lon+lat 
+gridded(final_data2) <- TRUE
+rage <- raster(final_data2, "age") 
+
+#output age nc file. THIS IS NOT THE LAST STEP!!! We need to additionally apply CDO processing in Euler.
+d <- writeRaster(rage, paste0("D:/PhD/nimpl_sofun_inputs/Data/Final_ncfile/","age_0923_interpolated.nc"),
+                 format = "CDF", overwrite = TRUE, varname = "age", 
+                 varunit = "yrs", longname = "stand-age", 
+                 xname = "lon", yname = "lat")
+#Once cdo finished, the nc file below will be deleted, and output of CDO will be renamed to age.nc
+
+#after CDO, have a check
+#ncfname <- paste ("D:/PhD/nimpl_sofun_inputs/Data/Final_ncfile/", "age", ".nc", sep="")
+#ncin <- nc_open(ncfname)
+#lon <- ncvar_get(ncin,"lon")
+#lat <- ncvar_get(ncin,"lat")
+#head(lon)
+#head(lat)
 
 ``` 
 
