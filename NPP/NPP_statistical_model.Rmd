@@ -162,7 +162,7 @@ final_sites3 <- merge(final_sites2,manage,by=c("site"),all.x=TRUE)
 ####(2) merge stand-age data into dataframe. There might be more than 1 sample measured in a site (as collected from different sources). So we need to aggregate them firstly.
 agee <- na.omit(manage_age[,3:4])
 names(agee) <- c("site","age")
-agee2 <- aggregate(age~site,data=agee,mean)
+agee2 <- aggregate(age~site,data=agee,mean,na.rm=TRUE)
 final_sites4 <- merge(final_sites3,agee2,by=c("site"),all.x=TRUE)
 
 ###6.add pft data derived from orginal data provided from Sara Vicca
