@@ -8,13 +8,13 @@ output:
 ---
 title: "Check GPP from sofun/yunkebranch_units (C3 or C3+C4) and compare it with GMD GPP"
 author: "Yunke Peng"
-date: "Sep 21 2020"
+date: "Sep 28 2020"
 output: html_document
 ---
 
 ## GPP data description
 
-Here the first map shows GMD GPP (fAPAR3g, 2000-2016). The second map shows GPP outputted from nimpl/yunkebranch_units/ (npft = 1, lGr3 = .TRUE.) in SOFUN simulation in Euler. Then the figure represents its comparison, supported by summary of linear regression. It clear shows some outliers (when GMD gpp has data while nimpl gpp = 0). I have indicated those sits in map at the end. I guess it is due to function: mprime = m**2 - kc**(2.0/3.0) * (m**(4.0/3.0)), then due to mprime < 0, it set mprime = 0, therefore gpp = 0. We need to solve this...
+Here it compares GMD GPP with (1) nimpl GPP for c3 plants only and (2) nimpl GPP for c3 + c4 plants. It shows that (2) has higher R2 (0.93), and many problem sites (GPP = 0) were removed in this data, where it might be because they were at the edge of land, and therefore automatically de-activated when newly including c3/c4 map in nimpl project. We have therefore used the second object (gpp_nimpl_c3c4) as the input in nimpl project.
 
 
 ```{r}
@@ -42,11 +42,11 @@ gpp_final <- as.data.frame(cbind(lonlat,pre.mat[,5]))
 names(gpp_final) <- c("lon","lat","gpp")
 gpp_gmd <- gpp_final
 
-coordinates(gpp_final) <- ~lon+lat 
-gridded(gpp_final) <- TRUE
-rage <- raster(gpp_final, name) 
-plot(rage)
-title("GMD GPP (fapar3g, 2000-2016)")
+#coordinates(gpp_final) <- ~lon+lat 
+#gridded(gpp_final) <- TRUE
+#rage <- raster(gpp_final, name) 
+#plot(rage)
+#title("GMD GPP (fapar3g, 2000-2016)")
 
 
 ######2. output nimpl/yunkebranch_units/ GPP (npft = 1, lGr3 = .TRUE.)
@@ -96,28 +96,83 @@ names(gpp_c3) <- c("lon","lat","gpp")
 
 gpp_c3data <- gpp_c3
 
-coordinates(gpp_c3) <- ~lon+lat 
-gridded(gpp_c3) <- TRUE
-rgpp1 <- raster(gpp_c3, "gpp") 
-plot(rgpp1)
-title("GPP from nimpl/yunkebranch_units/ (npft = 1, lGr3 = .TRUE.)")
+#coordinates(gpp_c3) <- ~lon+lat 
+#gridded(gpp_c3) <- TRUE
+#rgpp1 <- raster(gpp_c3, "gpp") 
+#plot(rgpp1)
+#title("GPP from nimpl/yunkebranch_units/ (npft = 1, lGr3 = .TRUE.)")
 
 
 gpp_gmd_c3 <- cbind(gpp_gmd,gpp_c3data[,3])
 names(gpp_gmd_c3) <- c("lon","lat","gpp_gmd","gpp_nimpl_c3")
 
-######3. gmd gpp vs. nimpl c3 gpp
-plot(gpp_gmd~gpp_nimpl_c3,data=gpp_gmd_c3)
-title("GMD GPP vs. nimpl/yunkebranch_units c3 GPP")
-summary(lm(gpp_gmd~gpp_nimpl_c3,data=gpp_gmd_c3))
+######3. output nimpl/yunkebranch_units/ GPP (npft = 2, lGr3 and lGr4 = .TRUE.)
+library(tidyverse)  # depends
+library(ncmeta)
+library(viridis)
+library(ggthemes)
+library(LSD)
+library(yardstick)
+library(ggplot2)
+library(RColorBrewer)
+library(dplyr)
+library(gplots)
+library(tidyselect)
+library(extrafont)
+devtools::load_all("D:/PhD/nimpl_sofun_inputs/package/rbeni")
+library(rbeni)
+library(raster)
+library(spgwr)
+library(maps)
 
-problem_grid <- subset(gpp_gmd_c3,gpp_nimpl_c3 == 0 & gpp_gmd>0)
+#1. In our path (with multiple years data), identify which is the first year and end year of those files
+firstyr_data <- 1980 # In data file, which is the first year
+endyr_data <- 2018 # In data file, which is the last year
+location <- "D:/PhD/nimpl_sofun_inputs/Data/output/"
+alloutput_list <- list.files(location,full.names = T)
 
-dim(problem_grid)
-summary(problem_grid)
+#2. Create a function to specify path, loop many years nc file and output a dataframe (lon, lat, var).
+inputnc <- function(name,start_year,end_year){
+  #-----------------------------------------------------------------------
+  # Input: 
+  # name: gpp, npp, anpp, vcmax25, leafcn, nuptake...
+  # start_year: e.g. 1981
+  # end_year: e.g. 2016
+  # location: e.g "D:/PhD/nimpl_sofun_inputs/Data/output/" or in Euler: "~/yunkebranch_units/outputnc/"
+  #-----------------------------------------------------------------------
+  output_allyears <- data.frame(matrix(NA))
+  # first, include all years annual data into a daframe
+  for (i in firstyr_data:endyr_data){
+    if (name == "npp"){
+      nc <- read_nc_onefile(alloutput_list[grepl("a.npp.nc", list.files(location,full.names = T))][i-firstyr_data+1]) #we only rely this to filter npp.nc file...
+    } else {
+      nc <- read_nc_onefile(alloutput_list[grepl(name, list.files(location,full.names = T))][i-firstyr_data+1]) #Input nc
+    }
+    output_year <- nc_to_df(nc, varnam = name)[,3] #Yearly output
+    output_allyears[1:259200,i-firstyr_data+1] <- output_year #here first column represents first year of data file 's output
+  }
+  names(output_allyears) <- paste(name,firstyr_data:endyr_data,sep="")
+  #this variable above (output_allyears), could be end of the function, which is variable at multiple years. But for our purporses, we need mean of select years
+  #then, only calculate means of selected years
+  output_selected_yrs <- rowMeans(output_allyears[,(start_year-firstyr_data+1):(end_year-firstyr_data+1)],na.rm = TRUE) # only calculated means based on selected start and end year (see function)
+  coord <- nc_to_df(nc, varnam = name)[,1:2] # obtain lon and lat
+  final_output <- cbind(coord,elev[,3],output_selected_yrs) # combine lon, lat,z with rowmeans variable
+  names(final_output) <- c("lon","lat","z",name)
+  return(final_output)
+  #-----------------------------------------------------------------------
+  # Output: output_final: the output data (259200 * 3) including lon, lat and value
+  #-----------------------------------------------------------------------
+}
 
-map("world", fill=TRUE, col="white", bg="white", ylim=c(-90, 90),xlim=c(-180,180))
-points(problem_grid$lon,problem_grid$lat, col="red", pch=16,cex=1.5)
-title("Problem sites")
+#select data over 30 years, each df includes lon, lat, z, var
+gpp_df <- inputnc("gpp",2000,2016)
+
+gpp_gmd_c3_c3c4 <- cbind(gpp_gmd_c3,gpp_df[,4])
+names(gpp_gmd_c3_c3c4) <- c("lon","lat","gpp_gmd","gpp_nimpl_c3","gpp_nimpl_c3c4")
+summary(gpp_gmd_c3_c3c4)
+
+######4. Compare GMD GPP with (1)nimpl_c3 and (2) nimpl_c3c4 (we used this in nimpl finally) 
+analyse_modobs2(subset(gpp_gmd_c3_c3c4,gpp_nimpl_c3c4>0),"gpp_gmd","gpp_nimpl_c3", type = "points")
+analyse_modobs2(subset(gpp_gmd_c3_c3c4,gpp_nimpl_c3c4>0),"gpp_gmd","gpp_nimpl_c3c4", type = "points")
 
 ```
