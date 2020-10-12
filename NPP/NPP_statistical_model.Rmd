@@ -169,10 +169,10 @@ final_sites4 <- merge(final_sites3,agee2,by=c("site"),all.x=TRUE)
 
 #Evergreen <- read.csv(file="~/data/NPP_Yunke/NPP_SaraVicca/orig/pft.csv")
 Evergreen <- read.csv(file="D:/PhD/nimpl_sofun_inputs/Data/NPP/NPP_SaraVicca/orig/pft.csv")
-Evergreen2 <- Evergreen[,c(4:5)]
 
-final_sites5 <- merge(final_sites4,Evergreen2,by=c("site"),all.x=TRUE)
-summary(final_sites5)
+final_sites5 <- merge(final_sites4,Evergreen,by=c("site"),all.x=TRUE)
+summary(final_sites5$pft)
+
 
 ####7. Output of analyses
 ######(1) NPP/GPP function
