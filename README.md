@@ -8,7 +8,7 @@
 * Terra A-P project database (organized by Dr. Sara Vicca and updated by Dr. Keith Bloomfield; non-public)
 * Malhi et al. 2011 Phil. Trans. R. Soc. B. (public available)
 * Malhi et al. 2017 New Phytologist (public available)
-* ForC dataset -  https://github.com/forc-db/ForC (public available)
+* ForC dataset -  https://github.com/forc-db/ForC (public available).
 
 ###### Pre-processing: In NPP/GPP analysis, there was one sample (see site: TRU08) indicating higher TNPP_1 (total NPP) than GPP, which is not reasonable. This sample was therefore considered as NA in this analysis. 
 
