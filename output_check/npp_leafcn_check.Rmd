@@ -70,7 +70,7 @@ inputnc <- function(name,start_year,end_year){
   for (i in firstyr_data:endyr_data){
     if (name == "npp"){
       nc <- read_nc_onefile(alloutput_list[grepl("a.npp.nc", list.files(location,full.names = T))][i-firstyr_data+1]) #we only rely this to filter npp.nc file...
-      } else {
+    } else {
       nc <- read_nc_onefile(alloutput_list[grepl(name, list.files(location,full.names = T))][i-firstyr_data+1]) #Input nc
     }
     output_year <- nc_to_df(nc, varnam = name)[,3] #Yearly output
@@ -124,7 +124,6 @@ NPP_all <- rbind(NPP_SaraVicca,NPP_Malhi,NPP_Keith,NPP_Forc)
 
 # structure dataframe for NPP in tissues
 gpp_site <- aggregate(GPP~lon+lat+z,data=NPP_all[,c("lon","lat","z","GPP")],mean,na.rm=TRUE)
-summary(gpp_site) # same below
 dim(gpp_site)
 
 npp_site <- aggregate(TNPP_1~lon+lat+z,data=NPP_all[,c("lon","lat","z","TNPP_1")],mean,na.rm=TRUE)
@@ -211,7 +210,7 @@ for (i in c(2:12,14:26,28:34,37:45,47:54,56:60,62:248,250:nrow(anpp_site))){
 for (i in c(1:nrow(bnpp_site))){
   bnpp_global <- na.omit(bnpp_df)
   bnpp_part <- subset(bnpp_global,lon>(bnpp_site[i,1]-a)&lon<(bnpp_site[i,1]+a)&
-                       lat>(bnpp_site[i,2]-a)&lat<(bnpp_site[i,2]+a))
+                        lat>(bnpp_site[i,2]-a)&lat<(bnpp_site[i,2]+a))
   coordinates(bnpp_part) <- c("lon","lat")
   gridded(bnpp_part) <- TRUE
   
@@ -225,7 +224,7 @@ lnpp_site$pred <- NA
 for (i in c(2:5,7:17,19:23,26:32,34:36,38:42,44:189,191:nrow(lnpp_site))){
   lnpp_global <- na.omit(lnpp_df)
   lnpp_part <- subset(lnpp_global,lon>(lnpp_site[i,1]-a)&lon<(lnpp_site[i,1]+a)&
-                       lat>(lnpp_site[i,2]-a)&lat<(lnpp_site[i,2]+a))
+                        lat>(lnpp_site[i,2]-a)&lat<(lnpp_site[i,2]+a))
   coordinates(lnpp_part) <- c("lon","lat")
   gridded(lnpp_part) <- TRUE
   
@@ -254,7 +253,7 @@ for (i in c(2:4,6:15,17:20,23:29,31:33,35:39,41:174,176:nrow(wnpp_site))){
 for (i in c(1:nrow(leafcn_site))){
   leafcn_global <- na.omit(leafcn_df)
   leafcn_part <- subset(leafcn_global,lon>(leafcn_site[i,1]-a)&lon<(leafcn_site[i,1]+a)&
-                       lat>(leafcn_site[i,2]-a)&lat<(leafcn_site[i,2]+a))
+                          lat>(leafcn_site[i,2]-a)&lat<(leafcn_site[i,2]+a))
   coordinates(leafcn_part) <- c("lon","lat")
   gridded(leafcn_part) <- TRUE
   
@@ -264,15 +263,78 @@ for (i in c(1:nrow(leafcn_site))){
 }
 
 
-#5. compare mod vs. obs
-analyse_modobs2(subset(gpp_site,pred>0),"GPP","pred", type = "points",
+
+#add pft data derived from orginal data provided from Sara Vicca
+#Evergreen <- read.csv(file="~/data/NPP_Yunke/NPP_SaraVicca/orig/pft.csv")
+Evergreen <- read.csv(file="D:/PhD/nimpl_sofun_inputs/Data/NPP/NPP_SaraVicca/orig/pft.csv")
+pft_type <- merge(NPP_all,Evergreen,by=c("site"),all.x=TRUE)
+pft_type2 <- pft_type[,c("lon","lat","z","pft")]
+pft_type3 <- unique(pft_type2)
+dim(pft_type3)
+nonforest <- pft_type3 %>% filter(pft == "Grassland" |pft == "Plantation"|pft == "Cropland")
+dim(nonforest)
+#we realized that there are only 36 of 347 sites are NOT forest. We filtered it at here, 
+# which makes it easy to merge with our GPP, NPP...sites.
+nonforest 
+#we noticed that row 22 and 23 has the same site, but one notified as Cropland another notified as grassland, perhaps from different sources
+#this classfication is really not important, so let's delete one safely (so that it will not cause trouble when merging)
+nonforest <- nonforest[c(1:22,24:26),]
+
+#now, let's merge nonforest df to each GPP, NPP...dataset
+gpp_site <- merge(gpp_site,nonforest,by=c("lon","lat","z"),all.x=TRUE)
+npp_site <- merge(npp_site,nonforest,by=c("lon","lat","z"),all.x=TRUE)
+anpp_site <- merge(anpp_site,nonforest,by=c("lon","lat","z"),all.x=TRUE)
+bnpp_site <- merge(bnpp_site,nonforest,by=c("lon","lat","z"),all.x=TRUE)
+lnpp_site <- merge(lnpp_site,nonforest,by=c("lon","lat","z"),all.x=TRUE)
+wnpp_site <- merge(wnpp_site,nonforest,by=c("lon","lat","z"),all.x=TRUE)
+
+#see below, it is clear that only anpp and gpp dataset has available non-forest data.
+#They both have 25 samples (non-forest) separately.
+dim(subset(gpp_site,pft!="NA"))
+dim(subset(npp_site,pft!="NA"))
+dim(subset(anpp_site,pft!="NA"))
+dim(subset(bnpp_site,pft!="NA"))
+dim(subset(lnpp_site,pft!="NA"))
+dim(subset(wnpp_site,pft!="NA"))
+
+#5. compare mod vs. obs 
+#As mentioned above, we can only compare forest vs. non-forest in GPP and NPP analysis.
+#non-forest GPP
+gpp_nonforest <- subset(gpp_site, pft!="NA")
+dim(gpp_nonforest)
+analyse_modobs2(subset(gpp_nonforest,pred>0),"GPP","pred", type = "points",
                 filnam = "D:/PhD/nimpl_sofun_inputs/fig/gpp.png")
+
+gpp_forest <- subset(gpp_site, is.na(pft)==TRUE)
+dim(gpp_forest)
+analyse_modobs2(subset(gpp_forest,pred>0),"GPP","pred", type = "points",
+                filnam = "D:/PhD/nimpl_sofun_inputs/fig/gpp.png")
+
+gpp_all <- gpp_site
+analyse_modobs2(subset(gpp_all,pred>0),"GPP","pred", type = "points",
+                filnam = "D:/PhD/nimpl_sofun_inputs/fig/gpp.png")
+
+# it is clear that forest GPP (N = 138) shows better performance than forest + non-forest GPP (N =162), and than non-forest GPP (N = 24)
 
 analyse_modobs2(subset(npp_site,pred>0),"TNPP_1","pred", type = "points",
                 filnam = "D:/PhD/nimpl_sofun_inputs/fig/npp.png")
 
-analyse_modobs2(subset(anpp_site,pred>0),"ANPP_2","pred", type = "points",
+#divide anpp into forest vs. non-forest
+anpp_nonforest <- subset(anpp_site, pft!="NA")
+dim(anpp_nonforest)
+analyse_modobs2(subset(anpp_nonforest,pred>0),"ANPP_2","pred", type = "points",
                 filnam = "D:/PhD/nimpl_sofun_inputs/fig/anpp.png")
+
+anpp_forest <- subset(anpp_site, is.na(pft)==TRUE)
+dim(anpp_forest)
+analyse_modobs2(subset(anpp_forest,pred>0),"ANPP_2","pred", type = "points",
+                filnam = "D:/PhD/nimpl_sofun_inputs/fig/anpp.png")
+
+anpp_all <- anpp_site
+analyse_modobs2(subset(anpp_all,pred>0),"ANPP_2","pred", type = "points",
+                filnam = "D:/PhD/nimpl_sofun_inputs/fig/anpp.png")
+
+#non-forest ANPP: R2 =0.3, n =24. which is better than forest or forest+non-forest anpp.
 
 analyse_modobs2(subset(bnpp_site,pred>0),"BNPP_1","pred", type = "points",
                 filnam = "D:/PhD/nimpl_sofun_inputs/fig/bnpp.png")
