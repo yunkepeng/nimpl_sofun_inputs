@@ -2,7 +2,7 @@
 ## Statistical models for carbon allocation and N cycle
 ### Author: Yunke Peng
 
-###### The data has provided a global dataset of carbon allocations (at different compartments), plant functional traits, soil traits and climate variables. It includes 672 samples, 200 sites overall.
+###### The data has provided a global dataset of carbon allocations (at different compartments), plant functional traits, soil traits and climate variables. It includes 672 samples, 200 sites overall..
 
 ###### The original reference of dataset included: 
 * Terra A-P project database (organized by Dr. Sara Vicca and updated by Dr. Keith Bloomfield; non-public)
