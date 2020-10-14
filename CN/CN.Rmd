@@ -30,8 +30,8 @@ library(MuMIn)
 library(lmerTest)
 
 #2. Input Fine-root data from TRY database, plot map, and obtain mean of root C/N which was finally used in nimpl project.
-#Fineroot <- read.csv(file="~/data/CN_root/fineroot_cn.csv")
-Fineroot <- read.csv(file="D:/PhD/nimpl_sofun_inputs/Data/CN_root/fineroot_cn.csv")
+Fineroot <- read.csv(file="~/data/CN_root/fineroot_cn.csv")
+#Fineroot <- read.csv(file="D:/PhD/nimpl_sofun_inputs/Data/CN_root/fineroot_cn.csv")
 
 lon <- subset(Fineroot,DataName=="Longitude")
 lat <- subset(Fineroot,DataName=="Latitude")
@@ -57,8 +57,8 @@ mean(rootcn4$rootcn)
 
 
 #3. Input Fine-wood data from TRY database, plot map, and obtain mean of wood C/N which was finally used in nimpl project.
-#woodcn <- read.csv(file="~/data/CN_wood/wood_cn.csv")
-woodcn <- read.csv(file="D:/PhD/nimpl_sofun_inputs/Data/CN_wood/wood_cn.csv")
+woodcn <- read.csv(file="~/data/CN_wood/wood_cn.csv")
+#woodcn <- read.csv(file="D:/PhD/nimpl_sofun_inputs/Data/CN_wood/wood_cn.csv")
 
 #check N. of sites
 points(woodcn$lon,woodcn$lat, col="blue", pch=16,cex=1.5)
@@ -71,8 +71,8 @@ mean(woodcn$OrigValueStr)
 #4. leaf C/N analyses.
 
 #Input leaf C, leaf N, LMA, Vcmax25 dataset. The dataset is a comintation of 5 original data sources, for details please see README.
-#leafCN <- read.csv(file="~/data/CN_leaf/final_leafCN.csv")
-leafCN <- read.csv(file="D:/PhD/nimpl_sofun_inputs/Data/CN_leaf/final_leafCN.csv")
+leafCN <- read.csv(file="~/data/CN_leaf/final_leafCN.csv")
+#leafCN <- read.csv(file="D:/PhD/nimpl_sofun_inputs/Data/CN_leaf/final_leafCN.csv")
 
 # making species name consistent
 for (i in 1:nrow(leafCN)){

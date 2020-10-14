@@ -33,12 +33,12 @@ The process below will provide original codes of soil C/N, stand age, fAPAR, alp
 
 ```{r}
 library(raster)
+library(rgdal)
+soil <- raster('~/data/ISRIC/data_orig/data/raster/w001000.adf')
+#soil <- raster('E:/final round/data/w001000.adf') # map input from the last 2015 version of ISRIC (Batjes 2015 ISRIC report)
 
-#soil <- raster('~/data/ISRIC/data_orig/data/raster/w001000.adf')
-soil <- raster('E:/final round/data/w001000.adf') # map input from the last 2015 version of ISRIC (Batjes 2015 ISRIC report)
-
-#Global_grid <- as.data.frame(read.csv(file="~/data/ISRIC/data_orig/data/Global_cell.csv")) 
-Global_grid <- as.data.frame(read.csv(file="E:/climate/Global_cell.csv")) #Input global land grids (0.5 degree;N = 259200)
+Global_grid <- as.data.frame(read.csv(file="~/data/ISRIC/data_orig/data/Global_cell.csv")) 
+#Global_grid <- as.data.frame(read.csv(file="E:/climate/Global_cell.csv")) #Input global land grids (0.5 degree;N = 259200)
 
 Global_grid$ID <- c(1:259200) #create a list of number, just helping to form a raster then.
 
@@ -48,7 +48,7 @@ vec.soil.extract <-extract(soil,pointXY)
 data.soil.extract <-data.frame(pointXY,SUID=vec.soil.extract) 
 # These two steps are important, it will extract SUID information from soil map to our grids data, so that each our global grid will have a SUID, which will be further combined (merged) with soil C/N data then.
 
-ISRIC.data<-read.csv(file="E:/final round/HW30s_FULL.csv",header=TRUE,sep=";",dec = ".") # Now, input ISRIC database
+ISRIC.data<-read.csv(file="~/data/ISRIC/data_orig/data/HW30s_FULL.csv",header=TRUE,sep=";",dec = ".") # Now, input ISRIC database
 
 data.soil.extract <- merge(data.soil.extract,ISRIC.data,by='SUID',all.x=TRUE) # merge site with soil variables by using SUID
 
@@ -92,8 +92,8 @@ library(dplyr)
 library(maps)
 
 #set the path and filename
-#ncfname <- paste ("~/data/GFAD/data_orig/", "GFAD_V1-1", ".nc", sep="")
-ncfname <- paste ("E:/C-N cycling/Carbon allocation/672 sites analysis/stand age/GFAD2/", "GFAD_V1-1", ".nc", sep="")
+ncfname <- paste ("~/data/GFAD/data_orig/", "GFAD_V1-1", ".nc", sep="")
+#ncfname <- paste ("E:/C-N cycling/Carbon allocation/672 sites analysis/stand age/GFAD2/", "GFAD_V1-1", ".nc", sep="")
 
 #1. open a netCDF file and check variable
 ncin <- nc_open(ncfname)
@@ -123,8 +123,8 @@ r <- raster(age_input, "age")
 plot(r) # now it shows an empty grid in lower AUS, also in some other regions. We need to interpolate them based on local mean value.
 
 #2. Input continent map
-#ncfname <- paste ("~/data/landmasks/", "masks_20120709.srex_mask_SREX_masks_all.05deg.time", ".nc", sep="")
-ncfname <- paste ("D:/PhD/nimpl_sofun_inputs/Data/srex/", "srex-region-masks_20120709.srex_mask_SREX_masks_all.05deg.time-invariant", ".nc", sep="")
+ncfname <- paste ("~/data/landmasks/", "srex-region-masks_20120709.srex_mask_SREX_masks_all.05deg.time-invariant", ".nc", sep="")
+#ncfname <- paste ("D:/PhD/nimpl_sofun_inputs/Data/srex/", "srex-region-masks_20120709.srex_mask_SREX_masks_all.05deg.time-invariant", ".nc", sep="")
 ncin <- nc_open(ncfname)
 
 lon <- ncvar_get(ncin,"lon")
@@ -145,8 +145,8 @@ continent_age <- merge(continent_input, age_input, by=c("lon","lat"), all.x = T,
 summary(continent_age)
 
 #3. Input fAPAR, and merge it with continent_age, and convert fAPAR's NA grid to those age = NA
-#ncfname <- paste ("~/data/fAPAR/fAPAR3g_v2/", "fAPAR3g_v2_1982_2016_FILLED", ".nc", sep="")
-ncfname <- paste ("D:/PhD/nimpl_sofun_inputs/Data/fAPAR/", "fAPAR3g_v2_1982_2016_FILLED", ".nc", sep="")
+ncfname <- paste ("~/data/fAPAR/fAPAR3g_v2/", "fAPAR3g_v2_1982_2016_FILLED", ".nc", sep="")
+#ncfname <- paste ("D:/PhD/nimpl_sofun_inputs/Data/fAPAR/", "fAPAR3g_v2_1982_2016_FILLED", ".nc", sep="")
 dname <- "FAPAR_FILLED"
 
 ncin <- nc_open(ncfname)
@@ -264,10 +264,7 @@ gridded(final_data2) <- TRUE
 rage <- raster(final_data2, "age") 
 
 #output age nc file. THIS IS NOT THE LAST STEP!!! We need to additionally apply CDO processing in Euler.
-d <- writeRaster(rage, paste0("D:/PhD/nimpl_sofun_inputs/Data/Final_ncfile/","age_0923_interpolated.nc"),
-                 format = "CDF", overwrite = TRUE, varname = "age", 
-                 varunit = "yrs", longname = "stand-age", 
-                 xname = "lon", yname = "lat")
+#d <- writeRaster(rage, paste0("D:/PhD/nimpl_sofun_inputs/Data/Final_ncfile/","age_0923_interpolated.nc"),format = "CDF", overwrite = TRUE, varname = "age", varunit = "yrs", longname = "stand-age",  xname = "lon", yname = "lat")
 #Once cdo finished, the nc file below will be deleted, and output of CDO will be renamed to age.nc
 
 #after CDO, have a check
@@ -286,9 +283,9 @@ d <- writeRaster(rage, paste0("D:/PhD/nimpl_sofun_inputs/Data/Final_ncfile/","ag
 library(ncdf4)
 library(raster)
 
-#ncfname <- paste ("~/data/fAPAR/fAPAR3g_v2/", "fAPAR3g_v2_1982_2016_FILLED", ".nc", sep="")
+ncfname <- paste ("~/data/fAPAR/fAPAR3g_v2/", "fAPAR3g_v2_1982_2016_FILLED", ".nc", sep="")
 
-ncfname <- paste ("E:/C-N cycling/Carbon allocation/fAPAR/fAPAR HUANYUAN/", "fAPAR3g_v2_1982_2016_FILLED", ".nc", sep="")
+#ncfname <- paste ("E:/C-N cycling/Carbon allocation/fAPAR/fAPAR HUANYUAN/", "fAPAR3g_v2_1982_2016_FILLED", ".nc", sep="")
 dname <- "FAPAR_FILLED"
 
 ncin <- nc_open(ncfname)
@@ -325,9 +322,9 @@ plot(r3)
 
 ```{r}
 library(raster)
-#alphalist <- list.files(path = "~/data/alpha/data_orig/",full.names = T) # here this file includes 116 data - that is the annual alpha from 1901 to 2016
+alphalist <- list.files(path = "~/data/alpha/data_orig/",full.names = T) # here this file includes 116 data - that is the annual alpha from 1901 to 2016
 
-alphalist <- list.files(path = "E:/C-N cycling/Carbon allocation/672 sites analysis/alpha/",full.names = T)
+#alphalist <- list.files(path = "E:/C-N cycling/Carbon allocation/672 sites analysis/alpha/",full.names = T)
 
 #Input alpha from a list of data frame from 1901 to 2016 (list 116)
 empty_alpha <- data.frame(matrix(NA)) 
@@ -363,8 +360,8 @@ The code below will represent the global map of final output:
 ```{r}
 library(raster)
 library(ncdf4)
-#ncfname <- paste ("~/data/nimpl_sofun_inputs/Final_ncfile/", "PPFD", ".nc", sep="")
-ncfname <- paste ("E:/R code/CN MS/PhD/NC files/", "PPFD", ".nc", sep="")
+ncfname <- paste ("~/data/nimpl_sofun_inputs/map/Final_ncfile/", "PPFD", ".nc", sep="")
+#ncfname <- paste ("E:/R code/CN MS/PhD/NC files/", "PPFD", ".nc", sep="")
 dname <- "PPFD"
 ncin <- nc_open(ncfname)
 
@@ -377,6 +374,8 @@ PPFD <- ncvar_get(ncin,"PPFD")
 nc_close(ncin)
 
 pre.vec.long <- as.vector(PPFD)
+pre.vec.long[pre.vec.long == 9999] <- NA
+
 lonlat <- expand.grid(lon, lat)
 PPFD_input <- as.data.frame(cbind(lonlat,pre.vec.long))
 names(PPFD_input) <- c("lon","lat","PPFD")
@@ -430,8 +429,8 @@ Tg is growth temperature (degree celcius). We used the 30 yrs average data (1982
 
 library(raster)
 library(ncdf4)
-#ncfname <- paste ("~/data/nimpl_sofun_inputs/Final_ncfile/", "Tg", ".nc", sep="")
-ncfname <- paste ("E:/R code/CN MS/PhD/NC files/", "Tg", ".nc", sep="")
+ncfname <- paste ("~/data/nimpl_sofun_inputs/map/Final_ncfile/", "Tg", ".nc", sep="")
+#ncfname <- paste ("E:/R code/CN MS/PhD/NC files/", "Tg", ".nc", sep="")
 dname <- "Tg"
 
 ncin <- nc_open(ncfname)
@@ -445,6 +444,8 @@ Tg <- ncvar_get(ncin,"Tg")
 nc_close(ncin)
 
 pre.vec.long <- as.vector(Tg)
+pre.vec.long[pre.vec.long == 9999] <- NA
+
 lonlat <- expand.grid(lon, lat)
 Tg_input <- as.data.frame(cbind(lonlat,pre.vec.long))
 names(Tg_input) <- c("lon","lat","Tg")
@@ -466,8 +467,8 @@ where Tg (in celcius degree) was derived from above, and vap (hPa) was derived f
 ```{r}
 library(raster)
 library(ncdf4)
-#ncfname <- paste ("~/data/nimpl_sofun_inputs/Final_ncfile/", "vpd", ".nc", sep="")
-ncfname <- paste ("E:/R code/CN MS/PhD/NC files/", "vpd", ".nc", sep="")
+ncfname <- paste ("~/data/nimpl_sofun_inputs/map/Final_ncfile/", "vpd", ".nc", sep="")
+#ncfname <- paste ("E:/R code/CN MS/PhD/NC files/", "vpd", ".nc", sep="")
 dname <- "vpd"
 
 ncin <- nc_open(ncfname)
@@ -481,6 +482,8 @@ vpd <- ncvar_get(ncin,"vpd")
 nc_close(ncin)
 
 pre.vec.long <- as.vector(vpd)
+pre.vec.long[pre.vec.long == 9999] <- NA
+
 lonlat <- expand.grid(lon, lat)
 vpd_input <- as.data.frame(cbind(lonlat,pre.vec.long))
 names(vpd_input) <- c("lon","lat","vpd")
@@ -497,9 +500,9 @@ Here the SLA tiff. file was originally downloaded from TRY (see link on above). 
 ```{r}
 library(raster)
 library(ncdf4)
-#SLA_extracted <- read.csv(file="~/data/TRY_maps/SLA_export.csv") #This dataframe outputted from ArcGIS, including FID, lon, lat, Elevation, SLA (mg/mm)
+SLA_extracted <- read.csv(file="~/data/TRY_maps/SLA_export.csv") #This dataframe outputted from ArcGIS, including FID, lon, lat, Elevation, SLA (mg/mm)
 
-SLA_extracted <- read.csv(file="E:/C-N cycling/Carbon allocation/672 sites analysis/TRY Global map/SLA_export.csv") #This dataframe outputted from ArcGIS, including FID, lon, lat, Elevation, SLA (mg/mm)
+#SLA_extracted <- read.csv(file="E:/C-N cycling/Carbon allocation/672 sites analysis/TRY Global map/SLA_export.csv") #This dataframe outputted from ArcGIS, including FID, lon, lat, Elevation, SLA (mg/mm)
 SLA_extracted2 <- subset(SLA_extracted,SLA_3km_v1>0) #remove NA or negative values
 
 SLA_extracted2$LMA <- 1000/SLA_extracted2$SLA_3km_v1 #mg/mm -> g/m2
@@ -516,10 +519,7 @@ gridded(final_lma) <- TRUE
 rLMA <- raster(final_lma, "LMA") 
 plot(rLMA)
 
-d <- writeRaster(rLMA, paste0("E:/R code/CN MS/PhD/NC files/","LMA_test.nc"),
-                 format = "CDF", overwrite = TRUE, varname = "LMA", 
-                 varunit = "g/m2", longname = "Leaf-mass-per-area (TRY gloabl traits map)", 
-                 xname = "lon", yname = "lat")
+#d <- writeRaster(rLMA, paste0("E:/R code/CN MS/PhD/NC files/","LMA_test.nc"),format = "CDF", overwrite = TRUE, varname = "LMA", varunit = "g/m2", longname = "Leaf-mass-per-area (TRY gloabl traits map)",xname = "lon", yname = "lat")
 
 
 ``` 
@@ -532,7 +532,9 @@ library(raster)
 library(ncdf4)
 
 #Now, input file after resampled from ArcGIS (extract multi values from raster)
-c4 <- read.csv(file="D:/PhD/Project 1/Data/ISLSCP_C4/export_c4.csv") #This dataframe outputted from ArcGIS, including lon, lat, Elevation, c4 percentage (%)
+c4 <- read.csv(file="~/data/c4_still/original/data/export_c4.csv") #This dataframe outputted from ArcGIS, including lon, lat, Elevation, c4 percentage (%)
+
+#c4 <- read.csv(file="D:/PhD/Project 1/Data/ISLSCP_C4/export_c4.csv") #This dataframe outputted from ArcGIS, including lon, lat, Elevation, c4 percentage (%)
 summary(c4)
 
 c4a <- subset(c4,c4_percent>=0) #remove NA or negative values
