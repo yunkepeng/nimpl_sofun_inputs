@@ -8,7 +8,7 @@ output:
 ---
 title: "Output GPP, NPP, NPP[tissues], leaf C/N from sofun/yunkebranch_units, and compare it with site-level data"
 author: "Yunke Peng"
-date: "Sep 28 2020"
+date: "Oct 19 2020"
 output: html_document
 ---
 
@@ -38,21 +38,21 @@ library(dplyr)
 library(gplots)
 library(tidyselect)
 library(extrafont)
-devtools::load_all("D:/PhD/nimpl_sofun_inputs/package/rbeni")
 library(rbeni)
 library(raster)
 library(spgwr)
 library(maps)
-
+library(rworldmap)
+library(cowplot)
 #1. In our path (with multiple years data), identify which is the first year and end year of those files
 firstyr_data <- 1980 # In data file, which is the first year
 endyr_data <- 2018 # In data file, which is the last year
-location <- "D:/PhD/nimpl_sofun_inputs/Data/output/"
+location <- "~/data/output/"
 alloutput_list <- list.files(location,full.names = T)
 
 #input elevation nc file, which will be cbind with global df directly
-#nc <- read_nc_onefile("~/data/watch_wfdei/WFDEI-elevation.nc")
-elev_nc <- read_nc_onefile("D:/PhD/nimpl_sofun_inputs/Data/Elevation/WFDEI-elevation.nc")
+elev_nc <- read_nc_onefile("~/data/watch_wfdei/WFDEI-elevation.nc")
+#elev_nc <- read_nc_onefile("D:/PhD/nimpl_sofun_inputs/Data/Elevation/WFDEI-elevation.nc")
 elev <- as.data.frame(nc_to_df(elev_nc, varnam = "elevation"))
 head(elev) # this is consistent with df coord below
 
@@ -116,10 +116,15 @@ bnf <- inputnc("nuptake",1982,2011)
 #3. Input NPP and leafCN site-based data
 # (1) pre-processing NPP
 # rbind data (more data details see https://github.com/yunkepeng/nimpl_sofun_inputs/blob/master/NPP/NPP_statistical_model.Rmd)
-NPP_SaraVicca <- read.csv(file="D:/PhD/nimpl_sofun_inputs/Data/NPP/NPP_SaraVicca/NPP_SaraVicca.csv")
-NPP_Malhi <- read.csv(file="D:/PhD/nimpl_sofun_inputs/Data/NPP/NPP_Malhi/NPP_Malhi.csv")
-NPP_Keith <- read.csv(file="D:/PhD/nimpl_sofun_inputs/Data/NPP/NPP_Keith/NPP_Keith.csv")
-NPP_Forc <- read.csv(file="D:/PhD/nimpl_sofun_inputs/Data/NPP/NPP_Forc/NPP_Forc.csv")
+NPP_SaraVicca <- read.csv(file="~/data/NPP/NPP_SaraVicca/NPP_SaraVicca.csv")
+NPP_Malhi <- read.csv(file="~/data/NPP/NPP_Malhi/NPP_Malhi.csv")
+NPP_Keith <- read.csv(file="~/data/NPP/NPP_Keith/NPP_Keith.csv")
+NPP_Forc <- read.csv(file="~/data/NPP/NPP_Forc/NPP_Forc.csv")
+
+#NPP_SaraVicca <- read.csv(file="D:/PhD/nimpl_sofun_inputs/Data/NPP/NPP_SaraVicca/NPP_SaraVicca.csv")
+#NPP_Malhi <- read.csv(file="D:/PhD/nimpl_sofun_inputs/Data/NPP/NPP_Malhi/NPP_Malhi.csv")
+#NPP_Keith <- read.csv(file="D:/PhD/nimpl_sofun_inputs/Data/NPP/NPP_Keith/NPP_Keith.csv")
+#NPP_Forc <- read.csv(file="D:/PhD/nimpl_sofun_inputs/Data/NPP/NPP_Forc/NPP_Forc.csv")
 NPP_all <- rbind(NPP_SaraVicca,NPP_Malhi,NPP_Keith,NPP_Forc)
 
 # structure dataframe for NPP in tissues
@@ -142,7 +147,8 @@ wnpp_site <- aggregate(NPP.wood~lon+lat+z,data=NPP_all[,c("lon","lat","z","NPP.w
 dim(wnpp_site)
 
 # (2) pre-processing leaf c/n
-leafCN <- read.csv(file="D:/PhD/nimpl_sofun_inputs/Data/CN_leaf/final_leafCN.csv")
+leafCN <- read.csv(file="~/data/CN_leaf/final_leafCN.csv")
+#leafCN <- read.csv(file="D:/PhD/nimpl_sofun_inputs/Data/CN_leaf/final_leafCN.csv")
 
 # make species consitent
 for (i in 1:nrow(leafCN)){
@@ -265,8 +271,8 @@ for (i in c(1:nrow(leafcn_site))){
 
 
 #add pft data derived from orginal data provided from Sara Vicca
-#Evergreen <- read.csv(file="~/data/NPP_Yunke/NPP_SaraVicca/orig/pft.csv")
-Evergreen <- read.csv(file="D:/PhD/nimpl_sofun_inputs/Data/NPP/NPP_SaraVicca/orig/pft.csv")
+Evergreen <- read.csv(file="~/data/NPP/NPP_SaraVicca/orig/pft.csv")
+#Evergreen <- read.csv(file="D:/PhD/nimpl_sofun_inputs/Data/NPP/NPP_SaraVicca/orig/pft.csv")
 pft_type <- merge(NPP_all,Evergreen,by=c("site"),all.x=TRUE)
 pft_type2 <- pft_type[,c("lon","lat","z","pft")]
 pft_type3 <- unique(pft_type2)
@@ -303,112 +309,115 @@ dim(subset(wnpp_site,pft!="NA"))
 gpp_nonforest <- subset(gpp_site, pft!="NA")
 dim(gpp_nonforest)
 analyse_modobs2(subset(gpp_nonforest,pred>0),"GPP","pred", type = "points",
-                filnam = "D:/PhD/nimpl_sofun_inputs/fig/gpp.png")
-
+                filnam = "/Users/yunpeng/Desktop/phd/nimpl/nimpl_sofun_inputs/fig/second_attempt_20201019/grassland_gpp.png")
+# forest GPP
 gpp_forest <- subset(gpp_site, is.na(pft)==TRUE)
 dim(gpp_forest)
 analyse_modobs2(subset(gpp_forest,pred>0),"GPP","pred", type = "points",
-                filnam = "D:/PhD/nimpl_sofun_inputs/fig/gpp.png")
+                filnam = "/Users/yunpeng/Desktop/phd/nimpl/nimpl_sofun_inputs/fig/second_attempt_20201019/forest_gpp.png")
 
+#all gpp
 gpp_all <- gpp_site
 analyse_modobs2(subset(gpp_all,pred>0),"GPP","pred", type = "points",
-                filnam = "D:/PhD/nimpl_sofun_inputs/fig/gpp.png")
+                filnam = "/Users/yunpeng/Desktop/phd/nimpl/nimpl_sofun_inputs/fig/second_attempt_20201019/all_gpp.png")
 
 # it is clear that forest GPP (N = 138) shows better performance than forest + non-forest GPP (N =162), and than non-forest GPP (N = 24)
 
+#npp
 analyse_modobs2(subset(npp_site,pred>0),"TNPP_1","pred", type = "points",
-                filnam = "D:/PhD/nimpl_sofun_inputs/fig/npp.png")
+                filnam = "/Users/yunpeng/Desktop/phd/nimpl/nimpl_sofun_inputs/fig/second_attempt_20201019/npp.png")
 
 #divide anpp into forest vs. non-forest
 anpp_nonforest <- subset(anpp_site, pft!="NA")
 dim(anpp_nonforest)
 analyse_modobs2(subset(anpp_nonforest,pred>0),"ANPP_2","pred", type = "points",
-                filnam = "D:/PhD/nimpl_sofun_inputs/fig/anpp.png")
+                filnam = "/Users/yunpeng/Desktop/phd/nimpl/nimpl_sofun_inputs/fig/second_attempt_20201019/nonforest_anpp.png")
 
 anpp_forest <- subset(anpp_site, is.na(pft)==TRUE)
 dim(anpp_forest)
 analyse_modobs2(subset(anpp_forest,pred>0),"ANPP_2","pred", type = "points",
-                filnam = "D:/PhD/nimpl_sofun_inputs/fig/anpp.png")
+                filnam = "/Users/yunpeng/Desktop/phd/nimpl/nimpl_sofun_inputs/fig/second_attempt_20201019/forest_anpp.png")
 
 anpp_all <- anpp_site
 analyse_modobs2(subset(anpp_all,pred>0),"ANPP_2","pred", type = "points",
-                filnam = "D:/PhD/nimpl_sofun_inputs/fig/anpp.png")
+                filnam = "/Users/yunpeng/Desktop/phd/nimpl/nimpl_sofun_inputs/fig/second_attempt_20201019/all_anpp.png")
 
 #non-forest ANPP: R2 =0.3, n =24. which is better than forest or forest+non-forest anpp.
 
 analyse_modobs2(subset(bnpp_site,pred>0),"BNPP_1","pred", type = "points",
-                filnam = "D:/PhD/nimpl_sofun_inputs/fig/bnpp.png")
+                filnam = "/Users/yunpeng/Desktop/phd/nimpl/nimpl_sofun_inputs/fig/second_attempt_20201019/bnpp.png")
 
 analyse_modobs2(subset(lnpp_site,pred>0),"NPP.foliage","pred", type = "points",
-                filnam = "D:/PhD/nimpl_sofun_inputs/fig/lnpp.png")
+                filnam = "/Users/yunpeng/Desktop/phd/nimpl/nimpl_sofun_inputs/fig/second_attempt_20201019/lnpp.png")
 
 analyse_modobs2(subset(wnpp_site,pred>0),"NPP.wood","pred", type = "points",
-                filnam = "D:/PhD/nimpl_sofun_inputs/fig/wnpp.png")
+                filnam = "/Users/yunpeng/Desktop/phd/nimpl/nimpl_sofun_inputs/fig/second_attempt_20201019/wnpp.png")
 
 analyse_modobs2(subset(leafcn_site,pred>0),"leafcn","pred", type = "points",
-                filnam = "D:/PhD/nimpl_sofun_inputs/fig/leafcn.png")
+                filnam = "/Users/yunpeng/Desktop/phd/nimpl/nimpl_sofun_inputs/fig/second_attempt_20201019/leafcn.png")
 
 #6. Represent, and save our maps
 #(1) gpp
 gg <- plot_map3(gpp_df[,c(1,2,4)], 
-          varnam = "gpp",plot_title = " GPP (gC/m2/yr)",
-          latmin = -65, latmax = 85)
+                varnam = "gpp",plot_title = " GPP (gC/m2/yr)",
+                latmin = -65, latmax = 85)
 gg
-ggsave("D:/PhD/nimpl_sofun_inputs/fig/map_gpp.png",plot = gg)
+#ggsave("D:/PhD/nimpl_sofun_inputs/fig/map_gpp.png",plot = gg)
 
 #(2) npp  
 gg<- plot_map3(npp_df[,c(1,2,4)], 
-          varnam = "npp",plot_title = " NPP (gC/m2/yr)",
-          latmin = -65, latmax = 85) 
+               varnam = "npp",plot_title = " NPP (gC/m2/yr)",
+               latmin = -65, latmax = 85) 
 gg
-ggsave("D:/PhD/nimpl_sofun_inputs/fig/map_npp.png",plot = gg)
+#ggsave("D:/PhD/nimpl_sofun_inputs/fig/map_npp.png",plot = gg)
 
 #(3) anpp
 gg<- plot_map3(anpp_df[,c(1,2,4)], 
                varnam = "anpp",plot_title = "Aboveground NPP (gC/m2/yr)",
                latmin = -65, latmax = 85) 
 gg
-ggsave("D:/PhD/nimpl_sofun_inputs/fig/map_anpp.png",plot = gg)
+#ggsave("D:/PhD/nimpl_sofun_inputs/fig/map_anpp.png",plot = gg)
 
 #(4) bnpp
 gg<- plot_map3(bnpp_df[,c(1,2,4)], 
                varnam = "bnpp",plot_title = "Belowground NPP (gC/m2/yr)",
                latmin = -65, latmax = 85) 
 gg
-ggsave("D:/PhD/nimpl_sofun_inputs/fig/map_bnpp.png",plot = gg)
+#ggsave("D:/PhD/nimpl_sofun_inputs/fig/map_bnpp.png",plot = gg)
 
 #(5) lnpp
 gg<- plot_map3(lnpp_df[,c(1,2,4)], 
                varnam = "lnpp",plot_title = "NPP allocated to leaves (gC/m2/yr)",
                latmin = -65, latmax = 85) 
 gg
-ggsave("D:/PhD/nimpl_sofun_inputs/fig/map_lnpp.png",plot = gg)
+#ggsave("D:/PhD/nimpl_sofun_inputs/fig/map_lnpp.png",plot = gg)
 
 #(6) wnpp
 gg<- plot_map3(wnpp_df[,c(1,2,4)], 
                varnam = "wnpp",plot_title = "NPP allocated to woods (gC/m2/yr)",
                latmin = -65, latmax = 85) 
 gg
-ggsave("D:/PhD/nimpl_sofun_inputs/fig/map_wnpp.png",plot = gg)
+#ggsave("D:/PhD/nimpl_sofun_inputs/fig/map_wnpp.png",plot = gg)
 
 #(7) leafcn
 gg<- plot_map3(leafcn_df[,c(1,2,4)], 
                varnam = "leafcn",plot_title = "Leaf carbon to nitrogen ratio",
                latmin = -65, latmax = 85) 
 gg
-ggsave("D:/PhD/nimpl_sofun_inputs/fig/map_leafcn.png",plot = gg)
+#points(anpp_site$lon,anpp_site$lat, col="black", pch=16,cex=1.5)
+#ggsave("D:/PhD/nimpl_sofun_inputs/fig/map_leafcn.png",plot = gg)
 
 #7. Mapping our global measured sites
-map("world", fill=TRUE, col="white", bg="white", ylim=c(-90, 90),xlim = c(-180,180), mar=c(1,0,0,1))
-points(anpp_site$lon,anpp_site$lat, col="black", pch=16,cex=1.5)
-points(npp_site$lon,npp_site$lat, col="red", pch=16,cex=1.5)
-points(gpp_site$lon,gpp_site$lat, col="orange", pch=16,cex=1.5)
-title("Orange: GPP + NPP + ANPP
-       Red: NPP + ANPP
-       Black: ANPP")
+#map("world", fill=TRUE, col="white", bg="white",ylim=c(-90, 90),xlim = c(-180,180), mar=c(1,0,0,1))
+#points(anpp_site$lon,anpp_site$lat, col="black", pch=16,cex=1.5)
+#points(npp_site$lon,npp_site$lat, col="red", pch=16,cex=1.5)
+#points(gpp_site$lon,gpp_site$lat, col="orange", pch=16,cex=1.5)
+#title("Orange: GPP + NPP + ANPP
+#       Red: NPP + ANPP
+#       Black: ANPP")
 
-map("world", fill=TRUE, col="white", bg="white", ylim=c(-90, 90),xlim = c(-180,180), mar=c(1,0,0,1))
-points(leafcn_site$lon,leafcn_site$lat, col="red", pch=16,cex=1.5)
-title("leaf C/N")
+#map("world", fill=TRUE, col="white", bg="white", ylim=c(-90, 90),xlim = c(-180,180), mar=c(1,0,0,1))
+#points(leafcn_site$lon,leafcn_site$lat, col="red", pch=16,cex=1.5)
+#title("leaf C/N")
 
 ```

@@ -119,5 +119,62 @@ mean(leafCN2$cmass)
 #root c/n = 42
 #wood c/n = 97
 
+
+#Plan B: now input a larger dataset (that only includes Narea, Vcmax25, lma)
+#For author's unpublished data purpose, this data is not avaiable now.
+#now, vcmax25 using output of sofun/yunkebranch_units (from p-model), lma using traits map
+
+#1. input a larger data including narea, vcmax and lma, lon, lat, z
+#convert individuals to site-species data - this data is not published now.
+SP_input <- read.csv(file="~/data/VcmaxMS/final_individuals.csv") #all individuals
+
+sitemean <- aggregate(SP_input,by=list(SP_input$lon,SP_input$lat), FUN=mean, na.rm=TRUE) #site-mean
+
+sitemean$sitename <- paste0("s", 1:nrow(sitemean),sep="") # define sitename (s1,s2..s276)
+
+SP_site1 <- sitemean[,c("lon","lat","sitename")]
+SP_final1 <- merge(SP_input,SP_site1,by=c("lat","lon"),all.x=TRUE) #merged sitename to SP data
+
+SP_Vcmax.25 <- aggregate(Vcmax.25~sitename+species,SP_final1,mean)
+SP_Jmax.25 <- aggregate(Jmax.25~sitename+species,SP_final1,mean)#NA
+SP_Elevation <- aggregate(Elevation~sitename+species,SP_final1,mean)
+SP_narea<- aggregate(narea~sitename+species,SP_final1,mean)
+SP_parea<- aggregate(parea ~sitename+species,SP_final1,mean)
+SP_lma<- aggregate(lma~sitename+species,SP_final1,mean)
+SP_Tg<- aggregate(Tg~sitename+species,SP_final1,mean)
+SP_PPFD<- aggregate(PPFD~sitename+species,SP_final1,mean)
+SP_Vcmax<- aggregate(Vcmax~sitename+species,SP_final1,mean)
+SP_Vcmax25<- aggregate(Vcmax25~sitename+species,SP_final1,mean)
+SP_Jmax<- aggregate(Jmax~sitename+species,SP_final1,mean)
+SP_Jmax25<- aggregate(Jmax25~sitename+species,SP_final1,mean)
+SP_vpd<- aggregate(vpd~sitename+species,SP_final1,mean,na.rm=TRUE) #vpd
+SP_lat<- aggregate(lat~sitename+species,SP_final1,mean)
+SP_lon<- aggregate(lon~sitename+species,SP_final1,mean)
+SP_new_jmax25<- aggregate(new_jmax25~sitename+species,SP_final1,mean) #na
+
+#merging all observed traits (and old prediction) data in SP
+sitespecies_final <-Reduce(function(x,y) merge(x = x, y = y, by = c("sitename","species"),all.x=TRUE), 
+                           list(SP_lon,SP_lat,SP_Elevation,SP_Vcmax25,SP_Vcmax.25,SP_Jmax25,SP_PPFD,SP_Tg,
+                                SP_narea,SP_parea,SP_lma,SP_Jmax.25,SP_new_jmax25,SP_vpd))
+
+#2. obtain Nrubisco and Nstructural from this large dataset
+#firstly, for site-species data
+sitespecies_final$nmass <- sitespecies_final$narea/sitespecies_final$lma
+sitespecies_final$vcmax25_lma <- sitespecies_final$Vcmax.25/sitespecies_final$lma
+
+summary(lmer(nmass~vcmax25_lma + (1|sitename) +(1|species),data=sitespecies_final))
+r.squaredGLMM(lmer(nmass~vcmax25_lma + (1|sitename) +(1|species),data=sitespecies_final))
+# r2 = 0.112
+#intercept = 0.02108 (Ns)
+#slope = 0.008736 (Nr)
+
+#secondly, for site-mean data
+sitemean$nmass <- sitemean$narea/sitemean$lma
+sitemean$vcmax25_lma <- sitemean$Vcmax.25/sitemean$lma
+
+summary(lm(nmass~vcmax25_lma ,data=sitemean))
+# r2 = 0.6419
+#intercept = 0.005418 (Ns)
+#slope = 0.023755 (Nr)
 ```
 
