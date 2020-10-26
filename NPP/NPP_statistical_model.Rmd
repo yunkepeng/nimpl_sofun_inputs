@@ -36,18 +36,18 @@ library("PerformanceAnalytics")
 library(MuMIn)
 
 ###1. Input original data file from NPP_SaraVicca, NPP_Malhi, NPP_Keith, and NPP_Forc
-#NPP_SaraVicca <- read.csv(file="~/data/NPP_Yunke/NPP_SaraVicca/NPP_SaraVicca.csv")
-#NPP_Malhi <- read.csv(file="~/data/NPP_Yunke/NPP_Malhi/NPP_Malhi.csv")
-#NPP_Keith <- read.csv(file="~/data/NPP_Yunke/NPP_Keith/NPP_Keith.csv")
-#NPP_Forc <- read.csv(file="~/data/NPP_Yunke/NPP_ForC/NPP_ForC.csv")
+NPP_SaraVicca <- read.csv(file="~/data/NPP_Yunke/NPP_SaraVicca/NPP_SaraVicca.csv")
+NPP_Malhi <- read.csv(file="~/data/NPP_Yunke/NPP_Malhi/NPP_Malhi.csv")
+NPP_Keith <- read.csv(file="~/data/NPP_Yunke/NPP_Keith/NPP_Keith.csv")
+NPP_Forc <- read.csv(file="~/data/NPP_Yunke/NPP_ForC/NPP_ForC.csv")
 
 
-NPP_SaraVicca <- read.csv(file="D:/PhD/nimpl_sofun_inputs/Data/NPP/NPP_SaraVicca/NPP_SaraVicca.csv")
-NPP_Malhi <- read.csv(file="D:/PhD/nimpl_sofun_inputs/Data/NPP/NPP_Malhi/NPP_Malhi.csv")
-NPP_Keith <- read.csv(file="D:/PhD/nimpl_sofun_inputs/Data/NPP/NPP_Keith/NPP_Keith.csv")
+#NPP_SaraVicca <- read.csv(file="D:/PhD/nimpl_sofun_inputs/Data/NPP/NPP_SaraVicca/NPP_SaraVicca.csv")
+#NPP_Malhi <- read.csv(file="D:/PhD/nimpl_sofun_inputs/Data/NPP/NPP_Malhi/NPP_Malhi.csv")
+#NPP_Keith <- read.csv(file="D:/PhD/nimpl_sofun_inputs/Data/NPP/NPP_Keith/NPP_Keith.csv")
 #The original data of Forc was avaialable at "~/data/NPP_Yunke/NPP_ForC/orig/", then after a pre-processing code (for merging and removing repeated sites; because there had some repeated sites to Sara Vicca and Keith's dataset), and after manually structuring variable order and name, the output file that directly used in this project is at below (NPP_Forc).
 #The pre-processing code of Forc was available at "D:/PhD/nimpl_sofun_inputs/nimpl_sofun_inputs/NPP/NPP_Forc_preprocessing.Rmd" and also available in yunkepeng github: nimpl_sofun_input/NPP/NPP_Forc_preprocessing.Rmd.
-NPP_Forc <- read.csv(file="D:/PhD/nimpl_sofun_inputs/Data/NPP/NPP_Forc/NPP_Forc.csv")
+#NPP_Forc <- read.csv(file="D:/PhD/nimpl_sofun_inputs/Data/NPP/NPP_Forc/NPP_Forc.csv")
 
 NPP_all <- rbind(NPP_SaraVicca,NPP_Malhi,NPP_Keith,NPP_Forc)
 
@@ -58,22 +58,22 @@ NPP_all <- rbind(NPP_SaraVicca,NPP_Malhi,NPP_Keith,NPP_Forc)
 #### Data sources: tmn, tmx, vap, pre (from CRU ts 4.01, see: https://crudata.uea.ac.uk/cru/data/hrg/cru_ts_4.01/), radi (from WFDEI, see http://www.eu-watch.org/gfx_content/documents/README-WFDEI%20(v2016).pdf), alpha from SPLASH-based products (see Euler:~/data/alpha/data_orig).
 #### All climate data were obtained from measurement year only, the measurement year is available at NPP_all$Begin_year and NPP_all$End_year
 
-#tmn <- read.csv(file="~/data/NPP_Yunke/climate/climate.csv")[,1:12] #monthly degree celcius
-#tmx <- read.csv(file="~/data/NPP_Yunke/climate/climate.csv")[,13:24] #monthly degree celcius
-#vap <- read.csv(file="~/data/NPP_Yunke/climate/climate.csv")[,25:36] #monthly hPa
-#pre <- read.csv(file="~/data/NPP_Yunke/climate/climate.csv")[,37:48] #monthly mm/month
-#radi<- read.csv(file="~/data/NPP_Yunke/climate/climate.csv")[,49:60] #monthly w/m2
-#alphalist3 <- read.csv(file="~/data/NPP_Yunke/climate/climate.csv")$alpha
-#CaGlobal <- read.csv(file="~/data/NPP_Yunke/climate/climate.csv")$Ca #ppm
+tmn <- read.csv(file="~/data/NPP_Yunke/climate/climate.csv")[,1:12] #monthly degree celcius
+tmx <- read.csv(file="~/data/NPP_Yunke/climate/climate.csv")[,13:24] #monthly degree celcius
+vap <- read.csv(file="~/data/NPP_Yunke/climate/climate.csv")[,25:36] #monthly hPa
+pre <- read.csv(file="~/data/NPP_Yunke/climate/climate.csv")[,37:48] #monthly mm/month
+radi<- read.csv(file="~/data/NPP_Yunke/climate/climate.csv")[,49:60] #monthly w/m2
+alphalist3 <- read.csv(file="~/data/NPP_Yunke/climate/climate.csv")$alpha
+CaGlobal <- read.csv(file="~/data/NPP_Yunke/climate/climate.csv")$Ca #ppm
 
 # for workflow of climate data please have a look at yunkepeng github: nimpl_sofun_inputs/climate/, or in Euler's README: "~/data/NPP_Yunke/climate/"
-tmn <- read.csv(file="D:/PhD/nimpl_sofun_inputs/Data/climate/climate.csv")[,1:12] #monthly degree celcius
-tmx <- read.csv(file="D:/PhD/nimpl_sofun_inputs/Data/climate/climate.csv")[,13:24] #monthly degree celcius
-vap <- read.csv(file="D:/PhD/nimpl_sofun_inputs/Data/climate/climate.csv")[,25:36] #monthly hPa
-pre <- read.csv(file="D:/PhD/nimpl_sofun_inputs/Data/climate/climate.csv")[,37:48] #monthly mm/month
-radi<- read.csv(file="D:/PhD/nimpl_sofun_inputs/Data/climate/climate.csv")[,49:60] #monthly w/m2
-alphalist3 <- read.csv(file="D:/PhD/nimpl_sofun_inputs/Data/climate/climate.csv")$alpha
-CaGlobal <- read.csv(file="D:/PhD/nimpl_sofun_inputs/Data/climate/climate.csv")$Ca #ppm
+#tmn <- read.csv(file="D:/PhD/nimpl_sofun_inputs/Data/climate/climate.csv")[,1:12] #monthly degree celcius
+#tmx <- read.csv(file="D:/PhD/nimpl_sofun_inputs/Data/climate/climate.csv")[,13:24] #monthly degree celcius
+#vap <- read.csv(file="D:/PhD/nimpl_sofun_inputs/Data/climate/climate.csv")[,25:36] #monthly hPa
+#pre <- read.csv(file="D:/PhD/nimpl_sofun_inputs/Data/climate/climate.csv")[,37:48] #monthly mm/month
+#radi<- read.csv(file="D:/PhD/nimpl_sofun_inputs/Data/climate/climate.csv")[,49:60] #monthly w/m2
+#alphalist3 <- read.csv(file="D:/PhD/nimpl_sofun_inputs/Data/climate/climate.csv")$alpha
+#CaGlobal <- read.csv(file="D:/PhD/nimpl_sofun_inputs/Data/climate/climate.csv")$Ca #ppm
 
 elev <- NPP_all$z
 lat <- NPP_all$lat
@@ -83,7 +83,7 @@ lon <- NPP_all$lon
 ####(1) Tg (growth temperature)
 Tg_cal <- function(tmn,tmx){
   #-----------------------------------------------------------------------
-  # Input:   ¦Ä (s;solar delclination), 12 month constant values
+  # Input:   ?? (s;solar delclination), 12 month constant values
   # Input:   tmn, in monthly or daily degrees
   # Input:   tmx, in monthly or daily degrees
   # Input:   lat, in degrees
@@ -116,7 +116,7 @@ Tg_cal <- function(tmn,tmx){
   Tg[Tg =="NaN"] <- NA
   return(Tg)
 }
-Tg <- Tg_cal(tmn,tmx) # monthly Tg in ¡æ
+Tg <- Tg_cal(tmn,tmx) # monthly Tg in ??
 Tg_K <- Tg+273.15     # monthly Tg in K
 
 ####(2) Pressure, Ca, vpd
@@ -139,8 +139,8 @@ NPP_all$alpha <- alphalist3
 ###5. merge MEASURED soil (orginally provided from Sara Vicca)
 ####(1) For our purpose, we only need CN, pH, age
 
-#soil <-read.csv(file="~/data/NPP_Yunke/NPP_SaraVicca/orig/soil.csv")
-soil <-read.csv(file="D:/PhD/nimpl_sofun_inputs/Data/NPP/NPP_SaraVicca/orig/soil.csv")
+soil <-read.csv(file="~/data/NPP_Yunke/NPP_SaraVicca/orig/soil.csv")
+#soil <-read.csv(file="D:/PhD/nimpl_sofun_inputs/Data/NPP/NPP_SaraVicca/orig/soil.csv")
 soil2 <- soil[,c(1,2,3,42,43,77)]
 names(soil2)<-c("site","lon","lat","CN","pH","age")
 
@@ -153,8 +153,8 @@ final_sites2 <- merge(final_sites1,pH,by=c("site"),all.x=TRUE)
 ###6. merge MEASURED management-type and stand-age data (the csv was derived from original data of Sara Vicca).
 ####(1) merge management type into dataframe. Management types (M: Managed, UM: unmanaged, RD: Recently disturbed, FI: Fertilized, NA: unknown).
 
-#manage_age <-read.csv(file="~/data/NPP_Yunke/NPP_SaraVicca/orig/age_and_management.csv") # first two cols were sitename and management data, last two cols were sitename and stand-age data.
-manage_age <-read.csv(file="D:/PhD/nimpl_sofun_inputs/Data/NPP/NPP_SaraVicca/orig/age_and_management.csv") # first two cols were sitename and management data, last two cols were sitename and stand-age data.
+manage_age <-read.csv(file="~/data/NPP_Yunke/NPP_SaraVicca/orig/age_and_management.csv") # first two cols were sitename and management data, last two cols were sitename and stand-age data.
+#manage_age <-read.csv(file="D:/PhD/nimpl_sofun_inputs/Data/NPP/NPP_SaraVicca/orig/age_and_management.csv") # first two cols were sitename and management data, last two cols were sitename and stand-age data.
 manage <-manage_age[1:159,1:2]
 names(manage) <- c("site","management")
 final_sites3 <- merge(final_sites2,manage,by=c("site"),all.x=TRUE)
@@ -167,8 +167,8 @@ final_sites4 <- merge(final_sites3,agee2,by=c("site"),all.x=TRUE)
 
 ###6.add pft data derived from orginal data provided from Sara Vicca
 
-#Evergreen <- read.csv(file="~/data/NPP_Yunke/NPP_SaraVicca/orig/pft.csv")
-Evergreen <- read.csv(file="D:/PhD/nimpl_sofun_inputs/Data/NPP/NPP_SaraVicca/orig/pft.csv")
+Evergreen <- read.csv(file="~/data/NPP_Yunke/NPP_SaraVicca/orig/pft.csv")
+#Evergreen <- read.csv(file="D:/PhD/nimpl_sofun_inputs/Data/NPP/NPP_SaraVicca/orig/pft.csv")
 
 final_sites5 <- merge(final_sites4,Evergreen,by=c("site"),all.x=TRUE)
 summary(final_sites5$pft)

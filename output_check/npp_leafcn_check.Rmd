@@ -402,8 +402,9 @@ gg
 #(7) leafcn
 gg<- plot_map3(leafcn_df[,c(1,2,4)], 
                varnam = "leafcn",plot_title = "Leaf carbon to nitrogen ratio",
-               latmin = -65, latmax = 85) 
+               latmin = -65, latmax = 85,maxval = 100, combine = FALSE) 
 gg
+
 #points(anpp_site$lon,anpp_site$lat, col="black", pch=16,cex=1.5)
 #ggsave("D:/PhD/nimpl_sofun_inputs/fig/map_leafcn.png",plot = gg)
 
