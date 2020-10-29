@@ -1,0 +1,276 @@
+---
+output:
+  html_document: default
+  pdf_document: default
+  word_document: default
+---
+
+---
+title: "Fitted statistical model for Nitrogen resorption efficiency"
+author: "Yunke Peng"
+date: "Oct 26, 2020"
+output: html_document
+---
+
+###The analysis below includes data from ~/data/NRE_various. Including Du et al. 2020 (site-based) and Deng et al. 2020 (species-based). The common thing is that it has already included NRE, MAT, MAP. We may then extract soil and climate data from our existing prediction field from ~/data/nimpl_sofun_inputs/map/Final_ncfile, for example including soil c/n (originally from HWSD), PPFD (orginally from WFDEI), Tg (CRU), vpd (CRU) and alpha (SPLASH). They were used by geographically weighted regressions in R. The results show that Tg and vpd can be great predictors on logit (NRE) (R2 = 0.28).
+
+### Pre-processing includes: aggregate to site-means, remove repeated sites, add elevation from ingestr, extract climate and soil data from prediction fields in nimpl simulations, remove two negative vpd points and one negative soil c/n points before analysies.
+
+
+```{r}
+
+require(data.table)
+library(maps)
+library(lme4)
+library(MuMIn)
+library(lmerTest)
+library(elevatr)
+library(raster)
+library(devtools)
+library(ingestr)
+library(tibble)
+library(spgwr)
+library(rworldmap)
+library(colorRamps)
+
+#2. Input NRE from different sources, rbind, remove repeated data and plot maps, and test a lm model
+#Dong is species-based, Du is site-based. To make them consistent, let's use site-based for both df
+
+NRE_Du <- read.csv(file="~/data/NRE_various/NRE_Du/NRE_Du.csv")
+NRE_Dong <- read.csv(file="~/data/NRE_various/NRE_Deng/NRE_Deng.csv")
+
+NRE_Du_df <- NRE_Du[,c("lon","lat","NRE","MAT","MAP")]
+NRE_Du_df <- aggregate(NRE_Du_df,by=list(NRE_Du_df$lon,NRE_Du_df$lat), FUN=mean, na.rm=TRUE) #site-mean
+NRE_Du_df <- NRE_Du_df[,c(3:7)]
+head(NRE_Du_df)
+dim(NRE_Du_df)
+
+NRE_Dong_df <- NRE_Dong[,c("Longitude","Latitude","NRE.nitrogen.resorption.efficiency.","MAT","MAP")]
+names(NRE_Dong_df) <- c("lon","lat","NRE","MAT","MAP")
+head(NRE_Dong_df)
+NRE_Dong_df <- aggregate(NRE_Dong_df,by=list(NRE_Dong_df$lon,NRE_Dong_df$lat), FUN=mean, na.rm=TRUE) #site-mean
+NRE_Dong_df <- NRE_Dong_df[,c(3:7)]
+dim(NRE_Dong_df)
+
+
+NRE_Dong_df$source <- "Dong"
+NRE_Du_df$source <- "Du"
+NRE_df <- rbind(NRE_Du_df,NRE_Dong_df)
+summary(NRE_df)
+
+#check repeated data, and remove 6 repeated points from Du et al. paper
+NRE_df$repeated <- duplicated(NRE_df[,c("lon","lat")])
+summary(NRE_df$repeated)
+NRE_df <- subset(NRE_df,repeated==FALSE)
+
+#project data
+newmap <- getMap(resolution = "low")
+plot(newmap, xlim = c(-180, 180), ylim = c(-75, 75), asp = 1)
+
+points(NRE_df$lon,NRE_df$lat, col="red", pch=16,cex=1)
+
+#3. add elevation in this df, based on ingtestr 
+siteinfo <- NRE_df[,c("lon","lat")] # present x and y separately
+siteinfo$date_start <- lubridate::ymd(paste0(1982, "-01-01"))
+siteinfo$date_end <- lubridate::ymd(paste0(2011, "-12-31"))
+siteinfo$sitename <- paste0("s", 1:nrow(siteinfo),sep="")
+siteinfo <- as_tibble(siteinfo)
+
+df_etopo <- ingest(
+  siteinfo,
+  source = "etopo1",
+  dir = "~/data/etopo/" 
+)
+
+NRE_df$elevation <- as.numeric(as.data.frame(df_etopo$data))
+subset(NRE_df,elevation<0)
+#Some grids > 0, lets' assume -3062 as NA, and others as 0 firstly?
+NRE_df$elevation[NRE_df$elevation< -50] <- NA
+NRE_df$elevation[NRE_df$elevation< 0] <- 0
+
+#4. Extract site climate/soil/age data (from prediction fields in nimpl simulation) for all NRE sites
+#Input data from: ~/data/nimpl_sofun_inputs/map/Final_ncfile
+library(rbeni)
+
+#input elevation for global grids
+elev_nc <- read_nc_onefile("~/data/watch_wfdei/WFDEI-elevation.nc")
+elev <- as.data.frame(nc_to_df(elev_nc, varnam = "elevation"))
+head(elev) 
+
+#input nc file
+#All nc file has already classified NA as 9999 (because it will otherwise cause FPE in simulations).
+Tg <- as.data.frame(nc_to_df(read_nc_onefile(
+  "~/data/nimpl_sofun_inputs/map/Final_ncfile/Tg.nc"),
+                               varnam = "Tg"))
+Tg$myvar[Tg$myvar==9999] <- NA
+
+PPFD <- as.data.frame(nc_to_df(read_nc_onefile(
+  "~/data/nimpl_sofun_inputs/map/Final_ncfile/PPFD.nc"),
+                             varnam = "PPFD"))
+PPFD$myvar[PPFD$myvar==9999] <- NA
+
+vpd <- as.data.frame(nc_to_df(read_nc_onefile(
+  "~/data/nimpl_sofun_inputs/map/Final_ncfile/vpd.nc"),
+  varnam = "vpd"))
+vpd$myvar[vpd$myvar==9999] <- NA
+
+Vcmax25 <- as.data.frame(nc_to_df(read_nc_onefile(
+  "~/data/nimpl_sofun_inputs/map/Final_ncfile/Vcmax25.nc"),
+  varnam = "Vcmax25"))
+Vcmax25$myvar[Vcmax25$myvar==9999] <- NA
+
+age <- as.data.frame(nc_to_df(read_nc_onefile(
+  "~/data/nimpl_sofun_inputs/map/Final_ncfile/age.nc"),
+  varnam = "age"))
+age$myvar[age$myvar==9999] <- NA
+
+alpha <- as.data.frame(nc_to_df(read_nc_onefile(
+  "~/data/nimpl_sofun_inputs/map/Final_ncfile/alpha.nc"),
+  varnam = "alpha"))
+alpha$myvar[alpha$myvar==9999] <- NA
+
+CNrt <- as.data.frame(nc_to_df(read_nc_onefile(
+  "~/data/nimpl_sofun_inputs/map/Final_ncfile/CNrt.nc"),
+  varnam = "CNrt"))
+CNrt$myvar[CNrt$myvar==9999] <- NA
+
+fAPAR <- as.data.frame(nc_to_df(read_nc_onefile(
+  "~/data/nimpl_sofun_inputs/map/Final_ncfile/fAPAR.nc"),
+  varnam = "fAPAR"))
+fAPAR$myvar[fAPAR$myvar==9999] <- NA
+
+LMA <- as.data.frame(nc_to_df(read_nc_onefile(
+  "~/data/nimpl_sofun_inputs/map/Final_ncfile/LMA.nc"),
+  varnam = "LMA"))
+LMA$myvar[LMA$myvar==9999] <- NA
+
+#cbind all predictors, and its lon, lat, z
+all_predictors <- cbind(elev,Tg$myvar,PPFD$myvar,vpd$myvar,
+                        alpha$myvar,Vcmax25$myvar,LMA$myvar,
+                        fAPAR$myvar,CNrt$myvar,age$myvar)
+
+names(all_predictors) <- c("lon","lat","z","Tg","PPFD","vpd",
+                           "alpha","Vcmax25","LMA","fAPAR","CNrt","age")
+
+Tg_df <- all_predictors[,c("lon","lat","z","Tg")]
+PPFD_df <- all_predictors[,c("lon","lat","z","PPFD")]
+vpd_df <- all_predictors[,c("lon","lat","z","vpd")]
+alpha_df <- all_predictors[,c("lon","lat","z","alpha")]
+CNrt_df <- all_predictors[,c("lon","lat","z","CNrt")]
+
+#now, apply gwr to extract site predictors' value
+head(NRE_df)
+NRE_site <- NRE_df[,c("lon","lat","elevation")]
+names(NRE_site) <- c("lon","lat","z")
+
+a <- 1.5 # which degree (distance) of grid when interpolating gwr from global grids
+i <- 1
+
+#Extract Tg, PPFD, vpd, alpha
+for (i in c(1:106,108:nrow(NRE_site))){ #one site does not have elevation (NA), therefore omitted
+  #Tg
+  Tg_global <- na.omit(Tg_df)
+  NRE_part <- subset(Tg_global,lon>(NRE_site[i,1]-a)&lon<(NRE_site[i,1]+a)&
+                       lat>(NRE_site[i,2]-a)&lat<(NRE_site[i,2]+a))
+  coordinates(NRE_part) <- c("lon","lat")
+  gridded(NRE_part) <- TRUE
+  NRE_coord <- NRE_site[i,1:3]
+  coordinates(NRE_coord) <- c("lon","lat")
+  NRE_site$Tg[i] <- (gwr(Tg ~ z, NRE_part, bandwidth = 1.06, fit.points =NRE_coord,predictions=TRUE))$SDF$pred
+  #ppfd
+  PPFD_global <- na.omit(PPFD_df)
+  NRE_part <- subset(PPFD_global,lon>(NRE_site[i,1]-a)&lon<(NRE_site[i,1]+a)&
+                       lat>(NRE_site[i,2]-a)&lat<(NRE_site[i,2]+a))
+  coordinates(NRE_part) <- c("lon","lat")
+  gridded(NRE_part) <- TRUE
+  NRE_coord <- NRE_site[i,1:3]
+  coordinates(NRE_coord) <- c("lon","lat")
+  NRE_site$PPFD[i] <- (gwr(PPFD ~ z, NRE_part, bandwidth = 1.06, fit.points =NRE_coord,predictions=TRUE))$SDF$pred
+  #vpd
+  vpd_global <- na.omit(vpd_df)
+  NRE_part <- subset(vpd_global,lon>(NRE_site[i,1]-a)&lon<(NRE_site[i,1]+a)&
+                       lat>(NRE_site[i,2]-a)&lat<(NRE_site[i,2]+a))
+  coordinates(NRE_part) <- c("lon","lat")
+  gridded(NRE_part) <- TRUE
+  NRE_coord <- NRE_site[i,1:3]
+  coordinates(NRE_coord) <- c("lon","lat")
+  NRE_site$vpd[i] <- (gwr(vpd ~ z, NRE_part, bandwidth = 1.06, fit.points =NRE_coord,predictions=TRUE))$SDF$pred
+  #alpha
+  alpha_global <- na.omit(alpha_df)
+  NRE_part <- subset(alpha_global,lon>(NRE_site[i,1]-a)&lon<(NRE_site[i,1]+a)&
+                       lat>(NRE_site[i,2]-a)&lat<(NRE_site[i,2]+a))
+  coordinates(NRE_part) <- c("lon","lat")
+  gridded(NRE_part) <- TRUE
+  NRE_coord <- NRE_site[i,1:3]
+  coordinates(NRE_coord) <- c("lon","lat")
+  NRE_site$alpha[i] <- (gwr(alpha ~ z, NRE_part, bandwidth = 1.06, fit.points =NRE_coord,predictions=TRUE))$SDF$pred
+  #print(i)
+}
+
+#Extract CNrt
+for (i in c(1:53,55:56,58,60:106,108:nrow(NRE_site))){ #one site does not have elevation (NA), therefore omitted
+  #CNrt
+  CNrt_global <- na.omit(CNrt_df)
+  NRE_part <- subset(CNrt_global,lon>(NRE_site[i,1]-a)&lon<(NRE_site[i,1]+a)&
+                       lat>(NRE_site[i,2]-a)&lat<(NRE_site[i,2]+a))
+  coordinates(NRE_part) <- c("lon","lat")
+  gridded(NRE_part) <- TRUE
+  NRE_coord <- NRE_site[i,1:3]
+  coordinates(NRE_coord) <- c("lon","lat")
+  NRE_site$CNrt[i] <- (gwr(CNrt ~ z, NRE_part, bandwidth = 1.06, fit.points =NRE_coord,predictions=TRUE))$SDF$pred
+  #print(i)
+}
+
+#combine NRE with site extracted climate and CNrt (Tg, PPFD, vpd, alpha, CNrt)
+NRE_climate <- cbind(NRE_df[,c("NRE","MAT","MAP","source")],NRE_site)
+summary(NRE_climate)
+
+#remove 2 negative vpd points (which should be NA)
+NRE_climate <- subset(NRE_climate, vpd>0)
+dim(NRE_climate)
+
+summary(lm(log((NRE/100)/(1-(NRE/100)))~MAT+log(MAP),data=NRE_climate))
+summary(lm(log((NRE/100)/(1-(NRE/100)))~Tg+log(vpd),data=NRE_climate))
+summary(lm(log((NRE/100)/(1-(NRE/100)))~Tg+log(alpha),data=NRE_climate))
+
+#remove negative CNrt
+NRE_climate_soil <- subset(NRE_climate, CNrt>0)
+summary(lm(log((NRE/100)/(1-(NRE/100)))~Tg+log(vpd)+log(CNrt),data=NRE_climate))
+
+###fAPAR, vcmax25 and LMA not considered yet
+
+#age_df <- all_predictors[,c("lon","lat","z","age")]
+#fAPAR_df <- all_predictors[,c("lon","lat","z","fAPAR")]
+#LMA_df <- all_predictors[,c("lon","lat","z","LMA")]
+#Vcmax25_df <- all_predictors[,c("lon","lat","z","Vcmax25")]
+#
+#fAPAR_global <- na.omit(fAPAR_df)
+#NRE_part <- subset(fAPAR_global,lon>(NRE_site[i,1]-a)&lon<(NRE_site[i,1]+a)&
+#                     lat>(NRE_site[i,2]-a)&lat<(NRE_site[i,2]+a))
+#coordinates(NRE_part) <- c("lon","lat")
+#gridded(NRE_part) <- TRUE
+#NRE_coord <- NRE_site[i,1:3]
+#coordinates(NRE_coord) <- c("lon","lat")
+#NRE_site$fAPAR[i] <- (gwr(fAPAR ~ z, NRE_part, bandwidth = 1.06, fit.points #=NRE_coord,predictions=TRUE))$SDF$pred
+##LMA
+#LMA_global <- na.omit(LMA_df)
+#NRE_part <- subset(LMA_global,lon>(NRE_site[i,1]-a)&lon<(NRE_site[i,1]+a)&
+#                     lat>(NRE_site[i,2]-a)&lat<(NRE_site[i,2]+a))
+#coordinates(NRE_part) <- c("lon","lat")
+#gridded(NRE_part) <- TRUE
+#NRE_coord <- NRE_site[i,1:3]
+#coordinates(NRE_coord) <- c("lon","lat")
+#NRE_site$LMA[i] <- (gwr(LMA ~ z, NRE_part, bandwidth = 1.06, fit.points #=NRE_coord,predictions=TRUE))$SDF$pred
+##Vcmax25
+#Vcmax25_global <- na.omit(Vcmax25_df)
+#NRE_part <- subset(Vcmax25_global,lon>(NRE_site[i,1]-a)&lon<(NRE_site[i,1]+a)&
+#                     lat>(NRE_site[i,2]-a)&lat<(NRE_site[i,2]+a))
+#coordinates(NRE_part) <- c("lon","lat")
+#gridded(NRE_part) <- TRUE
+#NRE_coord <- NRE_site[i,1:3]
+#coordinates(NRE_coord) <- c("lon","lat")
+#NRE_site$Vcmax25[i] <- (gwr(Vcmax25 ~ z, NRE_part, bandwidth = 1.06, #fit.points =NRE_coord,predictions=TRUE))$SDF$pred
+
+
+```
+
