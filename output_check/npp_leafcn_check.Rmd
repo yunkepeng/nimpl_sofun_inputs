@@ -44,6 +44,7 @@ library(spgwr)
 library(maps)
 library(rworldmap)
 library(cowplot)
+
 #1. In our path (with multiple years data), identify which is the first year and end year of those files
 firstyr_data <- 1980 # In data file, which is the first year
 endyr_data <- 2018 # In data file, which is the last year
@@ -116,10 +117,10 @@ bnf <- inputnc("nuptake",1982,2011)
 #3. Input NPP and leafCN site-based data
 # (1) pre-processing NPP
 # rbind data (more data details see https://github.com/yunkepeng/nimpl_sofun_inputs/blob/master/NPP/NPP_statistical_model.Rmd)
-NPP_SaraVicca <- read.csv(file="~/data/NPP/NPP_SaraVicca/NPP_SaraVicca.csv")
-NPP_Malhi <- read.csv(file="~/data/NPP/NPP_Malhi/NPP_Malhi.csv")
-NPP_Keith <- read.csv(file="~/data/NPP/NPP_Keith/NPP_Keith.csv")
-NPP_Forc <- read.csv(file="~/data/NPP/NPP_Forc/NPP_Forc.csv")
+NPP_SaraVicca <- read.csv(file="~/data/NPP_Yunke/NPP_SaraVicca/NPP_SaraVicca.csv")
+NPP_Malhi <- read.csv(file="~/data/NPP_Yunke/NPP_Malhi/NPP_Malhi.csv")
+NPP_Keith <- read.csv(file="~/data/NPP_Yunke/NPP_Keith/NPP_Keith.csv")
+NPP_Forc <- read.csv(file="~/data/NPP_Yunke/NPP_Forc/NPP_Forc.csv")
 
 #NPP_SaraVicca <- read.csv(file="D:/PhD/nimpl_sofun_inputs/Data/NPP/NPP_SaraVicca/NPP_SaraVicca.csv")
 #NPP_Malhi <- read.csv(file="D:/PhD/nimpl_sofun_inputs/Data/NPP/NPP_Malhi/NPP_Malhi.csv")
@@ -271,17 +272,17 @@ for (i in c(1:nrow(leafcn_site))){
 
 
 #add pft data derived from orginal data provided from Sara Vicca
-Evergreen <- read.csv(file="~/data/NPP/NPP_SaraVicca/orig/pft.csv")
+Evergreen <- read.csv(file="~/data/NPP_Yunke/NPP_SaraVicca/orig/pft.csv")
 #Evergreen <- read.csv(file="D:/PhD/nimpl_sofun_inputs/Data/NPP/NPP_SaraVicca/orig/pft.csv")
 pft_type <- merge(NPP_all,Evergreen,by=c("site"),all.x=TRUE)
 pft_type2 <- pft_type[,c("lon","lat","z","pft")]
 pft_type3 <- unique(pft_type2)
 dim(pft_type3)
-nonforest <- pft_type3 %>% filter(pft == "Grassland" |pft == "Plantation"|pft == "Cropland")
+nonforest <- subset(pft_type3, pft == "Grassland" |pft == "Plantation"|pft == "Cropland")
 dim(nonforest)
-#we realized that there are only 36 of 347 sites are NOT forest. We filtered it at here, 
+#we realized that there are only 26 of 347 sites are NOT forest. We filtered it at here, 
 # which makes it easy to merge with our GPP, NPP...sites.
-nonforest 
+nonforest[c(22:23),] 
 #we noticed that row 22 and 23 has the same site, but one notified as Cropland another notified as grassland, perhaps from different sources
 #this classfication is really not important, so let's delete one safely (so that it will not cause trouble when merging)
 nonforest <- nonforest[c(1:22,24:26),]
@@ -308,53 +309,42 @@ dim(subset(wnpp_site,pft!="NA"))
 #non-forest GPP
 gpp_nonforest <- subset(gpp_site, pft!="NA")
 dim(gpp_nonforest)
-analyse_modobs2(subset(gpp_nonforest,pred>0),"GPP","pred", type = "points",
-                filnam = "/Users/yunpeng/Desktop/phd/nimpl/nimpl_sofun_inputs/fig/second_attempt_20201019/grassland_gpp.png")
+analyse_modobs2(subset(gpp_nonforest,pred>0),"GPP","pred", type = "points")
 # forest GPP
 gpp_forest <- subset(gpp_site, is.na(pft)==TRUE)
 dim(gpp_forest)
-analyse_modobs2(subset(gpp_forest,pred>0),"GPP","pred", type = "points",
-                filnam = "/Users/yunpeng/Desktop/phd/nimpl/nimpl_sofun_inputs/fig/second_attempt_20201019/forest_gpp.png")
+analyse_modobs2(subset(gpp_forest,pred>0),"GPP","pred", type = "points")
 
 #all gpp
 gpp_all <- gpp_site
-analyse_modobs2(subset(gpp_all,pred>0),"GPP","pred", type = "points",
-                filnam = "/Users/yunpeng/Desktop/phd/nimpl/nimpl_sofun_inputs/fig/second_attempt_20201019/all_gpp.png")
+analyse_modobs2(subset(gpp_all,pred>0),"GPP","pred", type = "points")
 
 # it is clear that forest GPP (N = 138) shows better performance than forest + non-forest GPP (N =162), and than non-forest GPP (N = 24)
 
 #npp
-analyse_modobs2(subset(npp_site,pred>0),"TNPP_1","pred", type = "points",
-                filnam = "/Users/yunpeng/Desktop/phd/nimpl/nimpl_sofun_inputs/fig/second_attempt_20201019/npp.png")
+analyse_modobs2(subset(npp_site,pred>0),"TNPP_1","pred", type = "points")
 
 #divide anpp into forest vs. non-forest
 anpp_nonforest <- subset(anpp_site, pft!="NA")
 dim(anpp_nonforest)
-analyse_modobs2(subset(anpp_nonforest,pred>0),"ANPP_2","pred", type = "points",
-                filnam = "/Users/yunpeng/Desktop/phd/nimpl/nimpl_sofun_inputs/fig/second_attempt_20201019/nonforest_anpp.png")
+analyse_modobs2(subset(anpp_nonforest,pred>0),"ANPP_2","pred", type = "points")
 
 anpp_forest <- subset(anpp_site, is.na(pft)==TRUE)
 dim(anpp_forest)
-analyse_modobs2(subset(anpp_forest,pred>0),"ANPP_2","pred", type = "points",
-                filnam = "/Users/yunpeng/Desktop/phd/nimpl/nimpl_sofun_inputs/fig/second_attempt_20201019/forest_anpp.png")
+analyse_modobs2(subset(anpp_forest,pred>0),"ANPP_2","pred", type = "points")
 
 anpp_all <- anpp_site
-analyse_modobs2(subset(anpp_all,pred>0),"ANPP_2","pred", type = "points",
-                filnam = "/Users/yunpeng/Desktop/phd/nimpl/nimpl_sofun_inputs/fig/second_attempt_20201019/all_anpp.png")
+analyse_modobs2(subset(anpp_all,pred>0),"ANPP_2","pred", type = "points")
 
 #non-forest ANPP: R2 =0.3, n =24. which is better than forest or forest+non-forest anpp.
 
-analyse_modobs2(subset(bnpp_site,pred>0),"BNPP_1","pred", type = "points",
-                filnam = "/Users/yunpeng/Desktop/phd/nimpl/nimpl_sofun_inputs/fig/second_attempt_20201019/bnpp.png")
+analyse_modobs2(subset(bnpp_site,pred>0),"BNPP_1","pred", type = "points")
 
-analyse_modobs2(subset(lnpp_site,pred>0),"NPP.foliage","pred", type = "points",
-                filnam = "/Users/yunpeng/Desktop/phd/nimpl/nimpl_sofun_inputs/fig/second_attempt_20201019/lnpp.png")
+analyse_modobs2(subset(lnpp_site,pred>0),"NPP.foliage","pred", type = "points")
 
-analyse_modobs2(subset(wnpp_site,pred>0),"NPP.wood","pred", type = "points",
-                filnam = "/Users/yunpeng/Desktop/phd/nimpl/nimpl_sofun_inputs/fig/second_attempt_20201019/wnpp.png")
+analyse_modobs2(subset(wnpp_site,pred>0),"NPP.wood","pred", type = "points")
 
-analyse_modobs2(subset(leafcn_site,pred>0),"leafcn","pred", type = "points",
-                filnam = "/Users/yunpeng/Desktop/phd/nimpl/nimpl_sofun_inputs/fig/second_attempt_20201019/leafcn.png")
+analyse_modobs2(subset(leafcn_site,pred>0),"leafcn","pred", type = "points")
 
 #6. Represent, and save our maps
 #(1) gpp
