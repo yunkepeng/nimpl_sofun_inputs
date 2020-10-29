@@ -18,95 +18,7 @@ Here it compares GMD GPP with (1) nimpl GPP for c3 plants only and (2) nimpl GPP
 
 
 ```{r}
-library(raster)
-library(ncdf4)
-library(maps)
 
-#1. Input GMD GPP (fAPAR3g, 2000-2016)
-# downloaded from /cluster/work/climate/bestocke/data/sofun_outputs/output_nc_global/global_BRC_fAPAR3g_v2_2000_2016.a.gpp.nc
-
-name <- "gpp"
-ncin <- nc_open(paste ("D:/PhD/nimpl_sofun_inputs/Data/GPP/GMD/", "global_BRC_fAPAR3g_v2_2000_2016.a.gpp.nc", sep=""))
-
-lon <- ncvar_get(ncin,"lon")
-lat<-ncvar_get(ncin,"lat")
-gpp <- ncvar_get(ncin,name)
-time <- ncvar_get(ncin,"time")
-nc_close(ncin)
-
-pre.vec.long <- as.vector(gpp)
-pre.mat <- matrix(pre.vec.long, nrow = 259200, ncol = 17)
-
-lonlat <- expand.grid(lon, lat)
-gpp_final <- as.data.frame(cbind(lonlat,pre.mat[,5]))
-names(gpp_final) <- c("lon","lat","gpp")
-gpp_gmd <- gpp_final
-
-#coordinates(gpp_final) <- ~lon+lat 
-#gridded(gpp_final) <- TRUE
-#rage <- raster(gpp_final, name) 
-#plot(rage)
-#title("GMD GPP (fapar3g, 2000-2016)")
-
-
-######2. output nimpl/yunkebranch_units/ GPP (npft = 1, lGr3 = .TRUE.)
-# create a function for output multiple years nc file map
-outputdata <- function(name,year,min,max,path){
-  #-----------------------------------------------------------------------
-  # Input: name: variable vcmax25
-  # Input: min,max: minimum and maximum value in the map.
-  #-----------------------------------------------------------------------
-  ncin <- nc_open(paste (path, "global.",year,".a." ,name, ".nc", sep=""))
-  #ncin <- nc_open(paste ("~/data/sofun_outputs/output_nc/global/", "global.20xx.a." ,name, ".nc", sep=""))
-  lon <- ncvar_get(ncin,"lon")
-  lat<-ncvar_get(ncin,"lat")
-  variable <- ncvar_get(ncin,name)
-  nc_close(ncin)
-  
-  variabelist <- as.vector(variable)
-  lonlat <- expand.grid(lon, lat)
-  output_final <- as.data.frame(cbind(lonlat,variabelist))
-  names(output_final) <- c("lon","lat",name)
-  output_final2 <- subset(output_final,output_final[,3]>min & output_final[,3]<max) # to make map easy to follow, it subset a reasonable value here.
-  coordinates(output_final2) <- ~lon+lat 
-  gridded(output_final2) <- TRUE
-  rmap <- raster(output_final2, name) 
-  #plot(rmap,main=name)
-  return(output_final)
-  #-----------------------------------------------------------------------
-  # Output: plot(rmap): the presentation of global map (after subsetting max of data)
-  # Output: output_final: the output data (259200 * 3) including lon, lat and value
-  #-----------------------------------------------------------------------
-}
-
-#output them in a dataframe (dim: 259200 rows * 20 years)
-#outputted GPP saved in Euler /cluster/home/yunpeng/sofun_outputs/output_nc_global
-
-gpp_17years <- data.frame(matrix(NA))
-
-for (i in 2000:2016){
-  gpp_17years[1:259200,i-2000+1] <- outputdata("gpp",i,-999999,999999,"D:/PhD/nimpl_sofun_inputs/Data/GPP/c3/")[,3]
-}
-
-lonlat <- outputdata("gpp",i,-999999,999999,"D:/PhD/nimpl_sofun_inputs/Data/GPP/c3/")[,1:2]
-
-gpp_c3 <- cbind(lonlat,rowMeans(gpp_17years,na.rm = TRUE))
-
-names(gpp_c3) <- c("lon","lat","gpp")
-
-gpp_c3data <- gpp_c3
-
-#coordinates(gpp_c3) <- ~lon+lat 
-#gridded(gpp_c3) <- TRUE
-#rgpp1 <- raster(gpp_c3, "gpp") 
-#plot(rgpp1)
-#title("GPP from nimpl/yunkebranch_units/ (npft = 1, lGr3 = .TRUE.)")
-
-
-gpp_gmd_c3 <- cbind(gpp_gmd,gpp_c3data[,3])
-names(gpp_gmd_c3) <- c("lon","lat","gpp_gmd","gpp_nimpl_c3")
-
-######3. output nimpl/yunkebranch_units/ GPP (npft = 2, lGr3 and lGr4 = .TRUE.)
 library(tidyverse)  # depends
 library(ncmeta)
 library(viridis)
@@ -119,19 +31,27 @@ library(dplyr)
 library(gplots)
 library(tidyselect)
 library(extrafont)
-devtools::load_all("D:/PhD/nimpl_sofun_inputs/package/rbeni")
 library(rbeni)
 library(raster)
 library(spgwr)
 library(maps)
+library(rworldmap)
+library(cowplot)
+library(ncdf4)
 
-#1. In our path (with multiple years data), identify which is the first year and end year of those files
+#######input nimpl/yunkebranch_units gpp (c3 + c4)
 firstyr_data <- 1980 # In data file, which is the first year
 endyr_data <- 2018 # In data file, which is the last year
-location <- "D:/PhD/nimpl_sofun_inputs/Data/output/"
+location <- "~/data/output/"
 alloutput_list <- list.files(location,full.names = T)
 
-#2. Create a function to specify path, loop many years nc file and output a dataframe (lon, lat, var).
+#input elevation nc file, which will be cbind with global df directly
+elev_nc <- read_nc_onefile("~/data/watch_wfdei/WFDEI-elevation.nc")
+#elev_nc <- read_nc_onefile("D:/PhD/nimpl_sofun_inputs/Data/Elevation/WFDEI-elevation.nc")
+elev <- as.data.frame(nc_to_df(elev_nc, varnam = "elevation"))
+head(elev) # this is consistent with df coord below
+
+#Create a function to specify path, loop many years nc file and output a dataframe (lon, lat, var).
 inputnc <- function(name,start_year,end_year){
   #-----------------------------------------------------------------------
   # Input: 
@@ -165,14 +85,110 @@ inputnc <- function(name,start_year,end_year){
 }
 
 #select data over 30 years, each df includes lon, lat, z, var
-gpp_df <- inputnc("gpp",2000,2016)
+gpp_df <- inputnc("gpp",2000,2011)
 
-gpp_gmd_c3_c3c4 <- cbind(gpp_gmd_c3,gpp_df[,4])
-names(gpp_gmd_c3_c3c4) <- c("lon","lat","gpp_gmd","gpp_nimpl_c3","gpp_nimpl_c3c4")
-summary(gpp_gmd_c3_c3c4)
 
-######4. Compare GMD GPP with (1)nimpl_c3 and (2) nimpl_c3c4 (we used this in nimpl finally) 
-analyse_modobs2(subset(gpp_gmd_c3_c3c4,gpp_nimpl_c3c4>0),"gpp_gmd","gpp_nimpl_c3", type = "points")
-analyse_modobs2(subset(gpp_gmd_c3_c3c4,gpp_nimpl_c3c4>0),"gpp_gmd","gpp_nimpl_c3c4", type = "points")
+#######input GMD gpp
+#Data in Euler is from: /cluster/work/climate/bestocke/data/sofun_outputs/output_nc_global/global_FULL_fAPAR3g_v2_2000_2016.a.gpp.nc
+#Data in my desktop is from: /Users/yunpeng/data/gpp_gmd/global_FULL_fAPAR3g_v2_2000_2016.a.gpp.nc
+ncin <- nc_open(paste ("/Users/yunpeng/data/gpp_gmd/global_FULL_fAPAR3g_v2_2000_2016.a.gpp.nc"))
+lon <- ncvar_get(ncin,"lon")
+lat<-ncvar_get(ncin,"lat")
+gpp <- ncvar_get(ncin,"gpp")
+dim(gpp)
+nc_close(ncin)
+pre.vec.long <- as.vector(gpp)
+pre.mat <- matrix(pre.vec.long, nrow = 259200, ncol = 17)
+lonlat <- expand.grid(lon, lat)
+gpp_gmd <- as.data.frame(cbind(lonlat,rowMeans(pre.mat)))
+
+#compare nimpl gpp vs. gmd gpp
+head(gpp_df)
+
+gpp_gmd <- as.data.frame(cbind(gpp_gmd[,1:2],elev[,3],gpp_gmd[,3]))
+names(gpp_gmd) <- c("lon","lat","z","gpp")
+head(gpp_gmd)
+
+gpp_com <- as.data.frame(cbind(gpp_df[,4],gpp_gmd[,4]))
+names(gpp_com) <- c("nimpl_gpp","GMD_gpp")
+
+analyse_modobs2(subset(gpp_com,nimpl_gpp>0),"nimpl_gpp","GMD_gpp", type = "points")
+
+# it shows that nimpl_gpp and GMD_gpp did have very good fitted performance!
+
+###### Now, let's compare its extracted value with obs. gpp separately.
+#First, include GPP data and aggregate to site-mean
+NPP_SaraVicca <- read.csv(file="~/data/NPP_Yunke/NPP_SaraVicca/NPP_SaraVicca.csv")
+NPP_Malhi <- read.csv(file="~/data/NPP_Yunke/NPP_Malhi/NPP_Malhi.csv")
+NPP_Keith <- read.csv(file="~/data/NPP_Yunke/NPP_Keith/NPP_Keith.csv")
+NPP_Forc <- read.csv(file="~/data/NPP_Yunke/NPP_Forc/NPP_Forc.csv")
+NPP_all <- rbind(NPP_SaraVicca,NPP_Malhi,NPP_Keith,NPP_Forc)
+gpp_site <- aggregate(GPP~lon+lat+z,data=NPP_all[,c("lon","lat","z","GPP")],mean,na.rm=TRUE)
+dim(gpp_site)
+
+#(1) first pred's gpp, from nimpl (gpp_df)
+a <- 1.5
+for (i in c(1:nrow(gpp_site))){
+  gpp_global <- na.omit(gpp_df)
+  gpp_part <- subset(gpp_global,lon>(gpp_site[i,1]-a)&lon<(gpp_site[i,1]+a)&
+                       lat>(gpp_site[i,2]-a)&lat<(gpp_site[i,2]+a))
+  coordinates(gpp_part) <- c("lon","lat")
+  gridded(gpp_part) <- TRUE
+  
+  gpp_coord <- gpp_site[i,1:3]
+  coordinates(gpp_coord) <- c("lon","lat")
+  gpp_site$nimpl_gpp[i] <- (gwr(gpp ~ z, gpp_part, bandwidth = 1.06, fit.points =gpp_coord,predictions=TRUE))$SDF$pred
+}
+
+#(2) second pred's gpp, from gmd_gpp (gpp_gmd)
+for (i in c(1:nrow(gpp_site))){
+  gpp_global <- na.omit(gpp_gmd)
+  gpp_part <- subset(gpp_global,lon>(gpp_site[i,1]-a)&lon<(gpp_site[i,1]+a)&
+                       lat>(gpp_site[i,2]-a)&lat<(gpp_site[i,2]+a))
+  coordinates(gpp_part) <- c("lon","lat")
+  gridded(gpp_part) <- TRUE
+  
+  gpp_coord <- gpp_site[i,1:3]
+  coordinates(gpp_coord) <- c("lon","lat")
+  gpp_site$gmd_gpp[i] <- (gwr(gpp ~ z, gpp_part, bandwidth = 1.06, fit.points =gpp_coord,predictions=TRUE))$SDF$pred
+}
+
+head(gpp_site)
+
+#######add pft
+#add pft data derived from orginal data provided from Sara Vicca
+Evergreen <- read.csv(file="~/data/NPP_Yunke/NPP_SaraVicca/orig/pft.csv")
+pft_type <- merge(NPP_all,Evergreen,by=c("site"),all.x=TRUE)
+pft_type2 <- pft_type[,c("lon","lat","z","pft")]
+pft_type3 <- unique(pft_type2)
+nonforest <- subset(pft_type3, pft == "Grassland" |pft == "Plantation"|pft == "Cropland")
+
+#we realized that there are only 26 of 347 sites are NOT forest. We filtered it at here, 
+# which makes it easy to merge with our GPP, NPP...sites.
+nonforest[c(22:23),] 
+#we noticed that row 22 and 23 has the same site, but one notified as Cropland another notified as grassland, perhaps from different sources
+#this classfication is really not important, so let's delete one safely (so that it will not cause trouble when merging)
+nonforest <- nonforest[c(1:22,24:26),]
+gpp_site <- merge(gpp_site,nonforest,by=c("lon","lat","z"),all.x=TRUE)
+gpp_nonforest <- subset(gpp_site, pft!="NA")
+dim(gpp_nonforest) # 25 sites are non-forest
+#analyse_modobs2(subset(gpp_nonforest,pred>0),"GPP","pred", type = "points")
+
+
+######construct forest GPP dataset
+gpp_forest <- subset(gpp_site, is.na(pft)==TRUE)
+dim(gpp_forest) #139 sites are forest
+head(gpp_forest)
+
+######1. Forest GPP: nimpl_gpp vs. obs. gpp: we did some some undestimation.
+analyse_modobs2(subset(gpp_forest,nimpl_gpp>0),"GPP","nimpl_gpp", type = "points")
+
+######2. Forest GPP: gmd_gpp vs. obs. gpp: we did some some undestimation.
+analyse_modobs2(subset(gpp_forest,gmd_gpp>0),"GPP","gmd_gpp", type = "points")
+
+######3. Forest GPP: gmd_gpp vs. nimpl_gpp -> gmd slightly high, but not too much!
+analyse_modobs2(subset(gpp_forest,gmd_gpp>0),"nimpl_gpp","gmd_gpp", type = "points")
+
+#nimpl GPP (c3 only) data was stored in /Users/yunpeng/data/GPP/c3.
 
 ```
