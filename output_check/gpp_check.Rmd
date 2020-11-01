@@ -182,7 +182,100 @@ gpp_site <- extract(rgpp_global, sp_sites, sp = TRUE) %>% as_tibble() %>%
 gpp_site <- as.data.frame(cbind(gpp_site[,2:8],gpp_site[, 1]))
 head(gpp_site)
 
-#3. add site forcing data from FLUXNET
+#3. add site forcing data from FLUXNET 
+#Data from Euler: ~/data/stocker20gmd_outputs/rdata_objects/out_eval_FULL.Rdata
+#Data in my desktop: ~/data/gpp_gmd/out_eval_FULL.Rdata
+load("~/data/gpp_gmd/out_eval_FULL.Rdata")
+print(out_eval_FULL$gpp$fluxnet2015$data$meandf)
+summary(out_eval_FULL$gpp$fluxnet2015$data$meandf)
+gpp_flux_df <- as.data.frame(out_eval_FULL$gpp$fluxnet2015$data$meandf)
+head(gpp_flux_df)
+
+library(ingestr)
+siteinfo_fluxnet2015 <- as.data.frame(siteinfo_fluxnet2015)
+siteinfo_df <- siteinfo_fluxnet2015[,c("sitename","lon","lat","elv","plant_functional_type")]
+head(siteinfo_df)
+#merged with pred and obs gpp above
+gpp_flux_site <- merge(gpp_flux_df,siteinfo_df,by=c("sitename"),all.x=TRUE)
+#structure it
+gpp_flux_site <- gpp_flux_site[,c(4,5,6,7,1,2,3)]
+names(gpp_flux_site) <- c("lon","lat","z","pft","sitename","obs_GPP","GPP_site_forcing")
+head(gpp_flux_site)
+
+#3a. gwr
+for (i in c(1:nrow(gpp_flux_site))){
+  #gpp from nimpl
+  gpp_global <- na.omit(gpp_df)
+  gpp_part <- subset(gpp_global,lon>(gpp_flux_site[i,1]-a)&lon<(gpp_flux_site[i,1]+a)&
+                       lat>(gpp_flux_site[i,2]-a)&lat<(gpp_flux_site[i,2]+a))
+  coordinates(gpp_part) <- c("lon","lat")
+  gridded(gpp_part) <- TRUE
+  
+  gpp_coord <- gpp_flux_site[i,1:3] # select lon, lat, z
+  coordinates(gpp_coord) <- c("lon","lat")
+  gpp_flux_site$nimpl_gpp_gwr[i] <- (gwr(gpp ~ z, gpp_part, bandwidth = 1.06, fit.points =gpp_coord,predictions=TRUE))$SDF$pred
+  #GPP from gmd
+  gpp_global <- na.omit(gpp_gmd)
+  gpp_part <- subset(gpp_global,lon>(gpp_flux_site[i,1]-a)&lon<(gpp_flux_site[i,1]+a)&
+                       lat>(gpp_flux_site[i,2]-a)&lat<(gpp_flux_site[i,2]+a))
+  coordinates(gpp_part) <- c("lon","lat")
+  gridded(gpp_part) <- TRUE
+  
+  gpp_coord <- gpp_flux_site[i,1:3] # select lon, lat, z
+  coordinates(gpp_coord) <- c("lon","lat")
+  gpp_flux_site$gmd_gpp_gwr[i] <- (gwr(gpp ~ z, gpp_part, bandwidth = 1.06, fit.points =gpp_coord,predictions=TRUE))$SDF$pred
+}
+
+
+#3b.directly method
+#(1) from nimpl
+gpp_global <- na.omit(gpp_df)
+coordinates(gpp_global) <- ~lon+lat 
+gridded(gpp_global) <- TRUE
+rgpp_global <- raster(gpp_global, "gpp") 
+sp_sites <- SpatialPoints(gpp_flux_site[,c("lon","lat","z")]) # only select lon and lat
+
+gpp_flux_site <- extract(rgpp_global, sp_sites, sp = TRUE) %>% as_tibble() %>% 
+  right_join(gpp_flux_site, by = c("lon", "lat","z")) %>% 
+  dplyr::rename( nimpl_gpp_directly = gpp)
+
+gpp_flux_site <- as.data.frame(gpp_flux_site)
+
+#(2) from gmd
+gpp_global <- na.omit(gpp_gmd)
+coordinates(gpp_global) <- ~lon+lat 
+gridded(gpp_global) <- TRUE
+rgpp_global <- raster(gpp_global, "gpp") 
+sp_sites <- SpatialPoints(gpp_flux_site[,c("lon","lat","z")]) # only select lon and lat
+
+gpp_flux_site <- extract(rgpp_global, sp_sites, sp = TRUE) %>% as_tibble() %>% 
+  right_join(gpp_flux_site, by = c("lon", "lat","z")) %>% 
+  dplyr::rename( gmd_gpp_directly = gpp)
+
+gpp_flux_site <- as.data.frame(gpp_flux_site)
+head(gpp_flux_site)
+
+#re-structure
+gpp_flux_site <- gpp_flux_site[,c(2,3,4,6,7,8,9,10,11,1,5)]
+
+head(gpp_flux_site)
+
+#Comparsion:
+#1. obs. GPP vs. GPP_site_forcing --> No underestimation!
+analyse_modobs2(gpp_flux_site,"obs_GPP","GPP_site_forcing", type = "points")
+
+#2. obs. GPP vs. nimpl_gpp_gwr
+analyse_modobs2(gpp_flux_site,"obs_GPP","nimpl_gpp_gwr", type = "points")
+
+#3. obs. GPP vs. nimpl_gpp_directly
+analyse_modobs2(gpp_flux_site,"obs_GPP","nimpl_gpp_directly", type = "points")
+
+#4. obs. GPP vs. gmd_gpp_gwr
+analyse_modobs2(gpp_flux_site,"obs_GPP","gmd_gpp_gwr", type = "points")
+
+#5. obs. GPP vs. gmd_gpp_directly
+analyse_modobs2(gpp_flux_site,"obs_GPP","gmd_gpp_directly", type = "points")
+
 
 #######add pft
 #add pft data derived from orginal data provided from Sara Vicca
@@ -221,5 +314,6 @@ analyse_modobs2(subset(gpp_forest,gmd_gpp_directly>0),"GPP","gmd_gpp_directly", 
 analyse_modobs2(subset(gpp_forest,gmd_gpp_gwr>0),"nimpl_gpp_gwr","gmd_gpp_gwr", type = "points")
 
 #nimpl GPP (c3 only) data was stored in /Users/yunpeng/data/GPP/c3.
+
 
 ```
