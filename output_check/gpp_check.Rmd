@@ -38,6 +38,7 @@ library(maps)
 library(rworldmap)
 library(cowplot)
 library(ncdf4)
+library(sp)
 
 #######input nimpl/yunkebranch_units gpp (c3 + c4)
 firstyr_data <- 1980 # In data file, which is the first year
@@ -126,7 +127,8 @@ NPP_all <- rbind(NPP_SaraVicca,NPP_Malhi,NPP_Keith,NPP_Forc)
 gpp_site <- aggregate(GPP~lon+lat+z,data=NPP_all[,c("lon","lat","z","GPP")],mean,na.rm=TRUE)
 dim(gpp_site)
 
-#(1) first pred's gpp, from nimpl (gpp_df)
+#1. nimpl gpp
+#1a. gwr
 a <- 1.5
 for (i in c(1:nrow(gpp_site))){
   gpp_global <- na.omit(gpp_df)
@@ -137,10 +139,24 @@ for (i in c(1:nrow(gpp_site))){
   
   gpp_coord <- gpp_site[i,1:3]
   coordinates(gpp_coord) <- c("lon","lat")
-  gpp_site$nimpl_gpp[i] <- (gwr(gpp ~ z, gpp_part, bandwidth = 1.06, fit.points =gpp_coord,predictions=TRUE))$SDF$pred
+  gpp_site$nimpl_gpp_gwr[i] <- (gwr(gpp ~ z, gpp_part, bandwidth = 1.06, fit.points =gpp_coord,predictions=TRUE))$SDF$pred
 }
 
-#(2) second pred's gpp, from gmd_gpp (gpp_gmd)
+#1b. directly method
+#convert nimpl gpp to raster, and then extract site points
+coordinates(gpp_global) <- ~lon+lat 
+gridded(gpp_global) <- TRUE
+rgpp_global <- raster(gpp_global, "gpp") 
+sp_sites <- SpatialPoints(gpp_site[,c("lon","lat","z")]) # only select lon and lat
+
+gpp_site <- extract(rgpp_global, sp_sites, sp = TRUE) %>% as_tibble() %>% 
+  right_join(gpp_site, by = c("lon", "lat","z")) %>% 
+  dplyr::rename( nimpl_gpp_directly = gpp)
+
+gpp_site <- as.data.frame(cbind(gpp_site[,2:6],gpp_site[, 1]))
+
+#2. gmd gpp
+#2a. gwr
 for (i in c(1:nrow(gpp_site))){
   gpp_global <- na.omit(gpp_gmd)
   gpp_part <- subset(gpp_global,lon>(gpp_site[i,1]-a)&lon<(gpp_site[i,1]+a)&
@@ -148,12 +164,25 @@ for (i in c(1:nrow(gpp_site))){
   coordinates(gpp_part) <- c("lon","lat")
   gridded(gpp_part) <- TRUE
   
-  gpp_coord <- gpp_site[i,1:3]
+  gpp_coord <- gpp_site[i,1:3] # select lon, lat, z
   coordinates(gpp_coord) <- c("lon","lat")
-  gpp_site$gmd_gpp[i] <- (gwr(gpp ~ z, gpp_part, bandwidth = 1.06, fit.points =gpp_coord,predictions=TRUE))$SDF$pred
+  gpp_site$gmd_gpp_gwr[i] <- (gwr(gpp ~ z, gpp_part, bandwidth = 1.06, fit.points =gpp_coord,predictions=TRUE))$SDF$pred
 }
 
+#2b.directly method
+coordinates(gpp_global) <- ~lon+lat 
+gridded(gpp_global) <- TRUE
+rgpp_global <- raster(gpp_global, "gpp") 
+sp_sites <- SpatialPoints(gpp_site[,c("lon","lat","z")]) # only select lon and lat
+
+gpp_site <- extract(rgpp_global, sp_sites, sp = TRUE) %>% as_tibble() %>% 
+  right_join(gpp_site, by = c("lon", "lat","z")) %>% 
+  dplyr::rename( gmd_gpp_directly = gpp)
+
+gpp_site <- as.data.frame(cbind(gpp_site[,2:8],gpp_site[, 1]))
 head(gpp_site)
+
+#3. add site forcing data from FLUXNET
 
 #######add pft
 #add pft data derived from orginal data provided from Sara Vicca
@@ -181,13 +210,15 @@ dim(gpp_forest) #139 sites are forest
 head(gpp_forest)
 
 ######1. Forest GPP: nimpl_gpp vs. obs. gpp: we did some some undestimation.
-analyse_modobs2(subset(gpp_forest,nimpl_gpp>0),"GPP","nimpl_gpp", type = "points")
+analyse_modobs2(subset(gpp_forest,nimpl_gpp_gwr>0),"GPP","nimpl_gpp_gwr", type = "points")
+analyse_modobs2(subset(gpp_forest,nimpl_gpp_directly>0),"GPP","nimpl_gpp_directly", type = "points")
 
 ######2. Forest GPP: gmd_gpp vs. obs. gpp: we did some some undestimation.
-analyse_modobs2(subset(gpp_forest,gmd_gpp>0),"GPP","gmd_gpp", type = "points")
+analyse_modobs2(subset(gpp_forest,gmd_gpp_gwr>0),"GPP","gmd_gpp_gwr", type = "points")
+analyse_modobs2(subset(gpp_forest,gmd_gpp_directly>0),"GPP","gmd_gpp_directly", type = "points")
 
-######3. Forest GPP: gmd_gpp vs. nimpl_gpp -> gmd slightly high, but not too much!
-analyse_modobs2(subset(gpp_forest,gmd_gpp>0),"nimpl_gpp","gmd_gpp", type = "points")
+######3. Forest GPP: gmd_gpp_gwr vs. nimpl_gpp_gwr -> gmd slightly high, but not too much!
+analyse_modobs2(subset(gpp_forest,gmd_gpp_gwr>0),"nimpl_gpp_gwr","gmd_gpp_gwr", type = "points")
 
 #nimpl GPP (c3 only) data was stored in /Users/yunpeng/data/GPP/c3.
 
