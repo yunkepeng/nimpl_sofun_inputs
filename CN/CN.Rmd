@@ -108,7 +108,7 @@ r.squaredGLMM(a1)
 #Nrubisco = 0.010
 
 #Now, we also need to know average of Cmass in global individuals dataset, and considered it as a constant in nimpl project.
-leafCN2$cmass <- (leafCN2$narea/leafCN2$lma)*leafCN2$cn
+leafCN2$cmass <- (leafCN2$narea/leafCN2$lma)*as.numeric(leafCN2$cn)
 mean(leafCN2$cmass)
 #mean of global individuals dataset = 0.4638
 
@@ -126,7 +126,7 @@ mean(leafCN2$cmass)
 
 #1. input a larger data including narea, vcmax and lma, lon, lat, z
 #convert individuals to site-species data - this data is not published now.
-SP_input <- read.csv(file="~/data/VcmaxMS/final_individuals.csv") #all individuals
+SP_input <- read.csv(file="~/data/CN_leaf/final_individuals.csv") #all individuals
 
 sitemean <- aggregate(SP_input,by=list(SP_input$lon,SP_input$lat), FUN=mean, na.rm=TRUE) #site-mean
 
