@@ -119,6 +119,7 @@ firstyr_data <- 2007 # In data file, which is the first year
 endyr_data <- 2018 # In data file, which is the last year
 #location <- "~/data/output_leafcn/species/" #species-based coefficients
 location <- "~/data/output_leafcn/sitemean_coef/" # site-mean coefficients
+#location <- "~/data/output_leafcn/leafcn_1107_LMA_updated/" # site-mean coefficients
 
 alloutput_list <- list.files(location,full.names = T)
 
@@ -215,10 +216,10 @@ analyse_modobs2(leafcn_pred_direct,"nmass_obs","nimpl_nmass_directly", type = "p
 analyse_modobs2(leafcn_pred_direct,"nmass_obs","nmass_gwr_pred", type = "points")
 
 
-#####Compare species-based prediction with species-based obs. data???
+#####using updated's lma simulation
 firstyr_data <- 2007 # In data file, which is the first year
 endyr_data <- 2018 # In data file, which is the last year
-location <- "~/data/output_leafcn/species_coef/" #species-based coefficients
+location <- "~/data/output_leafcn/leafcn_1107_LMA_updated/" # site-mean coefficients
 
 alloutput_list <- list.files(location,full.names = T)
 

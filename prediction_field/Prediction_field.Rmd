@@ -59,9 +59,11 @@ ss1 <- aggregate(data.soil.extract3,by=list(data.soil.extract3$lon,data.soil.ext
 
 ss2 <- ss1[,c(3,4,5)] # now,select lon, lat and CNrt only
 
-
 final_CN <-Reduce(function(x,y) merge(x = x, y = y, by = c("lon","lat"),all.x=TRUE), 
                    list(Global_grid,ss2)) #merged this with global grids (N = 259200)
+
+df_CN <- final_CN
+
 #convert dataframe to raster
 coordinates(final_CN) <- ~lon+lat 
 
@@ -193,18 +195,17 @@ r <- raster(continent_age_fAPAR2, "new_age")
 plot(r) #we will start working from this map! Because it actually clarfies which grid stand-age = NA (in white), which grid stand-age has missed data (which temporaily considered = 0, and shown in grey, will be interpolated soon) .
 
 
-
 #4. Now, start interpolating each continent's missing data (when age = 0) as mean value of local continent
-age_final <- continent_age_fAPAR[,c("lon","lat","area","new_age")]
+age_final <- as.data.frame(continent_age_fAPAR[,c("lon","lat","area","new_age")])
 
 mylist <- vector(mode = "list", length =25) # for specifying gridded data at certain degrees
 
 for (i in c(1:8,10:24)){ # area 9 and 25 did not have such problem (missing data of stand-age; i.e. age = 0)
-  empty_age <- filter(age_final, area == i & new_age == 0) #find missing grids (new_age ==0, classfied as missing data)
-  available_age <- filter(age_final, area == i & new_age > 0) #find non-missing grids and calculate mean
+  empty_age <- subset(age_final, (area == i & new_age == 0)) #find missing grids (new_age ==0, classfied as missing data)
+  available_age <- subset(age_final, (area == i & new_age > 0)) #find non-missing grids and calculate mean
   empty_age$final_age <- mean(available_age$new_age)
   mylist[[i]] <- empty_age
-  print(i)
+  #print(i)
 }
 
 all_age <- as.data.frame(do.call(rbind, mylist))
@@ -212,8 +213,8 @@ dim(all_age)
 
 #South AUS (area = 26), however, was interpolated by area =25 's mean stand-age value
 
-South_AUS_empty_age <- filter(age_final, area == 26 & new_age == 0) 
-North_AUS_available_age <- filter(age_final, area == 25 & new_age > 0)
+South_AUS_empty_age <- subset(age_final, (area == 26 & new_age == 0) )
+North_AUS_available_age <- subset(age_final, (area == 25 & new_age > 0))
 South_AUS_empty_age$final_age <- mean(North_AUS_available_age$new_age)
 
 all_age2 <- rbind(all_age,South_AUS_empty_age)
@@ -255,6 +256,8 @@ summary(final_data)
 #now final_data is ready to be used, let's firstly change its lat, lon order correctly, then convert all NA to 9999
 
 final_data2 <- final_data[order(final_data[,2],final_data[,1]),]
+
+df_age <- final_data2
 
 final_data2[is.na(final_data2)] <- 9999
 
@@ -311,11 +314,14 @@ lonlat <- expand.grid(lon, lat)
 fAPAR_input <- as.data.frame(cbind(lonlat,final_fAPAR))
 names(fAPAR_input) <- c("lon","lat","fAPAR")
 
+df_fAPAR <- fAPAR_input
+
 coordinates(fAPAR_input) <- ~lon+lat 
 gridded(fAPAR_input) <- TRUE
 r3 <- raster(fAPAR_input, "fAPAR") 
 plot(r3)
 
+#needs to convert NA to 9999, and then cdo processing, then can be input to nimpl
 ```
 
 #4. alpha
@@ -339,6 +345,8 @@ final_alpha <- rowMeans(empty_alpha,na.rm = TRUE)
 
 alpha_input <- as.data.frame(cbind(lonlat,final_alpha)) 
 names(alpha_input) <- c("lon","lat","alpha")
+
+df_alpha <- alpha_input
 
 coordinates(alpha_input) <- ~lon+lat 
 gridded(alpha_input) <- TRUE
@@ -379,6 +387,8 @@ pre.vec.long[pre.vec.long == 9999] <- NA
 lonlat <- expand.grid(lon, lat)
 PPFD_input <- as.data.frame(cbind(lonlat,pre.vec.long))
 names(PPFD_input) <- c("lon","lat","PPFD")
+
+df_PPFD <- PPFD_input
 
 coordinates(PPFD_input) <- ~lon+lat 
 gridded(PPFD_input) <- TRUE
@@ -450,6 +460,8 @@ lonlat <- expand.grid(lon, lat)
 Tg_input <- as.data.frame(cbind(lonlat,pre.vec.long))
 names(Tg_input) <- c("lon","lat","Tg")
 
+df_Tg <- Tg_input
+
 coordinates(Tg_input) <- ~lon+lat 
 gridded(Tg_input) <- TRUE
 rTg <- raster(Tg_input, "Tg") 
@@ -487,6 +499,8 @@ pre.vec.long[pre.vec.long == 9999] <- NA
 lonlat <- expand.grid(lon, lat)
 vpd_input <- as.data.frame(cbind(lonlat,pre.vec.long))
 names(vpd_input) <- c("lon","lat","vpd")
+
+df_vpd <- vpd_input
 
 coordinates(vpd_input) <- ~lon+lat 
 gridded(vpd_input) <- TRUE
@@ -561,6 +575,7 @@ plot(rC4)
 
 ``` 
 
+#All final data saved as df_Tg, df_PPFD....which is consistent with final_ncfile/ (the one put in nimpl simulation) - although those dataframe (df_Tg...) needs two more steps, convert NA to 9999 (prevent FPE) and cdo processing
 
 #NC files generation
 After finishing map at each vairable, we can directly outputing such object (e.g. rLMA above) to nc file, using WriteRaster function in r. An example code outputnig rLMA is on below:
