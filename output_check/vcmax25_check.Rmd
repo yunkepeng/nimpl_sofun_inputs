@@ -8,33 +8,48 @@ output:
 ---
 title: "Check vcmax25 from SOFUN and compare it with vcmax25 from Peng et al. (unpublished)"
 author: "Yunke Peng"
-date: "Aug 21 2020"
+date: "Nov 7 2020"
 output: html_document
 ---
 
 ## Introduction about Vcmax25
 
-Here our predicted Vcmax25 nc file were 20 years output from sofun/yunekbranch_units. And we have considered both versions: (1) weighted-sum method of GPP (2) max daily vcmax25. We will attempt to check and compare its extracted site value with a database from Peng et al. unpublished. Within this database, we had vcmax25 from 276 sites globally. We would like to compare with its observations and predictions, to see how best our sofun method was developed recently...
+Here our predicted Vcmax25 nc file were 20 years output from sofun/yunkebranch_units. And we have considered both versions: (1) weighted-sum method of GPP (2) max daily vcmax25. We will attempt to check and compare its extracted site value with a database from Peng et al. unpublished. Within this database, we had vcmax25 from 266 sites globally. We would like to compare with its observations, to see how best our sofun method was developed recently...
 
 The output plot (figure) mainly includes four components:
 
 Fig.1a, 1b - Global mapping of Vcmax25 using weighted-sum or Max methods from sofun/yunkebranch_units, in the year 1991-2010.
 
-Fig.2a, 2b, 2c - Predicted site Vcmax25 vs. observed site Vcmax25. 2a was using Predictions from Peng et al. unpublished; 2b was using weighted-sum method, 2c was using max method.
-
-Fig.3a - Predicted weight-sum site Vcmax25  vs. Predicted site Vcmax25 from Peng et al.. 
-
-Fig.3b - Predicted max site Vcmax25  vs. Predicted site Vcmax25 from Peng et al.. 
-
-Fig.4a - Predicted site Vcmax25 from weighted-sum method  vs. observed site Vcmax25 in high elevation sites (z > 2km)
-
-Fig.4b - Predicted site Vcmax25 from max method  vs. observed site Vcmax25 in high elevation sites (z > 2km)
+Fig.2a, 2b - Predicted site Vcmax25 vs. observed site Vcmax25. 2a using weighted-sum method and 2b was using max method. It shows that max method performs better (R2 = 0.31), therefore considered as our method in global simulation
 
 ```{r}
 library(raster)
 library(ncdf4)
 library(spgwr)  
 library(visreg)
+require(data.table)
+library(maps)
+library(lme4)
+library(MuMIn)
+library(lmerTest)
+library(tidyverse)
+library(ncmeta)
+library(viridis)
+library(ggthemes)
+library(LSD)
+library(yardstick)
+library(ggplot2)
+library(RColorBrewer)
+library(dplyr)
+library(gplots)
+library(tidyselect)
+library(extrafont)
+library(rbeni)
+library(raster)
+library(spgwr)
+library(maps)
+library(rworldmap)
+library(cowplot)
 
 ######Test 1: Vcmax25 using weighted sum method 
 #1. input nc files for vcmax25 over 20 yrs.
@@ -73,14 +88,14 @@ outputdata <- function(name,year,min,max,path){
 vcmax25_20yrs <- data.frame(matrix(NA))
 
 for (i in 1991:2010){
-  vcmax25_20yrs[1:259200,i-1991+1] <- outputdata("vcmax25",i,-999999,999999,"D:/PhD/output/vcmax25/weight/")[,3]
+  vcmax25_20yrs[1:259200,i-1991+1] <- outputdata("vcmax25",i,-999999,999999,"~/data/output_vcmax25/weight/")[,3]
 }
 
 #3. convert unit from mol/m2/s to umol/m2/s
 vcmax25_final <- (vcmax25_20yrs)*1000000
 
 #4. construct coordinates (lon, lat)
-lonlat <- outputdata("vcmax25",i,-999999,999999,"D:/PhD/output/vcmax25/weight/")[,1:2]
+lonlat <- outputdata("vcmax25",i,-999999,999999,"~/data/output_vcmax25/weight/")[,1:2]
 
 #5. calculate vcmax25 average of 20yrs, cbind, rename and plot map
 vcmax25_weightedsum <- cbind(lonlat,rowMeans(vcmax25_final,na.rm = TRUE))
@@ -95,7 +110,7 @@ title("Fig.1a Vcmax25 using 'weighted-sum GPP' method in 1991-2010 (umol m-2 s-1
 ######Test 2: Vcmax25 using max daily vcmax25
 vcmax25max_20yrs <- data.frame(matrix(NA)) # for final sites climate data
 for (i in 1991:2010){
-  vcmax25max_20yrs[1:259200,i-1991+1] <- outputdata("vcmax25",i,-999999,999999,"D:/PhD/output/vcmax25/max/")[,3]
+  vcmax25max_20yrs[1:259200,i-1991+1] <- outputdata("vcmax25",i,-999999,999999,"~/data/output_vcmax25/max/")[,3]
 }
 
 vcmax25finalmax <- vcmax25max_20yrs*1000000
@@ -116,7 +131,12 @@ a <- 1.5 # how many distance (in degrees) to be considered when interpolating va
 vcmax25_weightedsum <- cbind(lonlat,rowMeans(vcmax25_final,na.rm = TRUE))
 names(vcmax25_weightedsum) <- c("lon","lat","vcmax25")
 
-elev <- read.csv(file="D:/PhD/yunkebranch_units/vc25/elev.csv")#include elevation data of 0.5 grids
+elev_nc <- read_nc_onefile("~/data/watch_wfdei/WFDEI-elevation.nc")
+#elev_nc <- read_nc_onefile("D:/PhD/nimpl_sofun_inputs/Data/Elevation/WFDEI-elevation.nc")
+elev <- as.data.frame(nc_to_df(elev_nc, varnam = "elevation"))
+head(elev) # this is consistent with df coord below
+
+#elev <- read.csv(file="D:/PhD/yunkebranch_units/vc25/elev.csv")#include elevation data of 0.5 grids
 vcmax25_input1 <- merge(vcmax25_weightedsum,elev,by=c("lat","lon"),all.x=TRUE) #merge with z
 names(vcmax25_input1) <- c("lat","lon","vcmax25","z")
 
@@ -126,8 +146,11 @@ vcmax25_input2 <- merge(vcmax25_max,elev,by=c("lat","lon"),all.x=TRUE)
 names(vcmax25_input2) <- c("lat","lon","vcmax25","z")
 
 #7. input site vcmax25 from Global Vcmax25 MS paper (Peng et al. unpublished).
-sites_vc25 <- read.csv(file="D:/PhD/yunkebranch_units/vc25/vc25_sitemean.csv")
-head(sites_vc25) #lon, lat, Elevation, obs_vcmax25, pred_vcmax25 (umol/m2/s)
+species_vc25 <- read.csv(file="~/data/VcmaxMS/final_individuals.csv")
+sites_vc25 <- aggregate(species_vc25,by=list(species_vc25$lon,species_vc25$lat), FUN=mean, na.rm=TRUE)
+dim(sites_vc25)
+sites_vc25 <- sites_vc25[,c("lon","lat","Elevation","Vcmax.25")]
+head(sites_vc25) #lon, lat, Elevation, obs_vcmax25 (umol/m2/s)
 samples <- sites_vc25[,1:3] #this only includes x,y,z now, which is prepared for gwr then.
 names(samples) <- c("lon","lat","z")
 
@@ -140,7 +163,7 @@ site_vcmax25 <- data.frame(matrix(NA)) # for final sites climate data
 vcmax25_input1 <- subset(vcmax25_input1,vcmax25>0)
 
 #apply weighted sums
-for (i in c(1:28,33:276)){ # 4 sites here were indicating NA that stops the gwr, omitting them now.
+for (i in c(1:186,191:266)){ 
   mylist[[i]]<- subset(vcmax25_input1,lon>(samples[i,1]-a)&lon<(samples[i,1]+a)&lat>(samples[i,2]-a)&lat<(samples[i,2]+a))
   coordinates(mylist[[i]]) <- c("lon","lat")
   gridded(mylist[[i]]) <- TRUE
@@ -159,7 +182,7 @@ site_vcmax25 <- data.frame(matrix(NA)) # for final sites climate data
 mylist <- vector(mode = "list", length = nrow(sites_vc25)) # for specifying gridded data at certain degrees
 mylist2 <- vector(mode = "list", length = nrow(sites_vc25)) # for sites
 
-for (i in 1:276){
+for (i in c(1:186,191:266)){
   mylist[[i]]<- subset(vcmax25_input2,lon>(samples2[i,1]-a)&lon<(samples2[i,1]+a)&lat>(samples2[i,2]-a)&lat<(samples2[i,2]+a))
   coordinates(mylist[[i]]) <- c("lon","lat")
   gridded(mylist[[i]]) <- TRUE
@@ -170,62 +193,11 @@ for (i in 1:276){
 }
 
 all_vcmax25 <- cbind(sites_vc25,samples[,c("vcmax25_weighted")],samples2[,c("vcmax25_max")])
-names(all_vcmax25) <- c("lon","lat","Elevation","obs_vcmax25","pred_vcmax25_Peng","pred_vcmax25_weightsum","pred_vcmax25_max")
+names(all_vcmax25) <- c("lon","lat","Elevation","obs_vcmax25","pred_vcmax25_weightsum","pred_vcmax25_max")
 
 
-#8. now the dataframe consists of everything we need
-#(1) firstly, check and plot three predictions (peng et al., weighted-sum, max) vs. observation 
-plot(pred_vcmax25_Peng~obs_vcmax25,data=all_vcmax25)
-title("Fig.2a Predicted Vcmax25 from (Peng et al) vs. observed Vcmax25 (R2 = 0.29)")
-summary(lm(pred_vcmax25_Peng~obs_vcmax25,data=all_vcmax25)) # using Peng et al. unpublished prediction: R2 = 0.29
-
-plot(pred_vcmax25_weightsum~obs_vcmax25,data=all_vcmax25)
-title("Fig.2b Weighted sum Vcmax25 vs. observed Vcmax25 (R2 = 0.25)")
-summary(lm(pred_vcmax25_weightsum~obs_vcmax25,data=all_vcmax25)) # using weighted-sum vcmax25 from SOFUN R2 = 0.25
-
-plot(pred_vcmax25_max~obs_vcmax25,data=all_vcmax25)
-title("Fig.2c Max Vcmax25 vs. observed Vcmax25 (R2 = 0.31)")
-summary(lm(pred_vcmax25_max~obs_vcmax25,data=all_vcmax25)) # using max vcmax25 from SOFUN:R2 = 0.31
-
-
-#(2) Comparsion between weighted or max vcmax25 and Peng et al. predicted Vcmax25
-plot(pred_vcmax25_weightsum~pred_vcmax25_Peng,data=all_vcmax25)
-title("Fig.3a Weighted-sum Vcmax25 vs. Predicted Vcmax25 from Peng et al (R2 = 0.87)")
-summary(lm(pred_vcmax25_weightsum~pred_vcmax25_Peng,data=all_vcmax25))
-
-plot(pred_vcmax25_max~pred_vcmax25_Peng,data=all_vcmax25)
-title("Fig.3b Max Vcmax25 vs. Predicted Vcmax25 from Peng et al (R2 = 0.85)")
-summary(lm(pred_vcmax25_max~pred_vcmax25_Peng,data=all_vcmax25))
-
-
-#(3) Comparsion for sites at high elevation (z > 2km) to check our magnitude of prediction
-
-#subset high elevation to compare
-high_elev <- subset(all_vcmax25,Elevation > 2000)
-dim(high_elev)
-
-plot(pred_vcmax25_weightsum~obs_vcmax25,data=high_elev,xlim=c(0,250),ylim=c(0,250))
-title("Fig.4a Weighted Sum Vcmax25 vs. Observed Vcmax25 in >2km sites R2 = 0.33")
-summary(lm(pred_vcmax25_weightsum~obs_vcmax25,data=high_elev)) # R2 = 0.32
-
-plot(pred_vcmax25_max~obs_vcmax25,data=high_elev,xlim=c(0,250),ylim=c(0,250))
-title("Fig.4b Max Vcmax25 vs. Observed Vcmax25 in >2km sites R2 = 0.39")
-summary(lm(pred_vcmax25_max~obs_vcmax25,data=high_elev)) # R2 = 0.39
-
-#9. check model bias (prediction - observation) vs. latitude
-summary(all_vcmax25$pred_vcmax25_max)
-
-#9.1 prediction using Peng et al., --> no bias
-summary(lm(pred_vcmax25_Peng-obs_vcmax25 ~ lat, data=all_vcmax25)) # r2 = 0.001, p-value = 0.58 
-
-#9.2 prediction using weightedsum method --> underestimation in high lat
-bias_weighted <- lm(pred_vcmax25_weightsum-obs_vcmax25 ~ lat, data=all_vcmax25)
-summary(bias_weighted)# r2 = 0.02, negative, p-value = 0.01 
-visreg(bias_weighted,"lat",ylab="Bias of weighted-sum Vcmax25")
-
-#9.3 prediction using max method --> overestimation in high lat
-bias_max <- lm(pred_vcmax25_max-obs_vcmax25 ~ lat, data=all_vcmax25)
-summary(bias_max)# r2 = 0.04, positive, p-value = 0.001
-visreg(bias_max,"lat",ylab="Bias of max Vcmax25")
+analyse_modobs2(all_vcmax25,"obs_vcmax25","pred_vcmax25_weightsum", type = "points")
+analyse_modobs2(all_vcmax25,"obs_vcmax25","pred_vcmax25_max", type = "points")
+#it is no doubt that max method performs better(no underestimation)!
 
 ```

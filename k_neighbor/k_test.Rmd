@@ -40,7 +40,7 @@ outputdata <- function(name,max){
   # Input: name: variable (LMA, Tg, alpha, PPFD, lat)
   # Input: max: maximum value in the map (9999 as default; if omitting NA VALUES then it should be < 9999 (dummy))
   #-----------------------------------------------------------------------
-  ncin <- nc_open(paste ("D:/PhD/nc/new/cdo/", name, ".nc", sep=""))
+  ncin <- nc_open(paste ("D:/PhD/nc/new/cdo/", name, ".nc", sep="")) # Input nc file of LMA after cdo processing.
   #ncin <- nc_open(paste ("~/data/nimpl_sofun_inputs/map/Final_ncfile/" ,name, ".nc", sep=""))
   lon <- ncvar_get(ncin,"lon")
   lat<-ncvar_get(ncin,"lat")

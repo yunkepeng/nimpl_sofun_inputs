@@ -22,26 +22,26 @@ library(MuMIn)
 #Input data
 
 #1. Input original dataset of Forc
-#NPP_SaraVicca <- read.csv(file="~/data/NPP_Yunke/NPP_ForC/orig/ForC_measurements_final.csv")
-Forc <- read.csv(file="D:/PhD/nimpl_sofun_inputs/Data/NPP/NPP_ForC/orig/ForC_measurements_final.csv")
+Forc <- read.csv(file="~/data/NPP_Yunke/NPP_ForC/orig/ForC_measurements_final.csv")
+#Forc <- read.csv(file="D:/PhD/nimpl_sofun_inputs/Data/NPP/NPP_ForC/orig/ForC_measurements_final.csv")
 
 #2. aggregate original data based on sites + Begin_measurementyr + End_measurementyr
 Forc2 <- aggregate(mean~sites.sitename+Begin_year1+End_year1+variable.name,data=Forc,mean)
 
 #3. here variablelist was also derived from an original csv. We only select variables that we need.
 
-#variablelist <- read.csv(file="~/data/NPP_Yunke/NPP_ForC/orig/site_need.csv")
-variablelist <- read.csv(file="E:/C-N cycling/Carbon allocation/ForC/site_need.csv")
+variablelist <- read.csv(file="~/data/NPP_Yunke/NPP_ForC/orig/site_need.csv")
+#variablelist <- read.csv(file="E:/C-N cycling/Carbon allocation/ForC/site_need.csv")
 variable <- as.character(variablelist$variable.name)
 
-#4. Inputing exist sites, as this will be used to check repetation in the future
-#NPP_SaraVicca <- read.csv(file="~/data/NPP_Yunke/NPP_SaraVicca/NPP_SaraVicca.csv")
-#NPP_Malhi <- read.csv(file="~/data/NPP_Yunke/NPP_Malhi/NPP_Malhi.csv")
-#NPP_Keith <- read.csv(file="~/data/NPP_Yunke/NPP_Keith/NPP_Keith.csv")
+#4. Inputing exist sites, as this will be used to check repeation in the future
+NPP_SaraVicca <- read.csv(file="~/data/NPP_Yunke/NPP_SaraVicca/NPP_SaraVicca.csv")
+NPP_Malhi <- read.csv(file="~/data/NPP_Yunke/NPP_Malhi/NPP_Malhi.csv")
+NPP_Keith <- read.csv(file="~/data/NPP_Yunke/NPP_Keith/NPP_Keith.csv")
 
-NPP_SaraVicca <- read.csv(file="D:/PhD/nimpl_sofun_inputs/Data/NPP/NPP_SaraVicca/NPP_SaraVicca.csv")
-NPP_Malhi <- read.csv(file="D:/PhD/nimpl_sofun_inputs/Data/NPP/NPP_Malhi/NPP_Malhi.csv")
-NPP_Keith <- read.csv(file="D:/PhD/nimpl_sofun_inputs/Data/NPP/NPP_Keith/NPP_Keith.csv")
+#NPP_SaraVicca <- read.csv(file="D:/PhD/nimpl_sofun_inputs/Data/NPP/NPP_SaraVicca/NPP_SaraVicca.csv")
+#NPP_Malhi <- read.csv(file="D:/PhD/nimpl_sofun_inputs/Data/NPP/NPP_Malhi/NPP_Malhi.csv")
+#NPP_Keith <- read.csv(file="D:/PhD/nimpl_sofun_inputs/Data/NPP/NPP_Keith/NPP_Keith.csv")
 
 NPP_all <- rbind(NPP_SaraVicca,NPP_Malhi,NPP_Keith)
 
