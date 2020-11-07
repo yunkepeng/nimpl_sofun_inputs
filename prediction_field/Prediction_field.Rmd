@@ -511,6 +511,8 @@ plot(rvpd)
 #8. LMA (a resample method was pre-processed in advance, see text below)
 Here the SLA tiff. file was originally downloaded from TRY (see link on above). Then I have inputted this tiff file into ArcGIS, and then interpolating all global grids points (N = 259200) from the tiff map, using "Extract multi values to points" function. This will enable us to output a global grid dataframe (in csv), that includes LMA values from 720*360 grids.
 
+Note that, due to LMA used by resampling method in R directly (see LMA_field.Rmd). This part (based after Arcgis resampling tool) was not in use, though still kept here.
+
 ```{r}
 library(raster)
 library(ncdf4)
