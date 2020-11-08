@@ -242,3 +242,52 @@ analyse_modobs2(leafcn_pred_direct,"TRY_lma","lma", type = "points")
 
 
 ```
+
+
+4. Add site PPFD and Tg into model, to see if it helps to predict better
+```{r}
+
+dim(leafcn_pred_direct)
+merge3 <- merge2[,c("lon","lat","Tg","PPFD","alpha")]
+elev_nc <- read_nc_onefile("~/data/watch_wfdei/WFDEI-elevation.nc")
+elev <- as.data.frame(nc_to_df(elev_nc, varnam = "elevation"))
+names(elev) <- c("lon","lat","z")
+
+all_global <-as.data.frame(Reduce(function(x,y) merge(x = x, y = y, by = c("lon","lat"),all.x=TRUE), 
+                list(elev,merge3)))
+
+leafcn_pred_direct <- leafcn_pred_direct[,c("lon","lat","z","lma","TRY_lma")]
+
+a <- 1.5
+
+#interpolating Tg and PPFD
+for (i in c(1:nrow(leafcn_pred_direct))){
+  gpp_global <- na.omit(all_global)
+  gpp_part <- subset(gpp_global,lon>(leafcn_pred_direct[i,1]-a)&lon<(leafcn_pred_direct[i,1]+a)&
+                       lat>(leafcn_pred_direct[i,2]-a)&lat<(leafcn_pred_direct[i,2]+a))
+  coordinates(gpp_part) <- c("lon","lat")
+  gridded(gpp_part) <- TRUE
+  
+  gpp_coord <- leafcn_pred_direct[i,1:3]
+  coordinates(gpp_coord) <- c("lon","lat")
+  leafcn_pred_direct$Tg[i] <- (gwr(Tg ~ z, gpp_part, bandwidth = 1.06, fit.points =gpp_coord,predictions=TRUE))$SDF$pred
+  leafcn_pred_direct$PPFD[i] <- (gwr(PPFD ~ z, gpp_part, bandwidth = 1.06, fit.points =gpp_coord,predictions=TRUE))$SDF$pred
+}
+
+#newly include narea and vcmax25
+
+SP_input <- read.csv(file="~/data/CN_leaf/final_individuals.csv") #all individuals
+SP_input2 <- SP_input[,c("lat","lon","Elevation","narea","Vcmax.25")]
+sitemean2 <- aggregate(SP_input2,by=list(SP_input2$lon,SP_input2$lat), FUN=mean, na.rm=TRUE) #site-mean
+sitemean2 <- sitemean2[,c("lon","lat","Elevation","narea","Vcmax.25")]
+names(sitemean2) <- c("lon","lat","z","narea","Vcmax.25")
+
+final <-as.data.frame(Reduce(function(x,y) merge(x = x, y = y, by = c("lon","lat","z"),all.x=TRUE), 
+                list(leafcn_pred_direct,sitemean2)))
+summary(final)
+
+final$nmass <- 1000 * final$narea/final$lma
+
+summary(lm(nmass ~ Tg + PPFD + lma , data = final))
+
+```
