@@ -287,8 +287,15 @@ final <-as.data.frame(Reduce(function(x,y) merge(x = x, y = y, by = c("lon","lat
                 list(leafcn_pred_direct,sitemean2)))
 summary(final)
 
-final$nmass <- 1000 * final$narea/final$lma
+final$nmass <- final$narea/final$lma
 
+#2 models to be considered now
 summary(lm(nmass ~ Tg + PPFD + lma , data = final))
+
+final$vcmax25_lma <- final$Vcmax.25/final$lma
+
+summary(lm(nmass ~ vcmax25_lma, data = final))
+
+dim(final)
 
 ```
