@@ -70,37 +70,33 @@ sitespecies_final <-Reduce(function(x,y) merge(x = x, y = y, by = c("sitename","
 
 #2. obtain Nrubisco and Nstructural from this large dataset
 #firstly, for site-species data
-sitespecies_final$nmass <- sitespecies_final$narea/sitespecies_final$lma
-sitespecies_final$vcmax25_lma <- sitespecies_final$Vcmax.25/sitespecies_final$lma
+#sitespecies_final$nmass <- sitespecies_final$narea/sitespecies_final$lma
+#sitespecies_final$vcmax25_lma <- sitespecies_final$Vcmax.25/sitespecies_final$lma
 
-hist(sitespecies_final$narea) # g/m2
-hist(sitespecies_final$lma) # g/m2
-hist(sitespecies_final$Vcmax.25) # umol/m2/s
+#hist(sitespecies_final$narea) # g/m2
+#hist(sitespecies_final$lma) # g/m2
+#hist(sitespecies_final$Vcmax.25) # umol/m2/s
 
-library(lme4)
+#library(lme4)
 
 #3. Fit (Nmass) ~ Ns + Nr * (Vcmax25/LMA) - for site-species data
-summary(lmer(nmass~vcmax25_lma + (1|sitename)+(1|species),data=sitespecies_final))
+#summary(lmer(nmass~vcmax25_lma + (1|sitename)+(1|species),data=sitespecies_final))
 
-r.squaredGLMM(lmer(nmass~vcmax25_lma + (1|sitename) +(1|species),data=sitespecies_final))
+#r.squaredGLMM(lmer(nmass~vcmax25_lma + (1|sitename) +(1|species),data=sitespecies_final))
 
 # r2 = 0.177
 #intercept = 0.0161 (Ns)
 #slope = 0.0041 (Nr)
 
 #compare crossed and nested design
-crossed <- lmer(nmass~vcmax25_lma + (1|sitename)+(1|species),data=sitespecies_final)
-nested <- lmer(nmass~vcmax25_lma +(1/ sitename|species),data=sitespecies_final)
-AIC(crossed, nested)
-anova(crossed, nested)
+#crossed <- lmer(nmass~vcmax25_lma + (1|sitename)+(1|species),data=sitespecies_final)
+#nested <- lmer(nmass~vcmax25_lma +(1/ sitename|species),data=sitespecies_final)
+#AIC(crossed, nested)
+#anova(crossed, nested)
 
-#secondly, for site-mean data
+#for site-mean data
 sitemean$nmass <- sitemean$narea/sitemean$lma
 sitemean$vcmax25_lma <- sitemean$Vcmax.25/sitemean$lma
-
-hist(sitemean$Vcmax.25)
-hist(sitemean$narea)
-hist(sitemean$lma)
 
 summary(lm(nmass~vcmax25_lma ,data=sitemean))
 #R2 = 0.26
@@ -114,12 +110,10 @@ mean(sitemean$nmass) * 27.18
 ##### After nimpl simulation, we output our data
 #3. output leafCN data (actually the output is leaf N/C!)
 
-#Now, input site-mean coef (Ns = 0.0144, Nr = 0.0050, as shown above)
+#####using updated's lma simulation
 firstyr_data <- 2007 # In data file, which is the first year
 endyr_data <- 2018 # In data file, which is the last year
-#location <- "~/data/output_leafcn/species/" #species-based coefficients
-location <- "~/data/output_leafcn/sitemean_coef/" # site-mean coefficients
-#location <- "~/data/output_leafcn/leafcn_1107_LMA_updated/" # site-mean coefficients
+location <- "~/data/output_leafcn/leafcn_1107_LMA_updated/" # site-mean coefficients
 
 alloutput_list <- list.files(location,full.names = T)
 
@@ -129,7 +123,6 @@ elev_nc <- read_nc_onefile("~/data/watch_wfdei/WFDEI-elevation.nc")
 elev <- as.data.frame(nc_to_df(elev_nc, varnam = "elevation"))
 head(elev) # this is consistent with df coord below
 
-#2. Create a function to specify path, loop many years nc file and output a dataframe (lon, lat, var).
 inputnc <- function(name,start_year,end_year){
   #-----------------------------------------------------------------------
   # Input: 
@@ -168,67 +161,6 @@ leafcn_df$nmass <- (leafcn_df$leafcn)*0.47 #we used Cmass (0.47) in nimpl simula
 #input a large data
 leafcn_site <- sitemean[,c("lon","lat","Elevation","narea","lma")]
 names(leafcn_site) <- c("lon","lat","z","narea","lma")
-summary(leafcn_site)
-
-dim(leafcn_site) # we will use this database for model validation later on.
-
-
-#4. Start geographically weighted regressions 
-# Now, both global_df and site_df have included four columns: lon, lat, z, var
-a <- 1.5 # which degree (distance) of grid when interpolating gwr from global grids
-i <- 1
-
-#use gwr to obtain site-level leaf c/n. then calculating leaf nmass for both pred and obs.
-for (i in c(1:nrow(leafcn_site))){
-  leafcn_global <- na.omit(leafcn_df)
-  leafcn_part <- subset(leafcn_global,lon>(leafcn_site[i,1]-a)&lon<(leafcn_site[i,1]+a)&
-                          lat>(leafcn_site[i,2]-a)&lat<(leafcn_site[i,2]+a))
-  coordinates(leafcn_part) <- c("lon","lat")
-  gridded(leafcn_part) <- TRUE
-  
-  leafcn_coord <- leafcn_site[i,1:3]
-  coordinates(leafcn_coord) <- c("lon","lat")
-  leafcn_site$pred[i] <- (gwr(nmass ~ z, leafcn_part, bandwidth = 1.06, fit.points =leafcn_coord,predictions=TRUE))$SDF$pred
-}
-
-leafcn_site$nmass_obs <- (leafcn_site$narea/leafcn_site$lma) 
-leafcn_site$nmass_gwr_pred <- leafcn_site$pred
-
-#still not good when looking all sites
-
-#using direct method?
-leafcn_global <- na.omit(leafcn_df)
-coordinates(leafcn_global) <- ~lon+lat 
-gridded(leafcn_global) <- TRUE
-rleafcn_global <- raster(leafcn_global, "nmass") 
-sp_sites <- SpatialPoints(leafcn_site[,c("lon","lat","z")]) # only select lon and lat
-
-leafcn_pred_direct <- extract(rleafcn_global, sp_sites, sp = TRUE) %>% as_tibble() %>% 
-  right_join(leafcn_site, by = c("lon", "lat","z")) %>% 
-  dplyr::rename( nimpl_nmass_directly = nmass)
-
-leafcn_pred_direct <- as.data.frame(leafcn_pred_direct)
-head(leafcn_pred_direct)
-
-#using direct method
-analyse_modobs2(leafcn_pred_direct,"nmass_obs","nimpl_nmass_directly", type = "points")
-#using gwr method
-analyse_modobs2(leafcn_pred_direct,"nmass_obs","nmass_gwr_pred", type = "points")
-
-
-#####using updated's lma simulation
-firstyr_data <- 2007 # In data file, which is the first year
-endyr_data <- 2018 # In data file, which is the last year
-location <- "~/data/output_leafcn/leafcn_1107_LMA_updated/" # site-mean coefficients
-
-alloutput_list <- list.files(location,full.names = T)
-
-leafcn_df <- inputnc("leafcn",2007,2018) # this is actually leaf n/c. We used this time period, because this is when all leaf C/N data collected
-leafcn_df$nmass <- (leafcn_df$leafcn)*0.47 #we used Cmass (0.47) in nimpl simulation to multiply leaf N/C -->therefore converting back to leaf Nmass, so that it can be compared directly later on
-
-#input a large data
-leafcn_site <- sitemean[,c("lon","lat","Elevation","narea","lma")]
-names(leafcn_site) <- c("lon","lat","z","narea","lma")
 
 #4. Start geographically weighted regressions 
 # Now, both global_df and site_df have included four columns: lon, lat, z, var
@@ -272,25 +204,6 @@ head(leafcn_pred_direct)
 analyse_modobs2(leafcn_pred_direct,"nmass_obs","nimpl_nmass_directly", type = "points")
 #using gwr method
 analyse_modobs2(leafcn_pred_direct,"nmass_obs","nmass_gwr_pred", type = "points")
-
-#above is to apply the same like above, it still fitted less good. No worries! Let's see how our site-based Nmass prediction compared with our site-species based data?
-
-leafcn_pred_direct2 <- leafcn_pred_direct[,c("lon","lat","z","nimpl_nmass_directly","nmass_gwr_pred")]
-
-names(leafcn_pred_direct2) <- c("lon","lat","Elevation","nimpl_nmass_directly","nmass_gwr_pred")
-
-#merge site-based prediction to site-species based obs. data
-final_species_predict <- merge(leafcn_pred_direct2,sitespecies_final,by=c("lat","lon","Elevation"),all.y=TRUE) 
-dim(sitespecies_final)
-dim(final_species_predict)
-
-summary(final_species_predict)
-
-#using direct method
-analyse_modobs2(final_species_predict,"nmass","nimpl_nmass_directly", type = "points")
-#using gwr method
-analyse_modobs2(final_species_predict,"nmass","nmass_gwr_pred", type = "points")
-#ok...just ignore....
 
 ```
 
