@@ -44,6 +44,7 @@ raster_z_crop <- crop(raster_z, bounding_box)
 raster_z_crop
 
 #2. Input 3km LMA raster that needs resampled
+#Original data source: https://isp.uv.es/code/try.html
 raster_SLA <- raster("~/data/TRY_maps/data_orig/SLA_3km_v1.tif")
 raster_SLA_crop <- crop(raster_SLA, bounding_box)
 raster_SLA_crop
