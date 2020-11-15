@@ -83,6 +83,7 @@ library(rsample)
 library(dslabs)
 library(purrr)
 library(randomForest)
+library(rbeni)
 
 # recap
 summary(LMA_df)
@@ -174,6 +175,11 @@ LMA_knn_df2 <-Reduce(function(x,y) merge(x = x, y = y, by = c("lon","lat"),all.x
 
 summary(LMA_knn_df2)
 df_LMA <- LMA_knn_df2[order(LMA_knn_df2[,2],LMA_knn_df2[,1]),]
+
+#prepare lon and lat
+ncin <- nc_open("~/data/watch_wfdei/WFDEI-elevation.nc")
+lon <- ncvar_get(ncin,"lon")
+lat<-ncvar_get(ncin,"lat")
 
 #output nc file - In Euler its path is same: "~/data/nimpl_sofun_inputs/map/Final_ncfile"
 LMA_nc <- list(df_to_grid(df_LMA,varnam = "LMA", lonnam = "lon", latnam = "lat"))
