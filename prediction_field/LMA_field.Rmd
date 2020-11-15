@@ -97,16 +97,16 @@ plot_map3(LMA_df,
 
 #(1) first, input Tg, PPFD, alpha directly from final_nc/ (the data directly used in nimpl simulation)
 # NA value was converted to 9999 in previous step (to prevent FPE in nimpl), therefore, converting it back
-Tg_df <- nc_to_df(read_nc_onefile("~/data/Final_ncfile/Tg.nc"), varnam = "Tg")
-Tg_df$myvar[Tg_df$myvar == 9999] <- NA
+Tg_df <- nc_to_df(read_nc_onefile("~/data/nimpl_sofun_inputs/map/Final_ncfile/Tg.nc"), varnam = "Tg")
+#Tg_df$myvar[Tg_df$myvar == 9999] <- NA
 names(Tg_df) <- c("lon","lat","Tg")
 
-PPFD_df <- nc_to_df(read_nc_onefile("~/data/Final_ncfile/PPFD.nc"), varnam = "PPFD")
-PPFD_df$myvar[PPFD_df$myvar == 9999] <- NA
+PPFD_df <- nc_to_df(read_nc_onefile("~/data/nimpl_sofun_inputs/map/Final_ncfile/PPFD.nc"), varnam = "PPFD")
+#PPFD_df$myvar[PPFD_df$myvar == 9999] <- NA
 names(PPFD_df) <- c("lon","lat","PPFD")
 
-alpha_df <- nc_to_df(read_nc_onefile("~/data/Final_ncfile/alpha.nc"), varnam = "alpha")
-alpha_df$myvar[alpha_df$myvar == 9999] <- NA
+alpha_df <- nc_to_df(read_nc_onefile("~/data/nimpl_sofun_inputs/map/Final_ncfile/alpha.nc"), varnam = "alpha")
+#alpha_df$myvar[alpha_df$myvar == 9999] <- NA
 names(alpha_df) <- c("lon","lat","alpha")
 
 merge1 <-Reduce(function(x,y) merge(x = x, y = y, by = c("lon","lat"),all.x=TRUE), 
@@ -173,15 +173,16 @@ LMA_knn_df2 <-Reduce(function(x,y) merge(x = x, y = y, by = c("lon","lat"),all.x
                 list(merge1[,c("lon","lat")],LMA_knn_df))
 
 summary(LMA_knn_df2)
-dim(LMA_knn_df2)
+df_LMA <- LMA_knn_df2[order(LMA_knn_df2[,2],LMA_knn_df2[,1]),]
 
-#And of course, convert NA to 9999 before nimpl, then apply cdo process.
-#LMA_knn_df2[is.na(LMA_knn_df2)] <- 9999
-#coordinates(LMA_knn_df2) <- ~lon+lat 
-#gridded(LMA_knn_df2) <- TRUE
-#rLMA <- raster(LMA_knn_df2, "LMA") 
-
-#d <- writeRaster(rLMA, paste0("~/data/nimpl_sofun_inputs/","LMA_1107.nc"),format = "CDF", overwrite = TRUE, varname = "LMA", varunit = "g/m2", longname = "Leaf-mass-per-area", xname = "lon", yname = "lat")
+#output nc file - In Euler its path is same: "~/data/nimpl_sofun_inputs/map/Final_ncfile"
+LMA_nc <- list(df_to_grid(df_LMA,varnam = "LMA", lonnam = "lon", latnam = "lat"))
+names(LMA_nc) <- "LMA"
+varams = "LMA"
+test <- list(lon,lat,LMA_nc,varams)
+names(test) <- c("lon","lat","vars","varams")
+write_nc2(test,varnams = "LMA",long_name = "Leaf mass per area",units = "g m-2",
+          path = "~/data/nimpl_sofun_inputs/map/Final_ncfile/LMA.nc")
 
 ``` 
 

@@ -34,6 +34,9 @@ The process below will provide original codes of soil C/N, stand age, fAPAR, alp
 ```{r}
 library(raster)
 library(rgdal)
+library(dplyr)
+library(rbeni)
+library(ncdf4)
 soil <- raster('~/data/ISRIC/data_orig/data/raster/w001000.adf')
 #soil <- raster('E:/final round/data/w001000.adf') # map input from the last 2015 version of ISRIC (Batjes 2015 ISRIC report)
 
@@ -62,26 +65,28 @@ ss2 <- ss1[,c(3,4,5)] # now,select lon, lat and CNrt only
 final_CN <-Reduce(function(x,y) merge(x = x, y = y, by = c("lon","lat"),all.x=TRUE), 
                    list(Global_grid,ss2)) #merged this with global grids (N = 259200)
 
-df_CN <- final_CN
+df_CN <- final_CN[,c("lon","lat","CNrt")]
 
 #convert dataframe to raster
 coordinates(final_CN) <- ~lon+lat 
-
 gridded(final_CN) <- TRUE
-
 rCNrt <- raster(final_CN, "CNrt") 
 plot(rCNrt)
 
-#please note that, after this object, we need two more steps (1) converting all NA values to 9999 so that it will not cause FPE, (2) after output nc file we additionally performing a CDO processing in Euler - running the code cdo remapbil,gridfile_halfdeg.txt input.nc output.nc
-# the code below is not for running, just to show the first step above, about converting NA to 9999 and output nc file. Same in all other prediction fields below.
+#prepare lon and lat
+ncin <- nc_open("~/data/watch_wfdei/WFDEI-elevation.nc")
+lon <- ncvar_get(ncin,"lon")
+lat<-ncvar_get(ncin,"lat")
 
-#final_CN <-Reduce(function(x,y) merge(x = x, y = y, by = c("lon","lat"),all.x=TRUE),list(Global_grid,ss2))
-#final_CN[is.na(final_CN)] <- 9999
-#coordinates(final_CN) <- ~lon+lat 
-#gridded(final_CN) <- TRUE
-#rCNrt <- raster(final_CN, name) 
-#d <- writeRaster(rCNrt, paste0("D:/PhD/nc/new/","CNrt.nc"),format = "CDF", overwrite = TRUE, varname = "CNrt", varunit = "unitless", longname = "soil cn ratio", xname = "lon", yname = "lat")
-
+#output nc file - In Euler its path is same: "~/data/nimpl_sofun_inputs/map/Final_ncfile"
+summary(df_CN)
+CNrt <- list(df_to_grid(df_CN,varnam = "CNrt", lonnam = "lon", latnam = "lat"))
+names(CNrt) <- "CNrt"
+varams = "CNrt"
+test <- list(lon,lat,CNrt,varams)
+names(test) <- c("lon","lat","vars","varams")
+write_nc2(test,varnams = "CNrt",long_name = "Soil carbon to nitrogen ratio",units = "unitness",
+          path = "~/data/nimpl_sofun_inputs/map/Final_ncfile/CNrt.nc")
 
 ```
 
@@ -245,8 +250,8 @@ plot(r)
 summary(final_data)
 outlier <- (subset(final_data,age ==0))
 dim(outlier)
-map("world", fill=TRUE, col="white", bg="white", ylim=c(-90, 90),xlim = c(-180,180), mar=c(1,0,0,1))
-points(outlier$lon,outlier$lat, col="red", pch=16,cex=1.5)
+#map("world", fill=TRUE, col="white", bg="white", ylim=c(-90, 90),xlim = c(-180,180), mar=c(1,0,0,1))
+#points(outlier$lon,outlier$lat, col="red", pch=16,cex=1.5)
 
 # it seems to still show 407 grids = 0 (normally in edge or sea). They may not be covered by fAPAR and continent grids from previous analysis, let's just simply assume them as NA.
 
@@ -259,25 +264,21 @@ final_data2 <- final_data[order(final_data[,2],final_data[,1]),]
 
 df_age <- final_data2
 
-final_data2[is.na(final_data2)] <- 9999
-
-#output age
+#output age map
 coordinates(final_data2) <- ~lon+lat 
 gridded(final_data2) <- TRUE
 rage <- raster(final_data2, "age") 
+plot(rage)
 
-#output age nc file. THIS IS NOT THE LAST STEP!!! We need to additionally apply CDO processing in Euler.
-#d <- writeRaster(rage, paste0("D:/PhD/nimpl_sofun_inputs/Data/Final_ncfile/","age_0923_interpolated.nc"),format = "CDF", overwrite = TRUE, varname = "age", varunit = "yrs", longname = "stand-age",  xname = "lon", yname = "lat")
-#Once cdo finished, the nc file below will be deleted, and output of CDO will be renamed to age.nc
-
-#after CDO, have a check
-#ncfname <- paste ("D:/PhD/nimpl_sofun_inputs/Data/Final_ncfile/", "age", ".nc", sep="")
-#ncin <- nc_open(ncfname)
-#lon <- ncvar_get(ncin,"lon")
-#lat <- ncvar_get(ncin,"lat")
-#head(lon)
-#head(lat)
-
+#output nc file - In Euler its path is same: "~/data/nimpl_sofun_inputs/map/Final_ncfile"
+summary(df_age)
+age_nc <- list(df_to_grid(df_age,varnam = "age", lonnam = "lon", latnam = "lat"))
+names(age_nc) <- "age"
+varams = "age"
+test <- list(lon,lat,age_nc,varams)
+names(test) <- c("lon","lat","vars","varams")
+write_nc2(test,varnams = "age",long_name = "stand age",units = "years",
+          path = "~/data/nimpl_sofun_inputs/map/Final_ncfile/age.nc")
 ``` 
 
 #3. fAPAR
@@ -321,7 +322,17 @@ gridded(fAPAR_input) <- TRUE
 r3 <- raster(fAPAR_input, "fAPAR") 
 plot(r3)
 
-#needs to convert NA to 9999, and then cdo processing, then can be input to nimpl
+#output nc file - In Euler its path is same: "~/data/nimpl_sofun_inputs/map/Final_ncfile"
+df_fAPAR$fAPAR[df_fAPAR$fAPAR == "NaN"] <- NA
+summary(df_fAPAR)
+
+fAPAR_nc <- list(df_to_grid(df_fAPAR,varnam = "fAPAR", lonnam = "lon", latnam = "lat"))
+names(fAPAR_nc) <- "fAPAR"
+varams = "fAPAR"
+test <- list(lon,lat,fAPAR_nc,varams)
+names(test) <- c("lon","lat","vars","varams")
+write_nc2(test,varnams = "fAPAR",long_name = "fAPAR",units = "unitless",
+          path = "~/data/nimpl_sofun_inputs/map/Final_ncfile/fAPAR.nc")
 ```
 
 #4. alpha
@@ -354,6 +365,18 @@ gridded(alpha_input) <- TRUE
 r4 <- raster(alpha_input, "alpha") 
 plot(r4)
 
+#output nc file - In Euler its path is same: "~/data/nimpl_sofun_inputs/map/Final_ncfile"
+df_alpha$alpha[df_alpha$alpha == "NaN"] <- NA
+summary(df_alpha)
+
+alpha_nc <- list(df_to_grid(df_alpha,varnam = "alpha", lonnam = "lon", latnam = "lat"))
+names(alpha_nc) <- "alpha"
+varams = "alpha"
+test <- list(lon,lat,alpha_nc,varams)
+names(test) <- c("lon","lat","vars","varams")
+write_nc2(test,varnams = "alpha",long_name = "alpha",units = "unitless",
+          path = "~/data/nimpl_sofun_inputs/map/Final_ncfile/alpha.nc")
+
 ``` 
 
 #5. PPFD (description and main calculation were provided)
@@ -368,7 +391,7 @@ The code below will represent the global map of final output:
 ```{r}
 library(raster)
 library(ncdf4)
-ncfname <- paste ("~/data/nimpl_sofun_inputs/map/Final_ncfile/", "PPFD", ".nc", sep="")
+ncfname <- paste ("~/data/Final_ncfile/old_9999/", "PPFD", ".nc", sep="")
 #ncfname <- paste ("E:/R code/CN MS/PhD/NC files/", "PPFD", ".nc", sep="")
 dname <- "PPFD"
 ncin <- nc_open(ncfname)
@@ -394,6 +417,17 @@ coordinates(PPFD_input) <- ~lon+lat
 gridded(PPFD_input) <- TRUE
 rPPFD <- raster(PPFD_input, "PPFD") 
 plot(rPPFD)
+
+#output nc file - In Euler its path is same: "~/data/nimpl_sofun_inputs/map/Final_ncfile"
+summary(df_PPFD)
+
+PPFD_nc <- list(df_to_grid(df_PPFD,varnam = "PPFD", lonnam = "lon", latnam = "lat"))
+names(PPFD_nc) <- "PPFD"
+varams = "PPFD"
+test <- list(lon,lat,PPFD_nc,varams)
+names(test) <- c("lon","lat","vars","varams")
+write_nc2(test,varnams = "PPFD",long_name = "PPFD",units = "umol m-2 s-1",
+          path = "~/data/nimpl_sofun_inputs/map/Final_ncfile/PPFD.nc")
 
 ``` 
 
@@ -439,7 +473,7 @@ Tg is growth temperature (degree celcius). We used the 30 yrs average data (1982
 
 library(raster)
 library(ncdf4)
-ncfname <- paste ("~/data/nimpl_sofun_inputs/map/Final_ncfile/", "Tg", ".nc", sep="")
+ncfname <- paste ("~/data/Final_ncfile/old_9999/", "Tg", ".nc", sep="")
 #ncfname <- paste ("E:/R code/CN MS/PhD/NC files/", "Tg", ".nc", sep="")
 dname <- "Tg"
 
@@ -466,6 +500,19 @@ coordinates(Tg_input) <- ~lon+lat
 gridded(Tg_input) <- TRUE
 rTg <- raster(Tg_input, "Tg") 
 plot(rTg)
+
+#output nc file - In Euler its path is same: "~/data/nimpl_sofun_inputs/map/Final_ncfile"
+summary(df_Tg)
+
+Tg_nc <- list(df_to_grid(df_Tg,varnam = "Tg", lonnam = "lon", latnam = "lat"))
+names(Tg_nc) <- "Tg"
+varams = "Tg"
+test <- list(lon,lat,Tg_nc,varams)
+names(test) <- c("lon","lat","vars","varams")
+write_nc2(test,varnams = "Tg",long_name = "Growth temperature",units = "Degree celcius",
+          path = "~/data/nimpl_sofun_inputs/map/Final_ncfile/Tg.nc")
+
+
 ``` 
 
 
@@ -479,7 +526,7 @@ where Tg (in celcius degree) was derived from above, and vap (hPa) was derived f
 ```{r}
 library(raster)
 library(ncdf4)
-ncfname <- paste ("~/data/nimpl_sofun_inputs/map/Final_ncfile/", "vpd", ".nc", sep="")
+ncfname <- paste ("~/data/Final_ncfile/old_9999/", "vpd", ".nc", sep="")
 #ncfname <- paste ("E:/R code/CN MS/PhD/NC files/", "vpd", ".nc", sep="")
 dname <- "vpd"
 
@@ -506,34 +553,43 @@ coordinates(vpd_input) <- ~lon+lat
 gridded(vpd_input) <- TRUE
 rvpd <- raster(vpd_input, "vpd") 
 plot(rvpd)
+
+#output nc file - In Euler its path is same: "~/data/nimpl_sofun_inputs/map/Final_ncfile"
+summary(df_vpd)
+
+vpd_nc <- list(df_to_grid(df_vpd,varnam = "vpd", lonnam = "lon", latnam = "lat"))
+names(vpd_nc) <- "vpd"
+varams = "vpd"
+test <- list(lon,lat,vpd_nc,varams)
+names(test) <- c("lon","lat","vars","varams")
+write_nc2(test,varnams = "vpd",long_name = "Vapor pressure deficient",units = "kPa",
+          path = "~/data/nimpl_sofun_inputs/map/Final_ncfile/vpd.nc")
+
 ``` 
 
 #8. LMA (a resample method was pre-processed in advance, see text below)
-Here the SLA tiff. file was originally downloaded from TRY (see link on above). Then I have inputted this tiff file into ArcGIS, and then interpolating all global grids points (N = 259200) from the tiff map, using "Extract multi values to points" function. This will enable us to output a global grid dataframe (in csv), that includes LMA values from 720*360 grids.
-
-Note that, due to LMA used by resampling method in R directly (see LMA_field.Rmd). This part (based after Arcgis resampling tool) was not in use, though still kept here.
+The processing of LMA map, please see LMA_field.Rmd, which was stored in a same file. It has applied (1) resample (2) applied knn method from predictors of PPFD, Tg and alpha. The below code is old and not used any more.
 
 ```{r}
-library(raster)
-library(ncdf4)
-SLA_extracted <- read.csv(file="~/data/TRY_maps/SLA_export.csv") #This dataframe outputted from ArcGIS, including FID, lon, lat, Elevation, SLA (mg/mm)
+#library(raster)
+#library(ncdf4)
+#SLA_extracted <- read.csv(file="~/data/TRY_maps/SLA_export.csv") #This dataframe outputted from ArcGIS, including FID, lon, lat, Elevation, SLA (mg/mm)
 
 #SLA_extracted <- read.csv(file="E:/C-N cycling/Carbon allocation/672 sites analysis/TRY Global map/SLA_export.csv") #This dataframe outputted from ArcGIS, including FID, lon, lat, Elevation, SLA (mg/mm)
-SLA_extracted2 <- subset(SLA_extracted,SLA_3km_v1>0) #remove NA or negative values
+#SLA_extracted2 <- subset(SLA_extracted,SLA_3km_v1>0) #remove NA or negative values
 
-SLA_extracted2$LMA <- 1000/SLA_extracted2$SLA_3km_v1 #mg/mm -> g/m2
+#SLA_extracted2$LMA <- 1000/SLA_extracted2$SLA_3km_v1 #mg/mm -> g/m2
 
-SLA_extracted3 <- SLA_extracted2[,c(2,3,6)] #only select lon, lat and LMA (g/m2)
+#SLA_extracted3 <- SLA_extracted2[,c(2,3,6)] #only select lon, lat and LMA (g/m2)
 
-names(lonlat) <- c("lon","lat") #here lonlat was derived from previous coordinates data, which can be continuously used
+#names(lonlat) <- c("lon","lat") #here lonlat was derived from previous coordinates data, which can be continuously used
 
-final_lma <-Reduce(function(x,y) merge(x = x, y = y, by = c("lon","lat"),all.x=TRUE), 
-                        list(lonlat,SLA_extracted3)) #combined with global grids
+#final_lma <-Reduce(function(x,y) merge(x = x, y = y, by = c("lon","lat"),all.x=TRUE),list(lonlat,SLA_extracted3)) #combined with global grids
 
-coordinates(final_lma) <- ~lon+lat 
-gridded(final_lma) <- TRUE
-rLMA <- raster(final_lma, "LMA") 
-plot(rLMA)
+#coordinates(final_lma) <- ~lon+lat 
+#gridded(final_lma) <- TRUE
+#rLMA <- raster(final_lma, "LMA") 
+#plot(rLMA)
 
 #d <- writeRaster(rLMA, paste0("E:/R code/CN MS/PhD/NC files/","LMA_test.nc"),format = "CDF", overwrite = TRUE, varname = "LMA", varunit = "g/m2", longname = "Leaf-mass-per-area (TRY gloabl traits map)",xname = "lon", yname = "lat")
 
@@ -577,12 +633,3 @@ plot(rC4)
 
 ``` 
 
-#All final data saved as df_Tg, df_PPFD....which is consistent with final_ncfile/ (the one put in nimpl simulation) - although those dataframe (df_Tg...) needs two more steps, convert NA to 9999 (prevent FPE) and cdo processing
-
-#NC files generation
-After finishing map at each vairable, we can directly outputing such object (e.g. rLMA above) to nc file, using WriteRaster function in r. An example code outputnig rLMA is on below:
-
-d <- writeRaster(rLMA, paste0("E:/R code/CN MS/PhD/NC files/","LMA.nc"),
-                 format = "CDF", overwrite = TRUE, varname = "LMA", 
-                 varunit = "g/m2", longname = "Leaf-mass-per-area (TRY gloabl traits map)", 
-                 xname = "lon", yname = "lat")
