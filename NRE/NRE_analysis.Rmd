@@ -8,17 +8,17 @@ output:
 ---
 title: "Fitted statistical model for Nitrogen resorption efficiency"
 author: "Yunke Peng"
-date: "Oct 26, 2020"
+date: "Nov 16, 2020"
 output: html_document
 ---
 
-###The analysis below includes data from ~/data/NRE_various. Including Du et al. 2020 (site-based) and Deng et al. 2020 (species-based). The common thing is that it has already included NRE, MAT, MAP. We may then extract soil and climate data from our existing prediction field from ~/data/nimpl_sofun_inputs/map/Final_ncfile, for example including soil c/n (originally from HWSD), PPFD (orginally from WFDEI), Tg (CRU), vpd (CRU) and alpha (SPLASH). They were used by geographically weighted regressions in R. The results show that Tg and vpd can be great predictors on logit (NRE) (R2 = 0.28).
+###The analysis below includes data from ~/data/NRE_various. Including Du et al. 2020 (site-based) and Deng et al. 2020 (species-based). The common thing is that it has already included NRE, MAT, MAP. We may then extract climate data from our existing prediction field from ~/data/nimpl_sofun_inputs/map/Final_ncfile, for example PPFD (orginally from WFDEI), Tg (CRU), vpd (CRU) and alpha (SPLASH). They were used by geographically weighted regressions in R. Data was include original raster data file from ISRIC (for soil c/n), TRY traits map (leaf N, P and LMA). However, TRY traits map original data has many empty grids, and therefore we have use its extracted site LMA value from half deg map, which is the "improved map" after knn method.
 
 ### Pre-processing includes: aggregate to site-means, remove repeated sites, add elevation from ingestr, extract climate and soil data from prediction fields in nimpl simulations, remove two negative vpd points and one negative soil c/n points before analysies.
 
+###There are 4 possible output suggested, at the end.
 
 ```{r}
-
 require(data.table)
 library(maps)
 library(lme4)
@@ -98,76 +98,55 @@ elev <- as.data.frame(nc_to_df(elev_nc, varnam = "elevation"))
 head(elev) 
 
 #input nc file
-#All nc file has already classified NA as 9999 (because it will otherwise cause FPE in simulations).
 Tg <- as.data.frame(nc_to_df(read_nc_onefile(
   "~/data/nimpl_sofun_inputs/map/Final_ncfile/Tg.nc"),
-                               varnam = "Tg"))
-Tg$myvar[Tg$myvar==9999] <- NA
+  varnam = "Tg"))
 
 PPFD <- as.data.frame(nc_to_df(read_nc_onefile(
   "~/data/nimpl_sofun_inputs/map/Final_ncfile/PPFD.nc"),
-                             varnam = "PPFD"))
-PPFD$myvar[PPFD$myvar==9999] <- NA
+  varnam = "PPFD"))
 
 vpd <- as.data.frame(nc_to_df(read_nc_onefile(
   "~/data/nimpl_sofun_inputs/map/Final_ncfile/vpd.nc"),
   varnam = "vpd"))
-vpd$myvar[vpd$myvar==9999] <- NA
-
-Vcmax25 <- as.data.frame(nc_to_df(read_nc_onefile(
-  "~/data/nimpl_sofun_inputs/map/Final_ncfile/Vcmax25.nc"),
-  varnam = "Vcmax25"))
-Vcmax25$myvar[Vcmax25$myvar==9999] <- NA
-
-age <- as.data.frame(nc_to_df(read_nc_onefile(
-  "~/data/nimpl_sofun_inputs/map/Final_ncfile/age.nc"),
-  varnam = "age"))
-age$myvar[age$myvar==9999] <- NA
 
 alpha <- as.data.frame(nc_to_df(read_nc_onefile(
   "~/data/nimpl_sofun_inputs/map/Final_ncfile/alpha.nc"),
   varnam = "alpha"))
-alpha$myvar[alpha$myvar==9999] <- NA
-
-CNrt <- as.data.frame(nc_to_df(read_nc_onefile(
-  "~/data/nimpl_sofun_inputs/map/Final_ncfile/CNrt.nc"),
-  varnam = "CNrt"))
-CNrt$myvar[CNrt$myvar==9999] <- NA
 
 fAPAR <- as.data.frame(nc_to_df(read_nc_onefile(
   "~/data/nimpl_sofun_inputs/map/Final_ncfile/fAPAR.nc"),
   varnam = "fAPAR"))
-fAPAR$myvar[fAPAR$myvar==9999] <- NA
-
-LMA <- as.data.frame(nc_to_df(read_nc_onefile(
-  "~/data/nimpl_sofun_inputs/map/Final_ncfile/LMA.nc"),
-  varnam = "LMA"))
-LMA$myvar[LMA$myvar==9999] <- NA
 
 #cbind all predictors, and its lon, lat, z
 all_predictors <- cbind(elev,Tg$myvar,PPFD$myvar,vpd$myvar,
-                        alpha$myvar,Vcmax25$myvar,LMA$myvar,
-                        fAPAR$myvar,CNrt$myvar,age$myvar)
+                        alpha$myvar,fAPAR$myvar)
 
 names(all_predictors) <- c("lon","lat","z","Tg","PPFD","vpd",
-                           "alpha","Vcmax25","LMA","fAPAR","CNrt","age")
+                           "alpha","fAPAR")
 
 Tg_df <- all_predictors[,c("lon","lat","z","Tg")]
 PPFD_df <- all_predictors[,c("lon","lat","z","PPFD")]
 vpd_df <- all_predictors[,c("lon","lat","z","vpd")]
 alpha_df <- all_predictors[,c("lon","lat","z","alpha")]
-CNrt_df <- all_predictors[,c("lon","lat","z","CNrt")]
+fAPAR_df <- all_predictors[,c("lon","lat","z","fAPAR")]
 
 #now, apply gwr to extract site predictors' value
 head(NRE_df)
 NRE_site <- NRE_df[,c("lon","lat","elevation")]
 names(NRE_site) <- c("lon","lat","z")
 
+#before gwr, there is one point lacks NA, it is in the sea. 
+#We just assumed them as 0 firstly, to make sure for loop can run
+#and then, set its preduction as NA at the end. 
+NRE_site[107,]
+NRE_site[107,3] <- 0 #set z =0
+NRE_site[107,]
+
 a <- 1.5 # which degree (distance) of grid when interpolating gwr from global grids
 i <- 1
-
 #Extract Tg, PPFD, vpd, alpha
-for (i in c(1:106,108:nrow(NRE_site))){ #one site does not have elevation (NA), therefore omitted
+for (i in c(1:nrow(NRE_site))){ #one site does not have elevation (NA), therefore omitted
   #Tg
   Tg_global <- na.omit(Tg_df)
   NRE_part <- subset(Tg_global,lon>(NRE_site[i,1]-a)&lon<(NRE_site[i,1]+a)&
@@ -204,28 +183,43 @@ for (i in c(1:106,108:nrow(NRE_site))){ #one site does not have elevation (NA), 
   NRE_coord <- NRE_site[i,1:3]
   coordinates(NRE_coord) <- c("lon","lat")
   NRE_site$alpha[i] <- (gwr(alpha ~ z, NRE_part, bandwidth = 1.06, fit.points =NRE_coord,predictions=TRUE))$SDF$pred
-  #print(i)
 }
 
-#Extract CNrt
-for (i in c(1:53,55:56,58,60:106,108:nrow(NRE_site))){ #one site does not have elevation (NA), therefore omitted
-  #CNrt
-  CNrt_global <- na.omit(CNrt_df)
-  NRE_part <- subset(CNrt_global,lon>(NRE_site[i,1]-a)&lon<(NRE_site[i,1]+a)&
+#As mentioned above, set the point in the sea as NA
+NRE_site[107,4:7] <- NA
+NRE_site[107,]
+
+NRE_site$fAPAR <- NA
+#additionally add fAPAR - only available in specific grids
+for (i in c(1:53,55:56,58,60:74,76:106,108:173,181:nrow(NRE_site))){ 
+  fAPAR_global <- na.omit(fAPAR_df)
+  NRE_part <- subset(fAPAR_global,lon>(NRE_site[i,1]-a)&lon<(NRE_site[i,1]+a)&
                        lat>(NRE_site[i,2]-a)&lat<(NRE_site[i,2]+a))
   coordinates(NRE_part) <- c("lon","lat")
   gridded(NRE_part) <- TRUE
+  
   NRE_coord <- NRE_site[i,1:3]
   coordinates(NRE_coord) <- c("lon","lat")
-  NRE_site$CNrt[i] <- (gwr(CNrt ~ z, NRE_part, bandwidth = 1.06, fit.points =NRE_coord,predictions=TRUE))$SDF$pred
-  #print(i)
+  NRE_site$fAPAR[i] <- (gwr(fAPAR ~ z, NRE_part, bandwidth = 1.06, fit.points =NRE_coord,predictions=TRUE))$SDF$pred
 }
+
+summary(NRE_site)
+
+#why many NA grids shown in fAPAR data? - have a look in the map
+fAPAR_NA <- subset(NRE_site,is.na(fAPAR))
+newmap <- getMap(resolution = "low")
+plot(newmap, xlim = c(-180, 180), ylim = c(-75, 75), asp = 1)
+
+points(fAPAR_NA$lon,fAPAR_NA$lat, col="red", pch=16,cex=1)
+#those 12 points may be either in the island, or edge of land...anyway, let's just keep them if not using fAPAR as a predictor then...
+
 
 #combine NRE with site extracted climate and CNrt (Tg, PPFD, vpd, alpha, CNrt)
 NRE_climate <- cbind(NRE_df[,c("NRE","MAT","MAP","source")],NRE_site)
 summary(NRE_climate)
 
 #remove 2 negative vpd points (which should be NA)
+new_DF <- subset(NRE_climate, is.na(NRE_climate))
 NRE_climate <- subset(NRE_climate, vpd>0)
 dim(NRE_climate)
 
@@ -233,44 +227,342 @@ summary(lm(log((NRE/100)/(1-(NRE/100)))~MAT+log(MAP),data=NRE_climate))
 summary(lm(log((NRE/100)/(1-(NRE/100)))~Tg+log(vpd),data=NRE_climate))
 summary(lm(log((NRE/100)/(1-(NRE/100)))~Tg+log(alpha),data=NRE_climate))
 
-#remove negative CNrt
-NRE_climate_soil <- subset(NRE_climate, CNrt>0)
-summary(lm(log((NRE/100)/(1-(NRE/100)))~Tg+log(vpd)+log(CNrt),data=NRE_climate))
+#This is just the end after including climate factors. Now, as far as we know vpd and Tg could be very good predictors, since it has good R2 (R2 =0.3),
+#and better than the design when using MAT or MAP alternatively.
 
-###fAPAR, vcmax25 and LMA not considered yet
+#### Now, it is the time to additionally include soil C/N, age and LMA
 
-#age_df <- all_predictors[,c("lon","lat","z","age")]
-#fAPAR_df <- all_predictors[,c("lon","lat","z","fAPAR")]
-#LMA_df <- all_predictors[,c("lon","lat","z","LMA")]
-#Vcmax25_df <- all_predictors[,c("lon","lat","z","Vcmax25")]
-#
-#fAPAR_global <- na.omit(fAPAR_df)
-#NRE_part <- subset(fAPAR_global,lon>(NRE_site[i,1]-a)&lon<(NRE_site[i,1]+a)&
-#                     lat>(NRE_site[i,2]-a)&lat<(NRE_site[i,2]+a))
-#coordinates(NRE_part) <- c("lon","lat")
-#gridded(NRE_part) <- TRUE
-#NRE_coord <- NRE_site[i,1:3]
-#coordinates(NRE_coord) <- c("lon","lat")
-#NRE_site$fAPAR[i] <- (gwr(fAPAR ~ z, NRE_part, bandwidth = 1.06, fit.points #=NRE_coord,predictions=TRUE))$SDF$pred
-##LMA
-#LMA_global <- na.omit(LMA_df)
-#NRE_part <- subset(LMA_global,lon>(NRE_site[i,1]-a)&lon<(NRE_site[i,1]+a)&
-#                     lat>(NRE_site[i,2]-a)&lat<(NRE_site[i,2]+a))
-#coordinates(NRE_part) <- c("lon","lat")
-#gridded(NRE_part) <- TRUE
-#NRE_coord <- NRE_site[i,1:3]
-#coordinates(NRE_coord) <- c("lon","lat")
-#NRE_site$LMA[i] <- (gwr(LMA ~ z, NRE_part, bandwidth = 1.06, fit.points #=NRE_coord,predictions=TRUE))$SDF$pred
-##Vcmax25
-#Vcmax25_global <- na.omit(Vcmax25_df)
-#NRE_part <- subset(Vcmax25_global,lon>(NRE_site[i,1]-a)&lon<(NRE_site[i,1]+a)&
-#                     lat>(NRE_site[i,2]-a)&lat<(NRE_site[i,2]+a))
-#coordinates(NRE_part) <- c("lon","lat")
-#gridded(NRE_part) <- TRUE
-#NRE_coord <- NRE_site[i,1:3]
-#coordinates(NRE_coord) <- c("lon","lat")
-#NRE_site$Vcmax25[i] <- (gwr(Vcmax25 ~ z, NRE_part, bandwidth = 1.06, #fit.points =NRE_coord,predictions=TRUE))$SDF$pred
+##1. Firstly, using extract method to extract soil C/N site data from ISRIC
+library(raster)
+library(rgdal)
+library(dplyr)
+library(rbeni)
+library(ncdf4)
+soil <- raster('~/data/ISRIC/data_orig/data/raster/w001000.adf')
+NRE_lonlat <- NRE_climate[,c("lon","lat","z")]
 
+sp_sites <- SpatialPoints(NRE_lonlat[,c("lon","lat","z")]) # only select lon and lat
+
+#change its variable name to SUID, this is a unique code that could be used to merged with soil data, which will be further merged with csv below.
+NRE_lonlat2 <- raster::extract(soil, sp_sites, sp = TRUE) %>% as_tibble() %>% 
+  right_join(NRE_lonlat, by = c("lon", "lat","z")) %>% 
+  dplyr::rename( SUID = w001000)
+
+#input soil information data csv
+ISRIC.data<-read.csv(file="~/data/ISRIC/data_orig/data/HW30s_FULL.csv",header=TRUE,sep=";",dec = ".") # Now, input ISRIC database
+data.soil.extract <- merge(NRE_lonlat2,ISRIC.data,by='SUID',all.x=TRUE) # merge site with soil variables by using SUID
+data.soil.extract2 <- subset(data.soil.extract,CNrt>0) # select available CNrt
+data.soil.extract3 <- data.soil.extract2[,c("lon","lat","z","CNrt")] # only select CNrt variable
+
+# note that in each site there might be more than 1 samples measured, so we should aggregate them which make sures that one grid holds one data only.
+ss1 <- aggregate(data.soil.extract3,by=list(data.soil.extract3$lon,data.soil.extract3$lat,data.soil.extract3$z), FUN=mean, na.rm=TRUE) 
+ss2 <- ss1[,c("lon","lat","z","CNrt")] # now,select lon, lat, z and CNrt only
+
+# finally, merging site-based soil c/n data into our current dataframe
+NRE_climate_CN <-Reduce(function(x,y) merge(x = x, y = y, by = c("lon","lat","z"),all.x=TRUE), 
+                  list(NRE_climate,ss2))
+
+
+##2. Secondly, adding age, we interpolate its site value from gwr (same as above), based on improved nc file that used in simulations
+#input nc file
+age <- as.data.frame(nc_to_df(read_nc_onefile(
+  "~/data/nimpl_sofun_inputs/map/Final_ncfile/age.nc"),
+  varnam = "age"))
+
+#cbind all predictors, and its lon, lat, z
+age_df <- cbind(elev,age$myvar)
+names(age_df) <- c("lon","lat","z","age")
+
+#now, apply gwr to extract site predictors' value
+NRE_site <- NRE_climate_CN[,c("lon","lat","z")]
+
+a <- 1.5
+i <- 1
+NRE_site$age <- NA
+
+for (i in 1:nrow(NRE_site)) {
+  tryCatch({
+    age_global <- na.omit(age_df)
+    NRE_part <- subset(age_global,lon>(NRE_site[i,1]-a)&lon<(NRE_site[i,1]+a)&
+                         lat>(NRE_site[i,2]-a)&lat<(NRE_site[i,2]+a))
+    coordinates(NRE_part) <- c("lon","lat")
+    gridded(NRE_part) <- TRUE
+    NRE_coord <- NRE_site[i,1:3]
+    coordinates(NRE_coord) <- c("lon","lat")
+    NRE_site$age[i] <- (gwr(age ~ z, NRE_part, bandwidth = 1.06, fit.points =NRE_coord,predictions=TRUE))$SDF$pred
+    #print(i)
+  }, error=function(e){})
+}
+
+#convert negative values to NA
+NRE_site$age[NRE_site$age < 0] <- NA
+
+#cbind it to NRE_climate_CN
+NRE_climate_CN$age <- NRE_site$age
+
+
+#add LMA, leaf N and P
+#Original data source: https://isp.uv.es/code/try.html
+raster_SLA <- raster("~/data/TRY_maps/data_orig/SLA_3km_v1.tif")
+raster_LNC <- raster("~/data/TRY_maps/data_orig/LNC_3km_v1.tif")
+raster_LPC <- raster("~/data/TRY_maps/data_orig/LPC_3km_v1.tif")
+
+
+#extract its value separately
+NRE_plot <- NRE_climate_CN[,c("lon","lat","z")]
+
+sp_sites <- SpatialPoints(NRE_plot[,c("lon","lat","z")]) # only select lon and lat
+
+NRE_plot1 <- raster::extract(raster_SLA, sp_sites, sp = TRUE) %>% as_tibble() %>% 
+  right_join(NRE_plot, by = c("lon", "lat","z")) 
+
+NRE_plot2 <- raster::extract(raster_LNC, sp_sites, sp = TRUE) %>% as_tibble() %>% 
+  right_join(NRE_plot, by = c("lon", "lat","z")) 
+
+NRE_plot3 <- raster::extract(raster_LPC, sp_sites, sp = TRUE) %>% as_tibble() %>% 
+  right_join(NRE_plot, by = c("lon", "lat","z")) 
+
+new <- cbind(NRE_plot1[,1],NRE_plot1[,1],NRE_plot1[,1])
+names(new) <- c("SLA","LNC","LPC")
+new$SLA[new$SLA < 0 ] <- NA #mg/g
+new$LNC[new$LNC < 0 ] <- NA #mg/g
+new$LPC[new$LPC < 0 ] <- NA #mm2/mg 
+summary(new)
+new$LMA <- 1000/new$SLA #mm2/mg -> g/m2
+new$LMA[new$LMA == Inf] <- NA
+
+#finally, cbind those leaf traits data with existing dataframe
+NRE_final <- cbind(NRE_climate_CN,new)
+summary(NRE_final)
+#considering that leaf traits original data's extract site value has many NA, alternatively using another LMA site data from 0.5 deg map (after knn)
+
+#input LMA nc file (0.5 deg final map)
+LMA <- as.data.frame(nc_to_df(read_nc_onefile(
+  "~/data/nimpl_sofun_inputs/map/Final_ncfile/LMA.nc"),
+  varnam = "LMA"))
+
+#cbind all predictors, and its lon, lat, z
+LMA_df <- cbind(elev,LMA$myvar)
+names(LMA_df) <- c("lon","lat","z","LMA")
+
+#now, apply gwr to extract site predictors' value
+NRE_site <- NRE_final[,c("lon","lat","z")]
+a <- 1.5
+i <- 1
+NRE_site$LMA_halfdeg <- NA
+
+for (i in 1:nrow(NRE_site)) {
+    LMA_global <- na.omit(LMA_df)
+    NRE_part <- subset(LMA_global,lon>(NRE_site[i,1]-a)&lon<(NRE_site[i,1]+a)&
+                         lat>(NRE_site[i,2]-a)&lat<(NRE_site[i,2]+a))
+    coordinates(NRE_part) <- c("lon","lat")
+    gridded(NRE_part) <- TRUE
+    NRE_coord <- NRE_site[i,1:3]
+    coordinates(NRE_coord) <- c("lon","lat")
+    NRE_site$LMA_halfdeg[i] <- (gwr(LMA ~ z, NRE_part, bandwidth = 1.06, fit.points =NRE_coord,predictions=TRUE))$SDF$pred
+}
+
+NRE_final$LMA_halfdeg <- NRE_site$LMA_halfdeg
+
+summary(NRE_final) # this is the final version of data, it is now ready for stepwise regression
+
+#################################
+#Now, prepare Stepwise regression
+#################################
+library(tidyverse)
+library(ggplot2)
+
+#1. select the most important predictor -> disregard MAT and MAP, as replaced by Tg and vpd (or alpha)
+#NRE_all <- NRE_final[,c("NRE","MAT","MAP","Tg","PPFD","vpd","alpha","fAPAR","CNrt","age","LMA_halfdeg")]
+NRE_all <- NRE_final[,c("NRE","Tg","PPFD","vpd","alpha","fAPAR","CNrt","age","LMA_halfdeg")]
+NRE_all <- na.omit(NRE_all)
+dim(NRE_all)
+#determine targets and preds.
+target <- 'NRE'
+
+preds <- NRE_all %>% select(-NRE) %>% 
+  names()
+
+r_list <- c()
+
+#For loop functions, include all predictor's r2 at the end
+for (var in preds){
+  forml <- paste( 'lm(', target, '~', var, ', data = NRE_all)')
+  fit_lin <- eval(parse(text = forml)) 
+  rsq <- summary(fit_lin)[["r.squared"]]
+  r_list <- c(r_list,rsq)
+}
+
+#convert to a dataframe, including all r2
+All_rsquare <- data.frame (
+  preds = factor(preds,levels=preds), 
+  rsq = r_list)
+
+#select max r2 in all predictors
+max(r_list)
+
+new_All_rsquare <- All_rsquare %>% 
+  # desc orders from largest to smallest
+  arrange(desc(rsq))
+
+ggplot(All_rsquare, aes(x = reorder(preds, -rsq), y = rsq)) + geom_point() + theme(axis.text.x = element_text(angle = 60, hjust = 1))
+#Tg is strongest overall!
+
+#2. stepwise regression selection
+library(caret)
+library(recipes)
+
+## list
+list_validatedR <- list()
+list_RMSE <- list()
+list_aic <- list()
+list_bic <- list()
+list_R <- list()
+list_adjustR <- list()
+list_variable <- list()
+
+# predictors retained in the model is PPFD, candidate is all others
+preds_retained <- "Tg"
+preds_candidate <- preds[-which(preds == preds_retained)] 
+
+#set train control
+my_cv <- trainControl(
+  method = "repeatedcv",      
+  number = 5,               
+  repeats = 5                
+)
+
+for (a in 1:(length(preds)-1)){
+  rsq_candidates <- c()
+  linmod_candidates <- list()
+  for (i in 1:length(preds_candidate)){
+    pred_add <- c(preds_retained, preds_candidate[i])
+    forml  <- paste( 'lm(', target, '~', paste(pred_add, collapse = '+'), ', data = NRE_all)')
+    # create a function and make its format available to output in for loop
+    fit_lin <- eval(parse(text = forml))
+    linmod_candidates[[ i ]] <- fit_lin
+    # obtain multiple r2 at each selection, and find the best one at the end
+    rsq <- summary(fit_lin)[["r.squared"]]
+    rsq_candidates[i] <- rsq
+  }
+  pred_max <- preds_candidate[ which.max(rsq_candidates) ]
+  # include best factors in retained factor
+  preds_retained <- c(preds_retained, pred_max)
+  list_variable[[a]] <- pred_max 
+  # include AIC, BIC, adjusted R2, R2, cross-validated R2 and RMSE at each k 
+  list_aic[[  a ]] <- AIC(eval(parse(text = paste( 'lm(', target, '~', paste(preds_retained, collapse = '+'), ', data = NRE_all)'))))
+  
+  list_bic[[ a ]] <- BIC(eval(parse(text = paste( 'lm(', target, '~', paste(preds_retained, collapse = '+'), ', data = NRE_all)'))))
+  
+  list_adjustR[[ a ]] <- summary(eval(parse(text = paste( 'lm(', target, '~', paste(preds_retained, collapse = '+'), ', data = NRE_all)'))))$adj.r.squared
+  
+  list_R[[ a ]] <- summary(eval(parse(text = paste( 'lm(', target, '~', paste(preds_retained, collapse = '+'), ', data = NRE_all)'))))[["r.squared"]]
+  
+  #Crossed-validation: R2 and RMSE
+  forml  <- paste( 'train(recipe(', target, '~', paste(pred_add, collapse = '+'), ', data = NRE_all),
+  data = NRE_all,
+  method = "lm",
+  trControl = my_cv,
+  metric = "RMSE")')
+  fit_train <- eval(parse(text = forml))
+  list_validatedR[[ a ]] <- fit_train$results$Rsquared
+  list_RMSE[[ a ]] <- fit_train$results$RMSE
+  # remove the newly added variable from candidate predictors
+  preds_candidate <- preds_candidate[-which(preds_candidate == pred_max)]
+}
+
+R_all <- as.numeric(list_R)
+validatedR_all <- as.numeric(list_validatedR)
+RMSE_all <- as.numeric(list_RMSE)
+adjustR_all <- as.numeric(list_adjustR)
+AIC_all <- as.numeric(list_aic)
+BIC_all <- as.numeric(list_bic)
+variable_all <- (as.character(list_variable))
+
+#We forget null model! Newly added here - for three r2 results, we just assume them as 0! Otherwise if showing NA or NAN, the following figures may have some technical problems...
+fit_null = lm(formula=NRE ~ 1, data=NRE_all)
+
+validatedR_null <- 0
+
+RMSE_null <- train(recipe(NRE~1, data = NRE_all),data = NRE_all,method = "lm",trControl = my_cv,metric = "RMSE")$results$RMSE
+
+adjustR_null <- 0
+R_null <- 0
+AIC_null <- AIC(fit_null)
+BIC_null <- BIC(fit_null)
+variable_null <- "null"
+
+# We also forget single predictor's model (lm (GPP~PPFD)), as already shown in Warming up! Newly added here
+validatedR_first <- train(recipe(NRE~Tg, data = NRE_all),data = NRE_all,method = "lm",trControl = my_cv,metric = "RMSE")$results$Rsquared
+
+RMSE_first <- train(recipe(NRE~Tg, data = NRE_all),data = NRE_all,method = "lm",trControl = my_cv,metric = "RMSE")$results$RMSE
+
+R_first <- summary(eval(parse(text = paste( 'lm(', target, '~', paste("Tg", collapse = '+'), ', data = NRE_all)'))))[["r.squared"]]
+
+adjustR_first <- summary(eval(parse(text = paste( 'lm(', target, '~', paste("Tg", collapse = '+'), ', data = NRE_all)'))))$adj.r.squared
+
+AIC_first <- AIC(eval(parse(text = paste( 'lm(', target, '~', paste("Tg", collapse = '+'), ', data = NRE_all)'))))
+
+BIC_first <- AIC(eval(parse(text = paste( 'lm(', target, '~', paste("Tg", collapse = '+'), ', data = NRE_all)'))))
+
+variable_first <- "Tg"
+
+#Now, everything is done (from k = 0 to k = all predictors), finally combine them into a metric dataframe
+R_final <- c(R_null,R_first,R_all)
+validatedR_final <- c(validatedR_null,validatedR_first,validatedR_all)
+RMSE_final <- c(RMSE_null,RMSE_first,RMSE_all)
+adjustR_final <- c(adjustR_null,adjustR_first,adjustR_all)
+AIC_final <- c(AIC_null,AIC_first,AIC_all)
+BIC_final <- c(BIC_null,BIC_first,BIC_all)
+variable_final <- c(variable_null,variable_first,variable_all)
+
+finalmetric <- data.frame(validatedR_final,RMSE_final,R_final,adjustR_final,AIC_final,BIC_final,variable_final)
+#display this metric
+metric_display <- finalmetric[,c(7,3,4,5,6,1,2)]
+names(metric_display) <- c("Newly added variable at each k","Multiple R2","Adjusted R2","AIC","BIC","Crossed validated R2","Cross validated RMSE")
+knitr::kable(metric_display)
+
+
+#Adjusted-R
+ggplot() + 
+  geom_point(data = finalmetric, aes(x = factor(variable_final,level = variable_final), y = adjustR_final)) +
+  geom_point(data = subset(finalmetric, adjustR_final == max(adjustR_final)), aes(x = variable_final, y = adjustR_final), color = "red") + xlab("Newly added predictor") + ylab("Adjusted R2")+ theme(axis.text.x = element_text(angle = 60, hjust = 1))
+
+#AIC
+ggplot() + 
+  geom_point(data = finalmetric, aes(x = factor(variable_final,level = variable_final), y = AIC_final)) +
+  geom_point(data = subset(finalmetric, AIC_final == min(AIC_final)), aes(x = variable_final, y = AIC_final), color = "red") + xlab("Newly added predictor") + ylab("AIC")+ theme(axis.text.x = element_text(angle = 60, hjust = 1))
+
+#BIC
+ggplot() + 
+  geom_point(data = finalmetric, aes(x = factor(variable_final,level = variable_final), y = BIC_final)) +
+  geom_point(data = subset(finalmetric, BIC_final == min(BIC_final)), aes(x = variable_final, y = BIC_final), color = "red") + xlab("Newly added predictor") + ylab("BIC")+ theme(axis.text.x = element_text(angle = 60, hjust = 1))
+
+#Cross validated R2 
+ggplot() + 
+  geom_point(data = finalmetric, aes(x = factor(variable_final,level = variable_final), y = validatedR_final)) +
+  geom_point(data = subset(finalmetric, validatedR_final == max(validatedR_final)), aes(x = variable_final, y = validatedR_final), color = "red") + xlab("Newly added predictor") + ylab("Cross validated R2")+ theme(axis.text.x = element_text(angle = 60, hjust = 1))
+
+#Cross validated RMSE 
+ggplot() + 
+  geom_point(data = finalmetric, aes(x = factor(variable_final,level = variable_final), y = RMSE_final)) +
+  geom_point(data = subset(finalmetric, RMSE_final == min(RMSE_final)), aes(x = variable_final, y = RMSE_final), color = "red") + xlab("Newly added predictor") + ylab("Cross validated RMSE")+ theme(axis.text.x = element_text(angle = 60, hjust = 1))
+
+
+#According to Cross-validated R2 : Tg + CNrt + age + PPFD
+#According to AIC and adjusted R2: Tg + CNrt + age
+
+
+summary(lm(log((NRE/100)/(1-(NRE/100)))~ Tg + CNrt + age + PPFD,data=NRE_all))
+
+summary(lm(log((NRE/100)/(1-(NRE/100)))~ Tg + CNrt + age,data=NRE_all))
+
+#But, we cannot ignore vpd!
+summary(lm(log((NRE/100)/(1-(NRE/100)))~ Tg + CNrt + age + vpd,data=NRE_all))
+
+summary(lm(log((NRE/100)/(1-(NRE/100)))~ Tg + CNrt + age + alpha,data=NRE_all))
+
+#Therefore, there are 4 models above, all good (r2 > 0.3). Time for decision!
 
 ```
 
