@@ -1,11 +1,4 @@
 ---
-output:
-  html_document: default
-  pdf_document: default
-  word_document: default
----
-
----
 title: "Global input for all prediction field"
 author: "Yunke Peng"
 date: "Sep 17 2020"
@@ -37,56 +30,102 @@ library(rgdal)
 library(dplyr)
 library(rbeni)
 library(ncdf4)
-soil <- raster('~/data/ISRIC/data_orig/data/raster/w001000.adf')
+
+## read file as raster
+raster_soil <- brick('~/data/ISRIC/data_orig/data/raster/w001000.adf')
+
+## write as NetCDF
+writeRaster(raster_soil, 
+            "~/data/ISRIC/tmp_cnsoil.nc", 
+            overwrite=TRUE, 
+            format="CDF", 
+            varname="cnsoil", 
+            varunit="unit", 
+            longname="Soil C:N ratio", 
+            xname="lon", yname="lat"
+            )
+
+## regrid using CDO (see https://www.notion.so/computationales/CDO-3607611d56494dc6a566f4e40cd9f7cc)
+
+## re-read CDO-aggregated and check if it's ok.
+
+## if necessary fill missing values (e.g. knn: cn ~ lon + lat, k = 5)
+
+
+
+########
+
+## get resolution of original file
+res_raster <- res(raster_soil)
+
+## aggregate to 0.5 deg
+res_out <- c(0.5, 0.5)
+agg <- res_out / res_raster
+raster_soil_agg <- raster::aggregate(raster_soil, fact = agg, fun = mean, na.rm = TRUE, expand = FALSE)
+
+writeRaster(raster_soil_agg, 
+            "~/data/ISRIC/data_halfdeg/cn_soil_isric_halfdeg.nc", 
+            overwrite=TRUE, 
+            format="CDF", 
+            varname="cnsoil", 
+            varunit="unit", 
+            longname="Soil C:N ratio", 
+            xname="lon", yname="lat"
+            )
+
+## make sure you get an array of 720 x 360
+nc <- read_nc_onefile("~/data/ISRIC/data_halfdeg/cn_soil_isric_halfdeg.nc")
+
+
 #soil <- raster('E:/final round/data/w001000.adf') # map input from the last 2015 version of ISRIC (Batjes 2015 ISRIC report)
-
-Global_grid <- as.data.frame(read.csv(file="~/data/ISRIC/data_orig/data/Global_cell.csv")) 
-#Global_grid <- as.data.frame(read.csv(file="E:/climate/Global_cell.csv")) #Input global land grids (0.5 degree;N = 259200)
-
-Global_grid$ID <- c(1:259200) #create a list of number, just helping to form a raster then.
-
-pointXY<-SpatialPointsDataFrame(Global_grid[,c('lon','lat')], data=data.frame(unique.id=paste(Global_grid$ID))) # convert to spatial data format 
-
-vec.soil.extract <-extract(soil,pointXY) 
-data.soil.extract <-data.frame(pointXY,SUID=vec.soil.extract) 
-# These two steps are important, it will extract SUID information from soil map to our grids data, so that each our global grid will have a SUID, which will be further combined (merged) with soil C/N data then.
-
-ISRIC.data<-read.csv(file="~/data/ISRIC/data_orig/data/HW30s_FULL.csv",header=TRUE,sep=";",dec = ".") # Now, input ISRIC database
-
-data.soil.extract <- merge(data.soil.extract,ISRIC.data,by='SUID',all.x=TRUE) # merge site with soil variables by using SUID
-
-data.soil.extract2 <- subset(data.soil.extract,CNrt>0) # select available CNrt
-data.soil.extract3 <- data.soil.extract2[,c("lon","lat","CNrt")] # only select CNrt variable
-
-ss1 <- aggregate(data.soil.extract3,by=list(data.soil.extract3$lon,data.soil.extract3$lat), FUN=mean, na.rm=TRUE) # note that in each grid there might be more than 1 samples measured, so we should aggregate them which make sures that one grid holds one data only.
-
-ss2 <- ss1[,c(3,4,5)] # now,select lon, lat and CNrt only
-
-final_CN <-Reduce(function(x,y) merge(x = x, y = y, by = c("lon","lat"),all.x=TRUE), 
-                   list(Global_grid,ss2)) #merged this with global grids (N = 259200)
-
-df_CN <- final_CN[,c("lon","lat","CNrt")]
-
-#convert dataframe to raster
-coordinates(final_CN) <- ~lon+lat 
-gridded(final_CN) <- TRUE
-rCNrt <- raster(final_CN, "CNrt") 
-plot(rCNrt)
-
-#prepare lon and lat
-ncin <- nc_open("~/data/watch_wfdei/WFDEI-elevation.nc")
-lon <- ncvar_get(ncin,"lon")
-lat<-ncvar_get(ncin,"lat")
-
-#output nc file - In Euler its path is same: "~/data/nimpl_sofun_inputs/map/Final_ncfile"
-summary(df_CN)
-CNrt <- list(df_to_grid(df_CN,varnam = "CNrt", lonnam = "lon", latnam = "lat"))
-names(CNrt) <- "CNrt"
-varams = "CNrt"
-test <- list(lon,lat,CNrt,varams)
-names(test) <- c("lon","lat","vars","varams")
-write_nc2(test,varnams = "CNrt",long_name = "Soil carbon to nitrogen ratio",units = "unitness",
-          path = "~/data/nimpl_sofun_inputs/map/Final_ncfile/CNrt.nc")
+# 
+# Global_grid <- as.data.frame(read.csv(file="~/data/ISRIC/data_orig/data/Global_cell.csv")) 
+# #Global_grid <- as.data.frame(read.csv(file="E:/climate/Global_cell.csv")) #Input global land grids (0.5 degree;N = 259200)
+# 
+# Global_grid$ID <- c(1:259200) #create a list of number, just helping to form a raster then.
+# 
+# pointXY<-SpatialPointsDataFrame(Global_grid[,c('lon','lat')], data=data.frame(unique.id=paste(Global_grid$ID))) # convert to spatial data format 
+# 
+# vec.soil.extract <-extract(soil,pointXY) 
+# data.soil.extract <-data.frame(pointXY,SUID=vec.soil.extract) 
+# # These two steps are important, it will extract SUID information from soil map to our grids data, so that each our global grid will have a SUID, which will be further combined (merged) with soil C/N data then.
+# 
+# ISRIC.data<-read.csv(file="~/data/ISRIC/data_orig/data/HW30s_FULL.csv",header=TRUE,sep=";",dec = ".") # Now, input ISRIC database
+# 
+# data.soil.extract <- merge(data.soil.extract,ISRIC.data,by='SUID',all.x=TRUE) # merge site with soil variables by using SUID
+# 
+# data.soil.extract2 <- subset(data.soil.extract,CNrt>0) # select available CNrt
+# data.soil.extract3 <- data.soil.extract2[,c("lon","lat","CNrt")] # only select CNrt variable
+# 
+# ss1 <- aggregate(data.soil.extract3,by=list(data.soil.extract3$lon,data.soil.extract3$lat), FUN=mean, na.rm=TRUE) # note that in each grid there might be more than 1 samples measured, so we should aggregate them which make sures that one grid holds one data only.
+# 
+# ss2 <- ss1[,c(3,4,5)] # now,select lon, lat and CNrt only
+# 
+# final_CN <-Reduce(function(x,y) merge(x = x, y = y, by = c("lon","lat"),all.x=TRUE), 
+#                    list(Global_grid,ss2)) #merged this with global grids (N = 259200)
+# 
+# df_CN <- final_CN[,c("lon","lat","CNrt")]
+# 
+# #convert dataframe to raster
+# coordinates(final_CN) <- ~lon+lat 
+# gridded(final_CN) <- TRUE
+# rCNrt <- raster(final_CN, "CNrt") 
+# plot(rCNrt)
+# 
+# #prepare lon and lat
+# ncin <- nc_open("~/data/watch_wfdei/WFDEI-elevation.nc")
+# lon <- ncvar_get(ncin,"lon")
+# lat<-ncvar_get(ncin,"lat")
+# 
+# #output nc file - In Euler its path is same: "~/data/nimpl_sofun_inputs/map/Final_ncfile"
+# summary(df_CN)
+# CNrt <- list(df_to_grid(df_CN,varnam = "CNrt", lonnam = "lon", latnam = "lat"))
+# names(CNrt) <- "CNrt"
+# varams = "CNrt"
+# test <- list(lon,lat,CNrt,varams)
+# names(test) <- c("lon","lat","vars","varams")
+# write_nc2(test,varnams = "CNrt",long_name = "Soil carbon to nitrogen ratio",units = "unitness",
+#           path = "~/data/nimpl_sofun_inputs/map/Final_ncfile/CNrt.nc")
 
 ```
 
