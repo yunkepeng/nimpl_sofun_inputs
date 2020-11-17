@@ -113,7 +113,7 @@ mean(sitemean$nmass) * 27.18
 #####using updated's lma simulation
 firstyr_data <- 2007 # In data file, which is the first year
 endyr_data <- 2018 # In data file, which is the last year
-location <- "~/data/output_leafcn/leafcn_1107_LMA_updated/" # site-mean coefficients
+location <- "~/data/output_leafcn/leafcn_normal_1117" # site-mean coefficients
 
 alloutput_list <- list.files(location,full.names = T)
 
@@ -192,7 +192,7 @@ gridded(leafcn_global) <- TRUE
 rleafcn_global <- raster(leafcn_global, "nmass") 
 sp_sites <- SpatialPoints(leafcn_site[,c("lon","lat","z")]) # only select lon and lat
 
-leafcn_pred_direct <- extract(rleafcn_global, sp_sites, sp = TRUE) %>% as_tibble() %>% 
+leafcn_pred_direct <- raster::extract(rleafcn_global, sp_sites, sp = TRUE) %>% as_tibble() %>% 
   right_join(leafcn_site, by = c("lon", "lat","z")) %>% 
   dplyr::rename( nimpl_nmass_directly = nmass)
 

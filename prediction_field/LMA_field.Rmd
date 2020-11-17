@@ -53,7 +53,7 @@ raster_SLA_crop
 res(raster_z_crop)
 res(raster_SLA_crop)
 
-resampled_SLA <- resample(raster_SLA_crop, raster_z_crop, method="ngb")
+resampled_SLA <- raster::resample(raster_SLA_crop, raster_z_crop, method="ngb")
 df_SLA <- stack(resampled_SLA)
 df_SLA <- as.data.frame(df_SLA,xy = TRUE)
 names(df_SLA) <- c("lon","lat","SLA")
@@ -218,7 +218,7 @@ gridded(leafcn_global) <- TRUE
 rleafcn_global <- raster(leafcn_global, "LMA") 
 sp_sites <- SpatialPoints(leafcn_site[,c("lon","lat","z")]) # only select lon and lat
 
-leafcn_pred_direct <- extract(rleafcn_global, sp_sites, sp = TRUE) %>% as_tibble() %>% 
+leafcn_pred_direct <- raster::extract(rleafcn_global, sp_sites, sp = TRUE) %>% as_tibble() %>% 
   right_join(leafcn_site, by = c("lon", "lat","z")) %>% 
   dplyr::rename( TRY_lma = LMA)
 
@@ -236,7 +236,7 @@ gridded(leafcn_global) <- TRUE
 rleafcn_global <- raster(leafcn_global, "LMA") 
 sp_sites <- SpatialPoints(leafcn_site[,c("lon","lat","z")]) # only select lon and lat
 
-leafcn_pred_direct <- extract(rleafcn_global, sp_sites, sp = TRUE) %>% as_tibble() %>% 
+leafcn_pred_direct <- raster::extract(rleafcn_global, sp_sites, sp = TRUE) %>% as_tibble() %>% 
   right_join(leafcn_site, by = c("lon", "lat","z")) %>% 
   dplyr::rename( TRY_lma = LMA)
 
@@ -299,10 +299,50 @@ final$nmass <- final$narea/final$lma
 #2 models to be considered now
 summary(lm(nmass ~ Tg + PPFD + lma , data = final))
 
+coef(lm(nmass ~ Tg + PPFD + lma , data = final))
+
+
 final$vcmax25_lma <- final$Vcmax.25/final$lma
 
 summary(lm(nmass ~ vcmax25_lma, data = final))
 
 dim(final)
+
+#3. lastly,considering add soil C/N into statistical model. That is, Nmass ~ Vcmax25/lma
+library(raster)
+library(rgdal)
+library(dplyr)
+library(rbeni)
+library(ncdf4)
+soil <- raster('~/data/ISRIC/data_orig/data/raster/w001000.adf')
+NRE_lonlat <- final[,c("lon","lat","z")]
+
+sp_sites <- SpatialPoints(NRE_lonlat[,c("lon","lat","z")]) # only select lon and lat
+
+#change its variable name to SUID, this is a unique code that could be used to merged with soil data, which will be further merged with csv below.
+NRE_lonlat2 <- raster::extract(soil, sp_sites, sp = TRUE) %>% as_tibble() %>% 
+  right_join(NRE_lonlat, by = c("lon", "lat","z")) %>% 
+  dplyr::rename( SUID = w001000)
+
+#input soil information data csv
+ISRIC.data<-read.csv(file="~/data/ISRIC/data_orig/data/HW30s_FULL.csv",header=TRUE,sep=";",dec = ".") # Now, input ISRIC database
+data.soil.extract <- merge(NRE_lonlat2,ISRIC.data,by='SUID',all.x=TRUE) # merge site with soil variables by using SUID
+data.soil.extract2 <- subset(data.soil.extract,CNrt>0) # select available CNrt
+data.soil.extract3 <- data.soil.extract2[,c("lon","lat","z","CNrt")] # only select CNrt variable
+
+# note that in each site there might be more than 1 samples measured, so we should aggregate them which make sures that one grid holds one data only.
+ss1 <- aggregate(data.soil.extract3,by=list(data.soil.extract3$lon,data.soil.extract3$lat,data.soil.extract3$z), FUN=mean, na.rm=TRUE) 
+ss2 <- ss1[,c("lon","lat","z","CNrt")] # now,select lon, lat, z and CNrt only
+
+# finally, merging site-based soil c/n data into our current dataframe
+final_add_CN <-Reduce(function(x,y) merge(x = x, y = y, by = c("lon","lat","z"),all.x=TRUE), 
+                  list(final,ss2))
+
+summary(final_add_CN)
+
+summary(lm(nmass ~ CNrt + vcmax25_lma, data = final_add_CN))
+
+summary(lm(nmass ~ CNrt + Vcmax.25 + lma, data = final_add_CN))
+
 
 ```
