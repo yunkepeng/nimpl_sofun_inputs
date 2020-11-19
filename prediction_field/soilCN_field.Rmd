@@ -1,0 +1,208 @@
+---
+output:
+  html_document: default
+  pdf_document: default
+  word_document: default
+---
+
+---
+title: "Prediction field of Soil CN"
+author: "Yunke Peng"
+date: "Nov 19 2020"
+output: html_document
+---
+
+## Introduction about Global nc files
+
+Here Soil C/N processing is too large so we take them as a separate part.
+The steps include
+ * input original raster (1/120 resolution) that includes SUID, and then aggregate it to 1/6 resolution
+ * Merge this grid data (for SUID) with HULL.csv (for SUID and soil CN), so that each grid has soil C/N data - based on weighted-sum method in top layer (20-60cm)
+ * Resample 1/6 resolution to half resolution (no need for cdo!)
+ * Using knn method to fill all grids
+
+1. Input original raster (1/120 resolution), aggregate to half degree resolution, combine with soil csv data to get soil C/N map.
+```{r}
+library(tidyverse)  # depends
+library(ncmeta)
+library(viridis)
+library(ggthemes)
+library(LSD)
+library(yardstick)
+library(ggplot2)
+library(RColorBrewer)
+library(dplyr)
+library(gplots)
+library(tidyselect)
+library(extrafont)
+library(rbeni)
+library(raster)
+library(spgwr)
+library(maps)
+library(rworldmap)
+library(cowplot)
+library(rsample)    # for creating validation splits
+library(recipes)    # for feature engineering
+# Modeling packages
+library(caret)       # for fitting KNN models
+library(h2o)       # for resampling and model training
+library(AmesHousing)
+library(modeldata)
+library(dslabs)
+library(purrr)
+library(randomForest)
+
+soil <- raster('~/data/ISRIC/data_orig/data/raster/w001000.adf') # map input from the last 2015 version of ISRIC (Batjes 2015 ISRIC report)
+#original resolution is 0.008333333 (1/120), now we convert to 20 times coarser, that is 1/6 (half_deg) which matches our standard.
+b <- aggregate(soil, fact = c(20, 20),na.rm=TRUE,fun=modal)
+
+halfdeg_CN <- as.data.frame(rasterToPoints(b))
+
+names(halfdeg_CN) <- c("lon","lat","SUID")
+
+halfdeg_CN2 <- subset(halfdeg_CN,SUID>0)
+
+#merged with ISRIC data
+ISRIC.data<-read.csv(file="~/data/ISRIC/data_orig/data/HW30s_FULL.csv",header=TRUE,sep=";",dec = ".") # Now, input ISRIC database
+
+ISRIC2 <- ISRIC.data[,c("SUID","SCID","PROP","CNrt","TopDep","BotDep")]
+
+ISRIC3 <- subset(ISRIC2,(CNrt>0 & TopDep >= 20 & BotDep <= 60))
+head(ISRIC3)
+
+ISRIC4 <- aggregate(ISRIC3,by = list(ISRIC3$SUID,ISRIC3$SCID,ISRIC3$PROP),FUN=mean,na.rm=TRUE)
+
+ISRIC5 <- ISRIC4[,c("SUID","SCID","PROP","CNrt")]
+
+ISRIC6 <- ISRIC5 %>%
+  group_by(SUID) %>%
+  mutate(Final_CNrt = CNrt * PROP / sum(PROP))
+
+ISRIC7 <- aggregate(Final_CNrt~SUID,FUN = sum, na.rm=TRUE,data=ISRIC6)
+
+names(ISRIC7) <- c("SUID","CNrt")
+
+data.soil.extract <- merge(halfdeg_CN2,ISRIC7,by="SUID",all.x=TRUE) # merge site with soil variables by using SUID
+
+final_CN <- data.soil.extract[,c("lon","lat","CNrt")] # only select CNrt variable
+
+plot_map3(final_CN, 
+          varnam = "CNrt",plot_title = "CNrt in 0.166667 resolution",
+          latmin = -65, latmax = 85)
+
+coordinates(final_CN) <- ~lon+lat
+gridded(final_CN) <- TRUE
+
+r <- raster(final_CN, "CNrt")
+plot(r)
+
+#resample
+elev_nc <- read_nc_onefile("~/data/watch_wfdei/WFDEI-elevation.nc")
+elev <- as.data.frame(nc_to_df(elev_nc, varnam = "elevation"))
+summary(elev)
+names(elev) <- c("lon","lat","z")
+coordinates(elev) <- ~lon+lat 
+gridded(elev) <- TRUE
+raster_z <- raster(elev, "z") 
+
+bounding_box <- extent(-180, 180, -90, 90)
+raster_z_crop <- crop(raster_z, bounding_box)
+raster_z_crop
+
+#2. Input 3km raster
+raster_CN <- r
+raster_CN_crop <- crop(raster_CN, bounding_box)
+raster_CN_crop
+
+#raster of SLA (0.02694946* 0.02694946) will be resampled to 0.5*0.5 resolution, based on provided elevation raster 
+res(raster_z_crop)
+res(raster_CN_crop)
+
+resampled_CN <- raster::resample(raster_CN_crop, raster_z_crop, method="ngb")
+df_CN <- stack(resampled_CN)
+df_CN <- as.data.frame(df_CN,xy = TRUE)
+
+summary(df_CN)
+
+names(df_CN) <- c("lon","lat","CNrt")
+
+plot_map3(df_CN, 
+          varnam = "CNrt",plot_title = "CNrt in 0.5 resolution",
+          latmin = -65, latmax = 85)
+
+names(df_CN) <- c("lon","lat","CNrt")
+
+#We start our work from here - using knn method to fill our NA grids
+#So, what grids need to be filled? We of course don't want to fill sea grids or edge grids
+#Maybe we can input PPFD map - for those grid with available PPFD, then we considered as land grid to fill its NA
+
+elev_nc <- read_nc_onefile("~/data/nimpl_sofun_inputs/map/Final_ncfile/PPFD.nc")
+elev <- as.data.frame(nc_to_df(elev_nc, varnam = "PPFD"))
+names(elev) <- c("lon","lat","PPFD")
+input <- merge(elev,df_CN,by = c("lon","lat"), all.x= TRUE)
+
+training_data <- subset(input,CNrt>0)
+dim(training_data)
+
+testing_data <- subset(input,is.na(CNrt)==TRUE & PPFD > 0)  #only select NA on land
+dim(testing_data)
+
+training_data <- training_data[,c("lon","lat","CNrt")]
+testing_data <- testing_data[,c("lon","lat","CNrt")]
+
+# we will use those 59804 grids to predict those 5046 grids
+
+# 3. knn training
+cv <- trainControl(
+  method = "cv", 
+  number = 10
+)
+
+# Create a hyperparameter grid search
+hyper_grid <- expand.grid(
+  k = floor(seq(5, 20, length.out = 15))
+)
+
+knn_fit <- train(CNrt ~., data = training_data,
+                 method = "knn",
+                 trControl=cv,
+                 preProcess = c("center", "scale"),
+                 tuneGrid = hyper_grid)
+
+knn_fit
+
+# output prediction data and add it in testing_data
+test_pred <- predict(knn_fit,newdata=testing_data)
+testing_data$CNrt <- test_pred
+
+#rbind, and merge back with lon.
+final <- rbind(training_data,testing_data)
+
+final2 <-Reduce(function(x,y) merge(x = x, y = y, by = c("lon","lat"),all.x=TRUE), 
+                list(elev,final))
+#form final3 dataframe as final output, and plot
+final3 <- final2[,c("lon","lat","CNrt")]
+
+final4 <- final3[order(final3[,2],final3[,1]),]
+final4_df <- final4
+coordinates(final4) <- ~lon+lat
+gridded(final4) <- TRUE
+rfinal <- raster(final4, "CNrt")
+plot(rfinal)
+
+library(ncdf4)
+ncin <- nc_open("~/data/watch_wfdei/WFDEI-elevation.nc")
+lon <- ncvar_get(ncin,"lon")
+lat<-ncvar_get(ncin,"lat")
+
+CNrt_nc <- list(df_to_grid(final4_df,varnam = "CNrt", lonnam = "lon", latnam = "lat"))
+names(CNrt_nc) <- "CNrt"
+varams = "CNrt"
+test <- list(lon,lat,CNrt_nc,varams)
+names(test) <- c("lon","lat","vars","varams")
+write_nc2(test,varnams = "CNrt",long_name = "CNrt",units = "unitless",
+          path = "~/data/nimpl_sofun_inputs/map/Final_ncfile/CNrt.nc")
+
+``` 
+
+
