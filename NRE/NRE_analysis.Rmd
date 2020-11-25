@@ -6,6 +6,8 @@ output:
 ---
 
 ---
+
+
 title: "Fitted statistical model for Nitrogen resorption efficiency"
 author: "Yunke Peng"
 date: "Nov 16, 2020"
@@ -223,9 +225,14 @@ new_DF <- subset(NRE_climate, is.na(NRE_climate))
 NRE_climate <- subset(NRE_climate, vpd>0)
 dim(NRE_climate)
 
-summary(lm(log((NRE/100)/(1-(NRE/100)))~MAT+log(MAP),data=NRE_climate))
-summary(lm(log((NRE/100)/(1-(NRE/100)))~Tg+log(vpd),data=NRE_climate))
-summary(lm(log((NRE/100)/(1-(NRE/100)))~Tg+log(alpha),data=NRE_climate))
+NRE_climate$nre <- NRE_climate$NRE/100
+
+summary(lm(log(nre/(1-nre))~MAT+log(MAP),data=NRE_climate))
+summary(lm(log(nre/(1-nre))~Tg+log(alpha),data=NRE_climate))
+
+#we use this model eventually
+summary(lm(log(nre/(1-nre))~Tg+log(vpd),data=NRE_climate))
+
 
 #This is just the end after including climate factors. Now, as far as we know vpd and Tg could be very good predictors, since it has good R2 (R2 =0.3),
 #and better than the design when using MAT or MAP alternatively.

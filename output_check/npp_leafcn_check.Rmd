@@ -6,26 +6,26 @@ output:
 ---
 
 ---
-title: "Output GPP, NPP, NPP[tissues], leaf C/N from sofun/yunkebranch_units, and compare it with site-level data"
+title: "Output GPP, NPP, NPP[tissues], leaf C/N，NRE, N flux in leaf, wood and root from sofun/yunkebranch, and compare it with site-level data"
 author: "Yunke Peng"
-date: "Oct 19 2020"
+date: "Nov 25 2020"
 output: html_document
 ---
 
 ##Here the main steps were:
 * Input nc files (from multiple years), and obtain mean of multiple years, then generating a dataframe for each variable.
 
-* Input site-level GPP, NPP, ANPP, BNPP, LNPP (leaf NPP), WNPP (wood NPP), and leaf C/N (which is consistent to the samples used in statistical models earlier).
+* Input site-level GPP, NPP, ANPP, BNPP, LNPP (leaf NPP), WNPP (wood NPP), and leaf C/N, NRE, N fluxes in leaf, wood and root, nuptake 
 
 * Extract site-level variable from Global map output (predictions), based on geographically weighted regressions analysis
 
-* Compare site obs. vs. pred.
+* Compare site obs. vs. pred. (sites were divided by forest vs. grassland; but now we only have statistical model for forest).
 
-* Output map of each output, as a brief check.
-
-* Study sites of NPP, and leaf C/N
+* Also Output map of each output, as a brief check.
 
 ```{r}
+library(ingestr)
+library(dplyr)
 library(tidyverse)  # depends
 library(ncmeta)
 library(viridis)
@@ -44,10 +44,148 @@ library(spgwr)
 library(maps)
 library(rworldmap)
 library(cowplot)
+library(spgwr)
+# (1) pre-processing NPP
+# rbind data (more data details see https://github.com/yunkepeng/nimpl_sofun_inputs/blob/master/NPP/NPP_statistical_model.Rmd)
+NPP_SaraVicca <- read.csv(file="~/data/NPP_Yunke/NPP_SaraVicca/NPP_SaraVicca.csv")
+NPP_Malhi <- read.csv(file="~/data/NPP_Yunke/NPP_Malhi/NPP_Malhi.csv")
+NPP_Keith <- read.csv(file="~/data/NPP_Yunke/NPP_Keith/NPP_Keith.csv")
+NPP_Forc <- read.csv(file="~/data/NPP_Yunke/NPP_Forc/NPP_Forc.csv")
+NPP_Schulze <- read.csv(file="~/data/NPP_Yunke/NPP_Schulze/NPP_Schulze.csv")
+
+NPP_all <- rbind(NPP_SaraVicca,NPP_Malhi,NPP_Keith,NPP_Forc,NPP_Schulze)
+
+#add pft data derived from orginal data provided from Sara Vicca, and Schulze's book.
+Evergreen <- read.csv(file="~/data/NPP_Yunke/NPP_SaraVicca/orig/pft.csv")
+NPP_all2 <- merge(NPP_all,Evergreen,by=c("site"),all.x=TRUE)
+NPP_all3 <- NPP_all2[,c("site","lon","lat","z","file","Begin_year","End_year",
+                        "Source","GPP","TNPP_1","ANPP_2","BNPP_1","NPP.foliage","NPP.wood","pft")]
+
+# (2) add data from Tian Di (pft = grassland for all data)
+#firstly, clean our current data
+Tiandi_df <- read.csv(file="~/data/npp_stoichiometry_grasslands_tiandi/npp_stoichiometry_china_grassland_CN_stoichiometry_with_matched_NPP_data_from_Prof_Fang_group_20201026.csv")
+#as proved in Beni's ref, there is no big diff about lon_stoichmenistry and lon_npp, so we used the lon_npp because it is npp analyses now!
+Tiandi_npp <- Tiandi_df[,c("Original_Site_Label_stoichiometry","Longitude_NPP","Latitude_NPP","Altitude_stoichiometry","Stoichiometry_Detection_year","Stoichiometry_Detection_year","TNPP","ANPP","ANPP","BNPP","CNratio_leaf","CNratio_root")]
+#we will go back to c/n ratio later! It is NPP now only...
+names(Tiandi_npp) <- c("site","lon","lat","z","Begin_year","End_year","TNPP_1","ANPP_2","NPP.foliage","BNPP_1","CN_leaf","CN_root")
+
+# (3) add data from Campioli (pft = grassland for all data)
+Cam_df <- read.csv(file="~/data/campioli/grasslands_MCampioli_20160111.csv")
+#correct coordinates firstly
+for (i in 1:nrow(Cam_df)){
+  if (Cam_df$latitude_sign[i] == "S"){
+    Cam_df$lat[i] <- -(Cam_df$latitude_value[i])
+    } else {
+      Cam_df$lat[i] <- Cam_df$latitude_value[i]
+    }
+  if (Cam_df$longitude_sign[i] == "W"){
+    Cam_df$lon[i] <- -(Cam_df$longitude_value[i])
+  } else {
+    Cam_df$lon[i] <- Cam_df$longitude_value[i]
+  }
+}
+
+Cam_npp <- Cam_df[,c("site","lon","lat","elevation","period_start","period_end","tnpp","anpp","anpp","bnpp")]
+names(Cam_npp) <- c("site","lon","lat","z","Begin_year","End_year","TNPP_1","ANPP_2","NPP.foliage","BNPP_1")
+
+#rbind them and manually add some input
+NPP_final <- dplyr::bind_rows(NPP_all3, Tiandi_npp,Cam_npp) 
+
+NPP_final$file[685:1598] <- "Tiandi"
+NPP_final$file[1599:1739] <- "MCampioli"
+
+NPP_final$Source[685:1598] <- "Tiandi in Euler (Tibet dataset)"
+NPP_final$Source[1599:1739] <- "MCampioli in Euler"
+
+NPP_final$pft[685:1739] <- "Grassland"
+
+summary(NPP_final)
+
+NPP_final$lnf_obs <- NPP_final$NPP.foliage/NPP_final$CN_leaf
+NPP_final$bnf_obs <- NPP_final$BNPP_1/NPP_final$CN_root
+
+for (i in 1:nrow(NPP_final)){
+  if (NPP_final$pft[i] == "Deciduous"|NPP_final$pft[i] == "Evergreen"|NPP_final$pft[i] == "Forest"|NPP_final$pft[i] == "Mixed"){
+    NPP_final$pft2[i] <- "Forest"
+  } else {
+    NPP_final$pft2[i] <- "Grassland"
+  }
+}
+
+#divide into 2 pfts and aggregate to sitemean, and finally combine them both.
+NPP_Forest <- subset(NPP_final,pft2=="Forest")
+NPP_Forest_site <- aggregate(NPP_Forest, by=list(NPP_Forest$lon,NPP_Forest$lat,NPP_Forest$z), mean,na.rm=TRUE)
+NPP_Forest_site <- NPP_Forest_site[,-c(1,2,3,4)]
+summary(NPP_Forest_site)
+NPP_Forest_site$pft2 <- "Forest"
+
+NPP_Grassland <- subset(NPP_final,pft2=="Grassland")
+NPP_Grassland_site <- aggregate(NPP_Grassland,by=list(NPP_Grassland$lon,NPP_Grassland$lat,NPP_Grassland$z),mean,na.rm=TRUE)
+NPP_Grassland_site <- NPP_Grassland_site[,-c(1,2,3,4)]
+summary(NPP_Grassland_site)
+NPP_Grassland_site$pft2 <- "Grassland"
+
+NPP <- rbind(NPP_Forest_site,NPP_Grassland_site)
+summary(NPP)
+
+#add NRE
+NRE_Du <- read.csv(file="~/data/NRE_various/NRE_Du/NRE_Du.csv")
+NRE_Dong <- read.csv(file="~/data/NRE_various/NRE_Deng/NRE_Deng.csv")
+
+NRE_Du_df <- NRE_Du[,c("lon","lat","NRE","MAT","MAP")]
+NRE_Du_df <- aggregate(NRE_Du_df,by=list(NRE_Du_df$lon,NRE_Du_df$lat), FUN=mean, na.rm=TRUE) #site-mean
+NRE_Du_df <- NRE_Du_df[,c(3:7)]
+head(NRE_Du_df)
+dim(NRE_Du_df)
+
+NRE_Dong_df <- NRE_Dong[,c("Longitude","Latitude","NRE.nitrogen.resorption.efficiency.","MAT","MAP")]
+names(NRE_Dong_df) <- c("lon","lat","NRE","MAT","MAP")
+head(NRE_Dong_df)
+NRE_Dong_df <- aggregate(NRE_Dong_df,by=list(NRE_Dong_df$lon,NRE_Dong_df$lat), FUN=mean, na.rm=TRUE) #site-mean
+NRE_Dong_df <- NRE_Dong_df[,c(3:7)]
+dim(NRE_Dong_df)
+
+
+NRE_Dong_df$source <- "Dong"
+NRE_Du_df$source <- "Du"
+NRE_df <- rbind(NRE_Du_df,NRE_Dong_df)
+summary(NRE_df)
+
+#check repeated data, and remove 6 repeated points from Du et al. paper
+NRE_df$repeated <- duplicated(NRE_df[,c("lon","lat")])
+summary(NRE_df$repeated)
+NRE_df <- subset(NRE_df,repeated==FALSE)
+
+#project data
+newmap <- getMap(resolution = "low")
+plot(newmap, xlim = c(-180, 180), ylim = c(-75, 75), asp = 1)
+
+points(NRE_df$lon,NRE_df$lat, col="red", pch=16,cex=1)
+
+#3. add elevation in this df, based on ingtestr 
+siteinfo <- NRE_df[,c("lon","lat")] # present x and y separately
+siteinfo$date_start <- lubridate::ymd(paste0(1982, "-01-01"))
+siteinfo$date_end <- lubridate::ymd(paste0(2011, "-12-31"))
+siteinfo$sitename <- paste0("s", 1:nrow(siteinfo),sep="")
+siteinfo <- as_tibble(siteinfo)
+
+df_etopo <- ingest(
+  siteinfo,
+  source = "etopo1",
+  dir = "~/data/etopo/" 
+)
+
+NRE_df$elevation <- as.numeric(as.data.frame(df_etopo$data))
+subset(NRE_df,elevation<0)
+#Some grids > 0, lets' assume -3062 as NA, and others as 0 firstly?
+NRE_df$elevation[NRE_df$elevation< -50] <- NA
+NRE_df$elevation[NRE_df$elevation< 0] <- 0
+
+summary(NRE_df)
 
 #1. In our path (with multiple years data), identify which is the first year and end year of those files
-firstyr_data <- 1980 # In data file, which is the first year
-endyr_data <- 2018 # In data file, which is the last year
+firstyr_data <- 1982 # In data file, which is the first year
+endyr_data <- 2011 # In data file, which is the last year
 location <- "~/data/output/"
 alloutput_list <- list.files(location,full.names = T)
 
@@ -103,312 +241,270 @@ lnpp_df <- inputnc("lnpp",1982,2011)
 
 wnpp_df <- inputnc("wnpp",1982,2011)
 
-leafcn_df <- inputnc("leafcn",2007,2018) # this is actually leaf n/c. We used this time period, because this is when all leaf C/N data collected
-leafcn_df$leafcn <- 1/leafcn_df$leafcn # we converted it to leaf c/n here.
+leafcn_df <- inputnc("leafcn",1982,2011) # this is actually leaf n/c. 
 
-lnf <- inputnc("lnf",1982,2011) 
+lnf_df <- inputnc("lnf",1982,2011) 
 
-wnf <- inputnc("wnf",1982,2011) 
+wnf_df <- inputnc("wnf",1982,2011) 
 
-bnf <- inputnc("bnf",1982,2011) 
+bnf_df <- inputnc("bnf",1982,2011) 
 
-bnf <- inputnc("nuptake",1982,2011) 
+nuptake_df <- inputnc("nuptake",1982,2011) 
 
-#3. Input NPP and leafCN site-based data
-# (1) pre-processing NPP
-# rbind data (more data details see https://github.com/yunkepeng/nimpl_sofun_inputs/blob/master/NPP/NPP_statistical_model.Rmd)
-NPP_SaraVicca <- read.csv(file="~/data/NPP_Yunke/NPP_SaraVicca/NPP_SaraVicca.csv")
-NPP_Malhi <- read.csv(file="~/data/NPP_Yunke/NPP_Malhi/NPP_Malhi.csv")
-NPP_Keith <- read.csv(file="~/data/NPP_Yunke/NPP_Keith/NPP_Keith.csv")
-NPP_Forc <- read.csv(file="~/data/NPP_Yunke/NPP_Forc/NPP_Forc.csv")
+nre_df <- inputnc("nre",1982,2011) 
 
-#NPP_SaraVicca <- read.csv(file="D:/PhD/nimpl_sofun_inputs/Data/NPP/NPP_SaraVicca/NPP_SaraVicca.csv")
-#NPP_Malhi <- read.csv(file="D:/PhD/nimpl_sofun_inputs/Data/NPP/NPP_Malhi/NPP_Malhi.csv")
-#NPP_Keith <- read.csv(file="D:/PhD/nimpl_sofun_inputs/Data/NPP/NPP_Keith/NPP_Keith.csv")
-#NPP_Forc <- read.csv(file="D:/PhD/nimpl_sofun_inputs/Data/NPP/NPP_Forc/NPP_Forc.csv")
-NPP_all <- rbind(NPP_SaraVicca,NPP_Malhi,NPP_Keith,NPP_Forc)
+a <- 1.5 #distance
 
-# structure dataframe for NPP in tissues
-gpp_site <- aggregate(GPP~lon+lat+z,data=NPP_all[,c("lon","lat","z","GPP")],mean,na.rm=TRUE)
-dim(gpp_site)
-
-npp_site <- aggregate(TNPP_1~lon+lat+z,data=NPP_all[,c("lon","lat","z","TNPP_1")],mean,na.rm=TRUE)
-dim(npp_site)
-
-anpp_site <- aggregate(ANPP_2~lon+lat+z,data=NPP_all[,c("lon","lat","z","ANPP_2")],mean,na.rm=TRUE)
-dim(anpp_site) # Comparing with above, 50 of 310 samples have measured ANPP, but not NPP (due to lack of BNPP)
-
-bnpp_site <- aggregate(BNPP_1~lon+lat+z,data=NPP_all[,c("lon","lat","z","BNPP_1")],mean,na.rm=TRUE)
-dim(bnpp_site)
-
-lnpp_site <- aggregate(NPP.foliage~lon+lat+z,data=NPP_all[,c("lon","lat","z","NPP.foliage")],mean,na.rm=TRUE)
-dim(lnpp_site)
-
-wnpp_site <- aggregate(NPP.wood~lon+lat+z,data=NPP_all[,c("lon","lat","z","NPP.wood")],mean,na.rm=TRUE)
-dim(wnpp_site)
-
-# (2) pre-processing leaf c/n
-leafCN <- read.csv(file="~/data/CN_leaf/final_leafCN.csv")
-#leafCN <- read.csv(file="D:/PhD/nimpl_sofun_inputs/Data/CN_leaf/final_leafCN.csv")
-
-# make species consitent
-for (i in 1:nrow(leafCN)){
-  if (is.na(leafCN$species2[i]) == TRUE){
-    leafCN$final_species[i]<- leafCN$species[i]} else { 
-      leafCN$final_species[i]<- paste(leafCN$species[i],sep=" ",leafCN$species2[i])} 
+#for gpp, npp, anpp, bnpp, lnpp, wnpp, lnf, bnf.
+for (i in 1:nrow(NPP)) {
+  tryCatch({
+    grid_global <- subset(gpp_df,gpp_df[,4]>0 & gpp_df[,3]>0)
+    grid_part <- subset(grid_global,lon>(NPP$lon[i]-a)&lon<(NPP$lon[i]+a)&
+                           lat>(NPP$lat[i]-a)&lat<(NPP$lat[i]+a))
+    coordinates(grid_part) <- c("lon","lat")
+    gridded(grid_part) <- TRUE
+    site_coord <- NPP[i,1:3]
+    coordinates(site_coord) <- c("lon","lat")
+    NPP$pred_gpp[i] <- NA
+    NPP$pred_gpp[i] <- (gwr(gpp ~ z, grid_part, bandwidth = 1.06, fit.points =site_coord,predictions=TRUE))$SDF$pred
+    }, error=function(e){}) # gpp
+  tryCatch({
+    grid_global <- subset(npp_df,npp_df[,4]>0 & npp_df[,3]>0)
+    grid_part <- subset(grid_global,lon>(NPP$lon[i]-a)&lon<(NPP$lon[i]+a)&
+                          lat>(NPP$lat[i]-a)&lat<(NPP$lat[i]+a))
+    coordinates(grid_part) <- c("lon","lat")
+    gridded(grid_part) <- TRUE
+    site_coord <- NPP[i,1:3]
+    coordinates(site_coord) <- c("lon","lat")
+    NPP$pred_npp[i] <- NA
+    NPP$pred_npp[i] <- (gwr(npp ~ z, grid_part, bandwidth = 1.06, fit.points =site_coord,predictions=TRUE))$SDF$pred
+  }, error=function(e){}) # npp
+  tryCatch({
+    grid_global <- subset(anpp_df,anpp_df[,4]>0 & anpp_df[,3]>0)
+    grid_part <- subset(grid_global,lon>(NPP$lon[i]-a)&lon<(NPP$lon[i]+a)&
+                          lat>(NPP$lat[i]-a)&lat<(NPP$lat[i]+a))
+    coordinates(grid_part) <- c("lon","lat")
+    gridded(grid_part) <- TRUE
+    site_coord <- NPP[i,1:3]
+    coordinates(site_coord) <- c("lon","lat")
+    NPP$pred_anpp[i] <- NA
+    NPP$pred_anpp[i] <- (gwr(anpp ~ z, grid_part, bandwidth = 1.06, fit.points =site_coord,predictions=TRUE))$SDF$pred
+  }, error=function(e){}) # anpp
+  tryCatch({
+    grid_global <- subset(bnpp_df,bnpp_df[,4]>0 & bnpp_df[,3]>0)
+    grid_part <- subset(grid_global,lon>(NPP$lon[i]-a)&lon<(NPP$lon[i]+a)&
+                          lat>(NPP$lat[i]-a)&lat<(NPP$lat[i]+a))
+    coordinates(grid_part) <- c("lon","lat")
+    gridded(grid_part) <- TRUE
+    site_coord <- NPP[i,1:3]
+    coordinates(site_coord) <- c("lon","lat")
+    NPP$pred_bnpp[i] <- NA
+    NPP$pred_bnpp[i] <- (gwr(bnpp ~ z, grid_part, bandwidth = 1.06, fit.points =site_coord,predictions=TRUE))$SDF$pred
+  }, error=function(e){}) # bnpp
+  tryCatch({
+    grid_global <- subset(lnpp_df,lnpp_df[,4]>0 & lnpp_df[,3]>0)
+    grid_part <- subset(grid_global,lon>(NPP$lon[i]-a)&lon<(NPP$lon[i]+a)&
+                          lat>(NPP$lat[i]-a)&lat<(NPP$lat[i]+a))
+    coordinates(grid_part) <- c("lon","lat")
+    gridded(grid_part) <- TRUE
+    site_coord <- NPP[i,1:3]
+    coordinates(site_coord) <- c("lon","lat")
+    NPP$pred_lnpp[i] <- NA
+    NPP$pred_lnpp[i] <- (gwr(lnpp ~ z, grid_part, bandwidth = 1.06, fit.points =site_coord,predictions=TRUE))$SDF$pred
+  }, error=function(e){}) # lnpp
+  tryCatch({
+    grid_global <- subset(wnpp_df,wnpp_df[,4]>0 & wnpp_df[,3]>0)
+    grid_part <- subset(grid_global,lon>(NPP$lon[i]-a)&lon<(NPP$lon[i]+a)&
+                          lat>(NPP$lat[i]-a)&lat<(NPP$lat[i]+a))
+    coordinates(grid_part) <- c("lon","lat")
+    gridded(grid_part) <- TRUE
+    site_coord <- NPP[i,1:3]
+    coordinates(site_coord) <- c("lon","lat")
+    NPP$pred_wnpp[i] <- NA
+    NPP$pred_wnpp[i] <- (gwr(wnpp ~ z, grid_part, bandwidth = 1.06, fit.points =site_coord,predictions=TRUE))$SDF$pred
+  }, error=function(e){}) # wnpp
+  tryCatch({
+    grid_global <- subset(lnf_df,lnf_df[,4]>0 & lnf_df[,3]>0)
+    grid_part <- subset(grid_global,lon>(NPP$lon[i]-a)&lon<(NPP$lon[i]+a)&
+                          lat>(NPP$lat[i]-a)&lat<(NPP$lat[i]+a))
+    coordinates(grid_part) <- c("lon","lat")
+    gridded(grid_part) <- TRUE
+    site_coord <- NPP[i,1:3]
+    coordinates(site_coord) <- c("lon","lat")
+    NPP$pred_lnf[i] <- NA
+    NPP$pred_lnf[i] <- (gwr(lnf ~ z, grid_part, bandwidth = 1.06, fit.points =site_coord,predictions=TRUE))$SDF$pred
+  }, error=function(e){}) # lnf
+  tryCatch({
+    grid_global <- subset(bnf_df,bnf_df[,4]>0 & bnf_df[,3]>0)
+    grid_part <- subset(grid_global,lon>(NPP$lon[i]-a)&lon<(NPP$lon[i]+a)&
+                          lat>(NPP$lat[i]-a)&lat<(NPP$lat[i]+a))
+    coordinates(grid_part) <- c("lon","lat")
+    gridded(grid_part) <- TRUE
+    site_coord <- NPP[i,1:3]
+    coordinates(site_coord) <- c("lon","lat")
+    NPP$pred_bnf[i] <- NA
+    NPP$pred_bnf[i] <- (gwr(bnf ~ z, grid_part, bandwidth = 1.06, fit.points =site_coord,predictions=TRUE))$SDF$pred
+  }, error=function(e){}) # bnf
 }
 
-# remove unreasonable outliers
-leafCN2 <- subset(leafCN,Vcmax.25>0&Vcmax.25<300&cn>1&cn<100&lma>0&lma<700)
+#for leafcn
+for (i in 1:nrow(NPP)) {
+  tryCatch({
+    grid_global <- subset(leafcn_df,leafcn_df[,4]>0 & leafcn_df[,3]>0)
+    grid_part <- subset(grid_global,lon>(NPP$lon[i]-a)&lon<(NPP$lon[i]+a)&
+                          lat>(NPP$lat[i]-a)&lat<(NPP$lat[i]+a))
+    coordinates(grid_part) <- c("lon","lat")
+    gridded(grid_part) <- TRUE
+    site_coord <- NPP[i,1:3]
+    coordinates(site_coord) <- c("lon","lat")
+    NPP$pred_leafcn[i] <- NA
+    NPP$pred_leafcn[i] <- (gwr(leafcn ~ z, grid_part, bandwidth = 1.06, fit.points =site_coord,predictions=TRUE))$SDF$pred
+  }, error=function(e){})} 
 
-# aggregate from species to site-mean leaf C/N
-leafcn_site <- aggregate(cn~lon+lat+Elevation,leafCN2,mean)
-names(leafcn_site) <- c("lon","lat","z","leafcn")
-summary(leafcn_site)
-dim(leafcn_site) # we will use this database for model validation later on.
-
-
-#4. Start geographically weighted regressions 
-# Now, both global_df and site_df have included four columns: lon, lat, z, var
-a <- 1.5 # which degree (distance) of grid when interpolating gwr from global grids
-i <- 1
-#we have not wrote functions here, becaue it may help to trace about our prediction (NA always occurs that stops the process)
-#GPP
-for (i in c(1:nrow(gpp_site))){
-  gpp_global <- na.omit(gpp_df)
-  gpp_part <- subset(gpp_global,lon>(gpp_site[i,1]-a)&lon<(gpp_site[i,1]+a)&
-                       lat>(gpp_site[i,2]-a)&lat<(gpp_site[i,2]+a))
-  coordinates(gpp_part) <- c("lon","lat")
-  gridded(gpp_part) <- TRUE
-  
-  gpp_coord <- gpp_site[i,1:3]
-  coordinates(gpp_coord) <- c("lon","lat")
-  gpp_site$pred[i] <- (gwr(gpp ~ z, gpp_part, bandwidth = 1.06, fit.points =gpp_coord,predictions=TRUE))$SDF$pred
-}
-
-#NPP
-for (i in c(1:nrow(npp_site))){
-  npp_global <- na.omit(npp_df)
-  npp_part <- subset(npp_global,lon>(npp_site[i,1]-a)&lon<(npp_site[i,1]+a)&
-                       lat>(npp_site[i,2]-a)&lat<(npp_site[i,2]+a))
-  coordinates(npp_part) <- c("lon","lat")
-  gridded(npp_part) <- TRUE
-  
-  npp_coord <- npp_site[i,1:3]
-  coordinates(npp_coord) <- c("lon","lat")
-  npp_site$pred[i] <- (gwr(npp ~ z, npp_part, bandwidth = 1.06, fit.points =npp_coord,predictions=TRUE))$SDF$pred
-}
+#for nre
+NRE_plot <- NRE_df[,c("lon","lat","elevation")]
+names(NRE_plot) <- c("lon","lat","z")
+for (i in 1:nrow(NRE_plot)) {
+  tryCatch({
+    grid_global <- subset(nre_df,nre_df[,4]>0 & nre_df[,3]>0)
+    grid_part <- subset(grid_global,lon>(NRE_plot$lon[i]-a)&lon<(NRE_plot$lon[i]+a)&
+                          lat>(NRE_plot$lat[i]-a)&lat<(NRE_plot$lat[i]+a))
+    coordinates(grid_part) <- c("lon","lat")
+    gridded(grid_part) <- TRUE
+    site_coord <- NRE_plot[i,1:3]
+    coordinates(site_coord) <- c("lon","lat")
+    NRE_df$pred_nre[i] <- NA
+    NRE_df$pred_nre[i] <- (gwr(nre ~ z, grid_part, bandwidth = 1.06, fit.points =site_coord,predictions=TRUE))$SDF$pred
+  }, error=function(e){}) }
 
 
-#anpp: some points cannot be interpolated (focused grids = NA), which needs to be skipped
-for (i in c(2:12,14:26,28:34,37:45,47:54,56:60,62:248,250:nrow(anpp_site))){
-  anpp_global <- na.omit(anpp_df)
-  anpp_part <- subset(anpp_global,lon>(anpp_site[i,1]-a)&lon<(anpp_site[i,1]+a)&
-                        lat>(anpp_site[i,2]-a)&lat<(anpp_site[i,2]+a))
-  coordinates(anpp_part) <- c("lon","lat")
-  gridded(anpp_part) <- TRUE
-  
-  anpp_coord <- anpp_site[i,1:3]
-  coordinates(anpp_coord) <- c("lon","lat")
-  anpp_site$pred[i] <- (gwr(anpp ~ z, anpp_part, bandwidth = 1.06, fit.points =anpp_coord,predictions=TRUE))$SDF$pred
-}
-
-#bnpp
-for (i in c(1:nrow(bnpp_site))){
-  bnpp_global <- na.omit(bnpp_df)
-  bnpp_part <- subset(bnpp_global,lon>(bnpp_site[i,1]-a)&lon<(bnpp_site[i,1]+a)&
-                        lat>(bnpp_site[i,2]-a)&lat<(bnpp_site[i,2]+a))
-  coordinates(bnpp_part) <- c("lon","lat")
-  gridded(bnpp_part) <- TRUE
-  
-  bnpp_coord <- bnpp_site[i,1:3]
-  coordinates(bnpp_coord) <- c("lon","lat")
-  bnpp_site$pred[i] <- (gwr(bnpp ~ z, bnpp_part, bandwidth = 1.06, fit.points =bnpp_coord,predictions=TRUE))$SDF$pred
-}
-
-#lnpp
-lnpp_site$pred <- NA
-for (i in c(2:5,7:17,19:23,26:32,34:36,38:42,44:189,191:nrow(lnpp_site))){
-  lnpp_global <- na.omit(lnpp_df)
-  lnpp_part <- subset(lnpp_global,lon>(lnpp_site[i,1]-a)&lon<(lnpp_site[i,1]+a)&
-                        lat>(lnpp_site[i,2]-a)&lat<(lnpp_site[i,2]+a))
-  coordinates(lnpp_part) <- c("lon","lat")
-  gridded(lnpp_part) <- TRUE
-  
-  lnpp_coord <- lnpp_site[i,1:3]
-  coordinates(lnpp_coord) <- c("lon","lat")
-  lnpp_site[i,5]  <- (gwr(lnpp ~ z, lnpp_part, bandwidth = 1.06, fit.points = lnpp_coord, predictions=TRUE))$SDF$pred
-  #print(i)
-}
-
-#wnpp
-wnpp_site$pred <- NA
-for (i in c(2:4,6:15,17:20,23:29,31:33,35:39,41:174,176:nrow(wnpp_site))){
-  wnpp_global <- na.omit(wnpp_df)
-  wnpp_part <- subset(wnpp_global,lon>(wnpp_site[i,1]-a)&lon<(wnpp_site[i,1]+a)&
-                        lat>(wnpp_site[i,2]-a)&lat<(wnpp_site[i,2]+a))
-  coordinates(wnpp_part) <- c("lon","lat")
-  gridded(wnpp_part) <- TRUE
-  
-  wnpp_coord <- wnpp_site[i,1:3]
-  coordinates(wnpp_coord) <- c("lon","lat")
-  wnpp_site[i,5] <- (gwr(wnpp ~ z, wnpp_part, bandwidth = 1.06, fit.points =wnpp_coord,predictions=TRUE))$SDF$pred
-  #print(i)
-}
-
-#leafcn
-for (i in c(1:nrow(leafcn_site))){
-  leafcn_global <- na.omit(leafcn_df)
-  leafcn_part <- subset(leafcn_global,lon>(leafcn_site[i,1]-a)&lon<(leafcn_site[i,1]+a)&
-                          lat>(leafcn_site[i,2]-a)&lat<(leafcn_site[i,2]+a))
-  coordinates(leafcn_part) <- c("lon","lat")
-  gridded(leafcn_part) <- TRUE
-  
-  leafcn_coord <- leafcn_site[i,1:3]
-  coordinates(leafcn_coord) <- c("lon","lat")
-  leafcn_site$pred[i] <- (gwr(leafcn ~ z, leafcn_part, bandwidth = 1.06, fit.points =leafcn_coord,predictions=TRUE))$SDF$pred
-}
-
-
-
-#add pft data derived from orginal data provided from Sara Vicca
-Evergreen <- read.csv(file="~/data/NPP_Yunke/NPP_SaraVicca/orig/pft.csv")
-#Evergreen <- read.csv(file="D:/PhD/nimpl_sofun_inputs/Data/NPP/NPP_SaraVicca/orig/pft.csv")
-pft_type <- merge(NPP_all,Evergreen,by=c("site"),all.x=TRUE)
-pft_type2 <- pft_type[,c("lon","lat","z","pft")]
-pft_type3 <- unique(pft_type2)
-dim(pft_type3)
-nonforest <- subset(pft_type3, pft == "Grassland" |pft == "Plantation"|pft == "Cropland")
-dim(nonforest)
-#we realized that there are only 26 of 347 sites are NOT forest. We filtered it at here, 
-# which makes it easy to merge with our GPP, NPP...sites.
-nonforest[c(22:23),] 
-#we noticed that row 22 and 23 has the same site, but one notified as Cropland another notified as grassland, perhaps from different sources
-#this classfication is really not important, so let's delete one safely (so that it will not cause trouble when merging)
-nonforest <- nonforest[c(1:22,24:26),]
-
-#now, let's merge nonforest df to each GPP, NPP...dataset
-gpp_site <- merge(gpp_site,nonforest,by=c("lon","lat","z"),all.x=TRUE)
-npp_site <- merge(npp_site,nonforest,by=c("lon","lat","z"),all.x=TRUE)
-anpp_site <- merge(anpp_site,nonforest,by=c("lon","lat","z"),all.x=TRUE)
-bnpp_site <- merge(bnpp_site,nonforest,by=c("lon","lat","z"),all.x=TRUE)
-lnpp_site <- merge(lnpp_site,nonforest,by=c("lon","lat","z"),all.x=TRUE)
-wnpp_site <- merge(wnpp_site,nonforest,by=c("lon","lat","z"),all.x=TRUE)
-
-#see below, it is clear that only anpp and gpp dataset has available non-forest data.
-#They both have 25 samples (non-forest) separately.
-dim(subset(gpp_site,pft!="NA"))
-dim(subset(npp_site,pft!="NA"))
-dim(subset(anpp_site,pft!="NA"))
-dim(subset(bnpp_site,pft!="NA"))
-dim(subset(lnpp_site,pft!="NA"))
-dim(subset(wnpp_site,pft!="NA"))
-
-#5. compare mod vs. obs 
-#As mentioned above, we can only compare forest vs. non-forest in GPP and NPP analysis.
-#non-forest GPP
-gpp_nonforest <- subset(gpp_site, pft!="NA")
-dim(gpp_nonforest)
-analyse_modobs2(subset(gpp_nonforest,pred>0),"GPP","pred", type = "points")
-# forest GPP
-gpp_forest <- subset(gpp_site, is.na(pft)==TRUE)
-dim(gpp_forest)
-analyse_modobs2(subset(gpp_forest,pred>0),"GPP","pred", type = "points")
-
-#all gpp
-gpp_all <- gpp_site
-analyse_modobs2(subset(gpp_all,pred>0),"GPP","pred", type = "points")
-
-# it is clear that forest GPP (N = 138) shows better performance than forest + non-forest GPP (N =162), and than non-forest GPP (N = 24)
-
-#npp
-analyse_modobs2(subset(npp_site,pred>0),"TNPP_1","pred", type = "points")
-
-#divide anpp into forest vs. non-forest
-anpp_nonforest <- subset(anpp_site, pft!="NA")
-dim(anpp_nonforest)
-analyse_modobs2(subset(anpp_nonforest,pred>0),"ANPP_2","pred", type = "points")
-
-anpp_forest <- subset(anpp_site, is.na(pft)==TRUE)
-dim(anpp_forest)
-analyse_modobs2(subset(anpp_forest,pred>0),"ANPP_2","pred", type = "points")
-
-anpp_all <- anpp_site
-analyse_modobs2(subset(anpp_all,pred>0),"ANPP_2","pred", type = "points")
-
-#non-forest ANPP: R2 =0.3, n =24. which is better than forest or forest+non-forest anpp.
-
-analyse_modobs2(subset(bnpp_site,pred>0),"BNPP_1","pred", type = "points")
-
-analyse_modobs2(subset(lnpp_site,pred>0),"NPP.foliage","pred", type = "points")
-
-analyse_modobs2(subset(wnpp_site,pred>0),"NPP.wood","pred", type = "points")
-
-analyse_modobs2(subset(leafcn_site,pred>0),"leafcn","pred", type = "points")
+#now, time to ggplot
+#analyse_modobs2(subset(NPP,pft2=="Forest"),"GPP.x","pred_gpp", type = "points")
+#analyse_modobs2(NPP,"TNPP_1","pred_npp", type = "points")
+#analyse_modobs2(NPP,"TNPP_1","pred_npp", type = "points")
+#analyse_modobs2(NPP,"ANPP_2","pred_anpp", type = "points")
+#analyse_modobs2(subset(NPP,NPP.foliage>0),"NPP.foliage","pred_lnpp", type = "points")
+#analyse_modobs2(NPP,"NPP.wood","pred_wnpp", type = "points")
+#analyse_modobs2(subset(NPP,pft2=="Forest"),"BNPP_1","pred_bnpp", type = "points")
+#analyse_modobs2(NPP,"CN_leaf","predicted_leafcn", type = "points")
 
 #6. Represent, and save our maps
 #(1) gpp
 gg <- plot_map3(gpp_df[,c(1,2,4)], 
                 varnam = "gpp",plot_title = " GPP (gC/m2/yr)",
-                latmin = -65, latmax = 85)
-gg
-#ggsave("D:/PhD/nimpl_sofun_inputs/fig/map_gpp.png",plot = gg)
+                latmin = -65, latmax = 85, combine = FALSE)
 
-#(2) npp  
-gg<- plot_map3(npp_df[,c(1,2,4)], 
-               varnam = "npp",plot_title = " NPP (gC/m2/yr)",
-               latmin = -65, latmax = 85) 
-gg
-#ggsave("D:/PhD/nimpl_sofun_inputs/fig/map_npp.png",plot = gg)
+gg$ggmap + geom_point(data=subset(NPP,GPP>0 & pred_gpp>0 & pft2 == "Forest"),aes(lon,lat),col="red") + 
+  geom_point(data=subset(NPP,GPP>0 & pred_gpp>0 & pft2 == "Grassland"),aes(lon,lat),col="blue")
+gg$gglegend
+analyse_modobs2(NPP,"GPP","pred_gpp", type = "points")
+analyse_modobs2(subset(NPP,pft2=="Forest"),"GPP","pred_gpp", type = "points")
+analyse_modobs2(subset(NPP,pft2=="Grassland"),"GPP","pred_gpp", type = "points")
+
+#(2) npp
+gg <- plot_map3(npp_df[,c(1,2,4)], 
+                varnam = "npp",plot_title = " NPP (gC/m2/yr)",
+                latmin = -65, latmax = 85, combine = FALSE)
+
+gg$ggmap + geom_point(data=subset(NPP,pred_npp>0 & TNPP_1>0 & pft2 == "Forest"),aes(lon,lat),col="red") + 
+  geom_point(data=subset(NPP,pred_npp>0 & TNPP_1>0 & pft2 == "Grassland"),aes(lon,lat),col="blue")
+gg$gglegend
+analyse_modobs2(subset(NPP,pred_npp>0 & TNPP_1>0),"TNPP_1","pred_npp", type = "points")
+analyse_modobs2(subset(NPP,pred_npp>0 & TNPP_1>0 & pft2 == "Forest"),"TNPP_1","pred_npp", type = "points")
+analyse_modobs2(subset(NPP,pred_npp>0 & TNPP_1>0 & pft2 == "Grassland"),"TNPP_1","pred_npp", type = "points")
 
 #(3) anpp
-gg<- plot_map3(anpp_df[,c(1,2,4)], 
-               varnam = "anpp",plot_title = "Aboveground NPP (gC/m2/yr)",
-               latmin = -65, latmax = 85) 
-gg
-#ggsave("D:/PhD/nimpl_sofun_inputs/fig/map_anpp.png",plot = gg)
+gg <- plot_map3(anpp_df[,c(1,2,4)], 
+                varnam = "anpp",plot_title = " ANPP (gC/m2/yr)",
+                latmin = -65, latmax = 85, combine = FALSE)
 
-#(4) bnpp
-gg<- plot_map3(bnpp_df[,c(1,2,4)], 
-               varnam = "bnpp",plot_title = "Belowground NPP (gC/m2/yr)",
-               latmin = -65, latmax = 85) 
-gg
-#ggsave("D:/PhD/nimpl_sofun_inputs/fig/map_bnpp.png",plot = gg)
+gg$ggmap + geom_point(data=subset(NPP,pred_anpp>0 & ANPP_2>0 & pft2 == "Forest"),aes(lon,lat),col="red") + 
+  geom_point(data=subset(NPP,pred_anpp>0 & ANPP_2>0 & pft2 == "Grassland"),aes(lon,lat),col="blue")
+gg$gglegend
+analyse_modobs2(subset(NPP,pred_anpp>0 & ANPP_2>0),"ANPP_2","pred_anpp", type = "points")
+analyse_modobs2(subset(NPP,pred_anpp>0 & ANPP_2>0 & pft2 == "Forest"),"ANPP_2","pred_anpp", type = "points")
+analyse_modobs2(subset(NPP,pred_anpp>0 & ANPP_2>0 & pft2 == "Grassland"),"ANPP_2","pred_anpp", type = "points")
 
-#(5) lnpp
-gg<- plot_map3(lnpp_df[,c(1,2,4)], 
-               varnam = "lnpp",plot_title = "NPP allocated to leaves (gC/m2/yr)",
-               latmin = -65, latmax = 85) 
-gg
-#ggsave("D:/PhD/nimpl_sofun_inputs/fig/map_lnpp.png",plot = gg)
+#(4) npp leaf
+gg <- plot_map3(lnpp_df[,c(1,2,4)], 
+                varnam = "lnpp",plot_title = " NPP in leaf (gC/m2/yr)",
+                latmin = -65, latmax = 85, combine = FALSE)
 
-#(6) wnpp
-gg<- plot_map3(wnpp_df[,c(1,2,4)], 
-               varnam = "wnpp",plot_title = "NPP allocated to woods (gC/m2/yr)",
-               latmin = -65, latmax = 85) 
-gg
-#ggsave("D:/PhD/nimpl_sofun_inputs/fig/map_wnpp.png",plot = gg)
+gg$ggmap + geom_point(data=subset(NPP,NPP.foliage>0 & pred_lnpp>0 & pft2 == "Forest"),aes(lon,lat),col="red") + 
+  geom_point(data=subset(NPP,NPP.foliage>0 & pred_lnpp>0 & pft2 == "Grassland"),aes(lon,lat),col="blue")
+gg$gglegend
+analyse_modobs2(subset(NPP,NPP.foliage>0 & pred_lnpp>0 ),"NPP.foliage","pred_lnpp", type = "points")
+analyse_modobs2(subset(NPP,NPP.foliage>0 & pred_lnpp>0 & pft2 == "Forest"),"NPP.foliage","pred_lnpp", type = "points")
+analyse_modobs2(subset(NPP,NPP.foliage>0 & pred_lnpp>0 & pft2 == "Grassland"),"NPP.foliage","pred_lnpp", type = "points")
 
-#(7) leafcn
-gg<- plot_map3(leafcn_df[,c(1,2,4)], 
-               varnam = "leafcn",plot_title = "Leaf carbon to nitrogen ratio",
-               latmin = -65, latmax = 85,maxval = 100, combine = FALSE) 
-gg
+#(5) npp wood
+gg <- plot_map3(wnpp_df[,c(1,2,4)], 
+                varnam = "wnpp",plot_title = " NPP in wood (gC/m2/yr)",
+                latmin = -65, latmax = 85, combine = FALSE)
 
-#points(anpp_site$lon,anpp_site$lat, col="black", pch=16,cex=1.5)
-#ggsave("D:/PhD/nimpl_sofun_inputs/fig/map_leafcn.png",plot = gg)
+gg$ggmap + geom_point(data=subset(NPP,NPP.wood>0 & pred_wnpp>0 & pft2 == "Forest"),aes(lon,lat),col="red") + 
+  geom_point(data=subset(NPP,NPP.wood>0 & pred_wnpp>0 & pft2 == "Grassland"),aes(lon,lat),col="blue")
+gg$gglegend
+analyse_modobs2(subset(NPP,NPP.wood>0 & pred_wnpp>0 ),"NPP.wood","pred_wnpp", type = "points")
 
-#7. Mapping our global measured sites
-#map("world", fill=TRUE, col="white", bg="white",ylim=c(-90, 90),xlim = c(-180,180), mar=c(1,0,0,1))
-#points(anpp_site$lon,anpp_site$lat, col="black", pch=16,cex=1.5)
-#points(npp_site$lon,npp_site$lat, col="red", pch=16,cex=1.5)
-#points(gpp_site$lon,gpp_site$lat, col="orange", pch=16,cex=1.5)
-#title("Orange: GPP + NPP + ANPP
-#       Red: NPP + ANPP
-#       Black: ANPP")
+#(6) bnpp
+gg <- plot_map3(bnpp_df[,c(1,2,4)], 
+                varnam = "bnpp",plot_title = " NPP in belowground (gC/m2/yr)",
+                latmin = -65, latmax = 85, combine = FALSE)
 
-#map("world", fill=TRUE, col="white", bg="white", ylim=c(-90, 90),xlim = c(-180,180), mar=c(1,0,0,1))
-#points(leafcn_site$lon,leafcn_site$lat, col="red", pch=16,cex=1.5)
-#title("leaf C/N")
+gg$ggmap + geom_point(data=subset(NPP,BNPP_1>0 & pred_bnpp>0 & pft2 == "Forest"),aes(lon,lat),col="red") + 
+  geom_point(data=subset(NPP,BNPP_1>0 & pred_bnpp>0 & pft2 == "Grassland"),aes(lon,lat),col="blue")
+gg$gglegend
+analyse_modobs2(subset(NPP,BNPP_1>0 & pred_bnpp>0),"BNPP_1","pred_bnpp", type = "points")
+analyse_modobs2(subset(NPP,BNPP_1>0 & pred_bnpp>0 & pft2 == "Forest"),"BNPP_1","pred_bnpp", type = "points")
+analyse_modobs2(subset(NPP,BNPP_1>0 & pred_bnpp>0 & pft2 == "Grassland"),"BNPP_1","pred_bnpp", type = "points")
+
+#(7) nre
+NRE_df$obs_nre <- NRE_df$NRE/100
+gg <- plot_map3(nre_df[,c(1,2,4)], 
+                varnam = "nre",plot_title = " N resorption efficiency",
+                latmin = -65, latmax = 85, combine = FALSE)
+
+gg$ggmap + geom_point(data=subset(NRE_df,obs_nre>0 & pred_nre>0),aes(lon,lat),col="red")
+gg$gglegend
+analyse_modobs2(subset(NRE_df,obs_nre>0 & pred_nre<1 ),"obs_nre","pred_nre", type = "points")
+
+#(8) lnf - including nre
+gg <- plot_map3(lnf_df[,c(1,2,4)], 
+                varnam = "lnf",plot_title = " N uptake in leaf (gN/m2/yr)",
+                latmin = -65, latmax = 85, combine = FALSE)
+
+gg$ggmap + geom_point(data=subset(NPP,lnf_obs>0 & pred_lnf>0 & pft2 == "Forest"),aes(lon,lat),col="red") + 
+  geom_point(data=subset(NPP,lnf_obs>0 & pred_lnf>0 & pft2 == "Grassland"),aes(lon,lat),col="blue")
+gg$gglegend
+analyse_modobs2(subset(NPP,lnf_obs>0 & pred_lnf>0 ),"lnf_obs","pred_lnf", type = "points")
+
+#(8) lnf - excluding nre
+NPP$predicted_leafcn <- 1/NPP$pred_leafcn #convert leaf n/c to c/n
+NPP$predicted_leafcn[NPP$predicted_leafcn  == Inf] <- NA
+
+NPP$lnf_new <- NPP$pred_anpp/NPP$predicted_leafcn
+gg <- plot_map3(lnf_df[,c(1,2,4)], 
+                varnam = "lnf",plot_title = " N uptake in leaf (gN/m2/yr)",
+                latmin = -65, latmax = 85, combine = FALSE)
+
+gg$ggmap + geom_point(data=subset(NPP,lnf_obs>0 & lnf_new>0 & pft2 == "Forest"),aes(lon,lat),col="red") + 
+  geom_point(data=subset(NPP,lnf_obs>0 & lnf_new>0 & pft2 == "Grassland"),aes(lon,lat),col="blue")
+gg$gglegend
+analyse_modobs2(subset(NPP,lnf_obs>0 & lnf_new>0 ),"lnf_obs","lnf_new", type = "points")
+
+#(9) leafcn
+leafcn <-leafcn_df
+leafcn$leafcn <- 1/leafcn$leafcn
+leafcn$leafcn[leafcn$leafcn == Inf] <- NA
+
+gg <- plot_map3(leafcn[,c(1,2,4)], 
+                varnam = "leafcn",plot_title = "Leaf carbon to nitrogen ratio",
+                latmin = -65, latmax = 85, combine = FALSE)
+
+gg$ggmap + geom_point(data=subset(NPP,CN_leaf>0 & predicted_leafcn>0 & pft2 == "Forest"),aes(lon,lat),col="red") + 
+  geom_point(data=subset(NPP,CN_leaf>0 & predicted_leafcn>0 & pft2 == "Grassland"),aes(lon,lat),col="blue")
+gg$gglegend
+analyse_modobs2(subset(NPP,CN_leaf>0 & predicted_leafcn>0 ),"CN_leaf","predicted_leafcn", type = "points")
 
 ```
