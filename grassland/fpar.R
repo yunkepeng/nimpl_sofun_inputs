@@ -8,7 +8,7 @@
 library(dplyr)
 library(ingestr)
 
-rm(list=ls())
+#rm(list=ls())
 NPP_SaraVicca <- read.csv(file="~/data/NPP_Yunke/NPP_SaraVicca/NPP_SaraVicca.csv")
 NPP_Malhi <- read.csv(file="~/data/NPP_Yunke/NPP_Malhi/NPP_Malhi.csv")
 NPP_Keith <- read.csv(file="~/data/NPP_Yunke/NPP_Keith/NPP_Keith.csv")
@@ -111,22 +111,20 @@ settings_modis <- get_settings_modis(
   bundle            = "modis_fpar",
   data_path         = "~/data/modis_subsets/",
   method_interpol   = "loess",
-  keep              = TRUE,
   overwrite_raw     = FALSE,
   overwrite_interpol= TRUE
 )
 
-#select grassland sites only
+#select grassland sites only -> this object is what we used to extract all climate forcing
 NPP_grassland <- subset(NPP_final,pft2=="Grassland")
 dim(NPP_grassland)
 
+#extract site mean of grasslands -> this object is what we used to extract fapar
 NPP_final2 <- aggregate(NPP_grassland,by=list(NPP_grassland$lon,NPP_grassland$lat), FUN=mean, na.rm=TRUE) #site-mean
 
 for (i in 1:nrow(NPP_final2)){
   NPP_final2$sitename2[i] <- paste("grassland",i,sep = "")
 }
-
-dim(NPP_final2)
 
 siteinfo <- data.frame(
   sitename = NPP_final2$sitename2,
@@ -143,10 +141,78 @@ siteinfo <-  siteinfo %>% dplyr::mutate(date_start = lubridate::ymd(paste0(year_
 siteinfo
 dim(siteinfo)
 
+
 #df_modis_fpar <- ingest(siteinfo = siteinfo,source= "modis",settings  = settings_modis,verbose   = FALSE,parallel = TRUE,ncore = 16)
+
+head(NPP_grassland2)
+dim(NPP_grassland2)
+
+forcing_df <- list.files("/Users/yunpeng/data/grassland/all",full.names = T)
+length(forcing_df)
+
+fapar_df <- list.files("/Users/yunpeng/data/modis_subsets",full.names = T)
+fapar_df <- fapar_df[1:227]
+
+library(stringr)
+
+
+vec <- vector()
+vec <- c(vec, 1:227)
+
+for (i in 1:length(fapar_df)){
+  vec[i] <- substr(sub('.*daily_', '', fapar_df[i]),1,nchar(sub('.*daily_', '', fapar_df[i]))-4)
+}
+
+yes <- vector()
+yes <- c(yes, 1:227)
+
+vec_yes <- data.frame(vec,yes)
+
+names(vec_yes) <- c("sitename","sign")
+
+siteinfo2 <- merge(siteinfo,vec_yes,all.x=TRUE)
+summary(siteinfo2)
+
+siteinfo3 <- subset(siteinfo2,is.na(sign)==TRUE)
+
+siteinfo_4 <- siteinfo3[,1:7]
+
+csvfile <- paste("/Users/yunpeng/site2.csv",sep = "")
+write.csv(siteinfo_4, csvfile, row.names = TRUE)
+
+
+df_modis_fpar <- ingest(siteinfo = siteinfo_4[68,],source= "modis",settings  = settings_modis,verbose   = FALSE)
+
+
+settings_modis <- get_settings_modis(
+  bundle            = "modis_fpar",
+  data_path         = "~/data/modis_subsets2/",
+  method_interpol   = "linear",
+  keep              = TRUE,
+  overwrite_raw     = FALSE,
+  overwrite_interpol= TRUE
+)
+
 
 #Input fpar
 #read.csv("/Users/yunpeng/data/modis_subsets/MODIS_FPAR_MCD15A3H_daily_grassland1.csv")
 
+#check one specific site
+
+fpar <- read.csv(file="/Users/yunpeng/data/modis_subsets/MODIS_FPAR_MCD15A3H_daily_grassland214.csv")
+summary(fpar)
+
+ggplot(fpar) + 
+  geom_line(aes(x=year_dec, y=modisvar_filled), color = 'blue') +
+  geom_line(aes(x=year_dec, y=modisvar_filtered), color = 'purple') +
+  geom_line(aes(x=year_dec, y=modisvar), color = 'red') + labs(x = 'Timestep',y = 'fpar')
 
 
+NPP_final2[212,]
+
+ggplot(fpar) + 
+  geom_point(aes(x=year_dec, y=modisvar_filtered), color = 'purple') +
+  geom_point(aes(x=year_dec, y=modisvar), color = 'red') + labs(x = 'Timestep',y = 'fpar')+
+  ggtitle("An example site in Mangolia (lon: 112.26, lat: 43.3).
+  Red:modisvar, Purple: modisvar_filtered")
+  
