@@ -199,7 +199,7 @@ for (i in 1:length(fapar_df)){
 #output grassland1, grassland2.....which will be bind with climate forcing data soon
 
 #Input climate forcing, and cbind with fapar for each site -> form final climate focing
-for (i in c(1:377,379:608,611:626,629:632,635:756,759:length(forcing_df))){
+for (i in c(1:377,379:609,611:627,629:633,635:757,759:length(forcing_df))){
   df1 <- read.csv(forcing_df[i])
   df1$date <- as.Date(df1$date)
   fpar <- as.data.frame(eval(parse(text=df1$sitename2[1])))[,3]
@@ -209,17 +209,15 @@ for (i in c(1:377,379:608,611:626,629:632,635:756,759:length(forcing_df))){
   assign(df1$sitename[1], as_tibble(df3))
   #print(i)
 }
-# i = 378,609,610,627,628,633,634,757,758 are not available for fpar
+# i = 378,610,628,634,758 are not available for fpar
 
 #Some fapar sites' value are not available - may be due to in the edge and so the data was missing
-for (i in c(378,609,610,627,628,633,634,757,758)){
+for (i in c(378,610,628,634,758)){
   df1 <- read.csv(forcing_df[i])
   print(df1$sitename[1])
 }
-na_data <- subset(NPP_grassland2,sitename=="NPP1376"|sitename=="NPP1605"|sitename=="NPP1606"
-                  |sitename=="NPP1623"|sitename=="NPP1624"|sitename=="NPP1629"|sitename=="NPP1630"
-                  |sitename=="NPP436"|sitename=="NPP440")
-na_data
+
+na_data <- subset(NPP_grassland2,sitename=="NPP1376"|sitename=="NPP1606"|sitename=="NPP1624"|sitename=="NPP1630"|sitename=="NPP440")
 
 library(rworldmap)
 newmap <- getMap(resolution = "low")
@@ -242,9 +240,15 @@ params_modl <- list(
 
 dim(na_data) #this point needs to be passed
 siteinfo$pred_gpp <- NA
+siteinfo$avg_fapar <- NA
+siteinfo$max_fapar <- NA
 
 for (i in 1:nrow(siteinfo)) {
   tryCatch({
+    test <- (eval(parse(text=siteinfo$sitename[i])))
+    siteinfo[i,c("max_fapar")] <- max(test$fapar)
+    siteinfo[i,c("avg_fapar")] <- mean(test$fapar)
+    
     modlist <- run_pmodel_f_bysite( 
     siteinfo$sitename[i], 
     params_siml <- list(
@@ -280,10 +284,12 @@ for (i in 1:nrow(siteinfo)) {
 
 #collect gpp
 hist(siteinfo$pred_gpp)
-summary(siteinfo$pred_gpp)
+summary(siteinfo)
 
 #combine with NPP_grassland2 data
 NPP_grassland2$pred_gpp <- siteinfo$pred_gpp
+NPP_grassland2$max_fapar <- siteinfo$max_fapar
+NPP_grassland2$avg_fapar <- siteinfo$avg_fapar
 
 hist(NPP_grassland2$TNPP_1/NPP_grassland2$pred_gpp)
 
@@ -409,6 +415,7 @@ for (i in 1:nrow(grassland_site)) {
     grassland_site[i,c("fapar")]<- (gwr(fAPAR ~ z, NRE_part, bandwidth = 1.06, fit.points =NRE_coord,predictions=TRUE))$SDF$pred
   }, error=function(e){})} 
 
+
 summary(grassland_site)
 
 library(raster)
@@ -455,6 +462,19 @@ NPP_grassland_final$alpha[NPP_grassland_final$alpha>1] <- NA
 #NPP_grassland_final$age[NPP_grassland_final$age<0] <- NA
 summary(NPP_grassland_final)
 
+#compare fapar between site simulation and extraction from map
+summary(lm(avg_fapar~fapar,NPP_grassland_final))
+
+summary(lm(max_fapar~fapar,NPP_grassland_final))
+plot(avg_fapar~fapar,NPP_grassland_final)
+plot(max_fapar~fapar,NPP_grassland_final)
+
+#these sites were outliers appears in plot above
+subset(NPP_grassland_final,fapar-avg_fapar>0.3)
+
+#these sites were outliers when modisvar (orig data) is very high (even >1), while final value is ok
+subset(NPP_grassland_final,sitename2=="grassland142"|sitename2=="grassland142"|
+         sitename2=="grassland130"|sitename2=="107"|sitename2=="grassland104")
 
 #1. aggregate based on lat, lon and z
 site_all <- (aggregate(NPP_grassland_final,by=list(NPP_grassland_final$lon,NPP_grassland_final$lat,NPP_grassland_final$z), FUN=mean, na.rm=TRUE))
@@ -524,9 +544,9 @@ summary(b3)
 
 #Models are generally poor, so, just to shows its relationship to single factor here.
 NPP_grassland_final3$npp_gpp <- NPP_grassland_final3$TNPP_1/NPP_grassland_final3$pred_gpp  
-NPP_grassland_final3$npp_gpp[NPP_grassland_final3$npp_gpp>1] <- NA
+#NPP_grassland_final3$npp_gpp[NPP_grassland_final3$npp_gpp>1] <- NA
 NPP_grassland_final3$anpp_gpp <- NPP_grassland_final3$ANPP_2/NPP_grassland_final3$pred_gpp  
-NPP_grassland_final3$anpp_gpp[NPP_grassland_final3$anpp_gpp>1] <- NA
+#NPP_grassland_final3$anpp_gpp[NPP_grassland_final3$anpp_gpp>1] <- NA
 
 hist(NPP_grassland_final3$anpp_gpp)
 hist(NPP_grassland_final3$npp_gpp)

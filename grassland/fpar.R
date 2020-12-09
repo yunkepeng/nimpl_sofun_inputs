@@ -141,78 +141,56 @@ siteinfo <-  siteinfo %>% dplyr::mutate(date_start = lubridate::ymd(paste0(year_
 siteinfo
 dim(siteinfo)
 
-
-#df_modis_fpar <- ingest(siteinfo = siteinfo,source= "modis",settings  = settings_modis,verbose   = FALSE,parallel = TRUE,ncore = 16)
-
-head(NPP_grassland2)
-dim(NPP_grassland2)
-
-forcing_df <- list.files("/Users/yunpeng/data/grassland/all",full.names = T)
-length(forcing_df)
-
-fapar_df <- list.files("/Users/yunpeng/data/modis_subsets",full.names = T)
-fapar_df <- fapar_df[1:227]
-
-library(stringr)
-
-
-vec <- vector()
-vec <- c(vec, 1:227)
-
-for (i in 1:length(fapar_df)){
-  vec[i] <- substr(sub('.*daily_', '', fapar_df[i]),1,nchar(sub('.*daily_', '', fapar_df[i]))-4)
-}
-
-yes <- vector()
-yes <- c(yes, 1:227)
-
-vec_yes <- data.frame(vec,yes)
-
-names(vec_yes) <- c("sitename","sign")
-
-siteinfo2 <- merge(siteinfo,vec_yes,all.x=TRUE)
-summary(siteinfo2)
-
-siteinfo3 <- subset(siteinfo2,is.na(sign)==TRUE)
-
-siteinfo_4 <- siteinfo3[,1:7]
-
-csvfile <- paste("/Users/yunpeng/site2.csv",sep = "")
-write.csv(siteinfo_4, csvfile, row.names = TRUE)
-
-
-df_modis_fpar <- ingest(siteinfo = siteinfo_4[68,],source= "modis",settings  = settings_modis,verbose   = FALSE)
-
-
 settings_modis <- get_settings_modis(
   bundle            = "modis_fpar",
-  data_path         = "~/data/modis_subsets2/",
-  method_interpol   = "linear",
+  data_path         = "~/data/modis_subsets5/",
+  method_interpol   = "loess",
   keep              = TRUE,
   overwrite_raw     = FALSE,
   overwrite_interpol= TRUE
 )
+settings <- settings_modis 
+#df_modis_fpar <- ingest(siteinfo = siteinfo,source= "modis",settings  = settings_modis,verbose   = FALSE,parallel = TRUE,ncore = 8)
+siteinfo2 <- subset(siteinfo[c(10,17,18,246,321),])
+siteinfo2
+
+#PS: How to deal with 5 fapar with original data, but failed to run loess to get final data?
+g10 <- read.csv("/Users/yunpeng/data/modis_subsets4/raw/MODIS_FPAR_MCD15A3H_grassland10.csv")
+g17 <- read.csv("/Users/yunpeng/data/modis_subsets4/raw/MODIS_FPAR_MCD15A3H_grassland17.csv")
+g48 <- read.csv("/Users/yunpeng/data/modis_subsets4/raw/MODIS_FPAR_MCD15A3H_grassland48.csv")
+g246 <- read.csv("/Users/yunpeng/data/modis_subsets4/raw/MODIS_FPAR_MCD15A3H_grassland246.csv")
+g321 <- read.csv("/Users/yunpeng/data/modis_subsets4/raw/MODIS_FPAR_MCD15A3H_grassland321.csv")
 
 
-#Input fpar
-#read.csv("/Users/yunpeng/data/modis_subsets/MODIS_FPAR_MCD15A3H_daily_grassland1.csv")
 
-#check one specific site
-
-fpar <- read.csv(file="/Users/yunpeng/data/modis_subsets/MODIS_FPAR_MCD15A3H_daily_grassland214.csv")
-summary(fpar)
-
-ggplot(fpar) + 
-  geom_line(aes(x=year_dec, y=modisvar_filled), color = 'blue') +
-  geom_line(aes(x=year_dec, y=modisvar_filtered), color = 'purple') +
-  geom_line(aes(x=year_dec, y=modisvar), color = 'red') + labs(x = 'Timestep',y = 'fpar')
+library(ingestr)
+source("/Users/yunpeng/Desktop/phd/nimpl/nimpl_sofun_inputs/package/ingestr/R/ingest_modis_bysite.R")
 
 
-NPP_final2[212,]
+df <- g10 #can be changed to g17, g48, g246, g321 
 
-ggplot(fpar) + 
-  geom_point(aes(x=year_dec, y=modisvar_filtered), color = 'purple') +
-  geom_point(aes(x=year_dec, y=modisvar), color = 'red') + labs(x = 'Timestep',y = 'fpar')+
-  ggtitle("An example site in Mangolia (lon: 112.26, lat: 43.3).
-  Red:modisvar, Purple: modisvar_filtered")
+##--------------------------------------------------------------------
+## Reformat raw data
+##--------------------------------------------------------------------
+df <- df %>%
   
+  ## put QC info to a separate column
+  dplyr::mutate(date = lubridate::ymd(calendar_date)) %>%
+  dplyr::select(pixel, date, band, value) %>%
+  tidyr::pivot_wider(values_from = value, names_from = band) %>%
+  
+  ## rename to standard
+  rename(value = !!settings$band_var, qc = !!settings$band_qc)
+
+## Determine scale factor from band info and scale values
+bands <- MODISTools::mt_bands(product = settings$prod) %>%
+  as_tibble()
+scale_factor <- bands %>%
+  dplyr::filter(band == settings$band_var) %>%
+  pull(scale_factor) %>%
+  as.numeric()
+df <- df %>%
+  mutate(value = scale_factor * value)
+summary(df)
+
+#results proved that they are all NA, in all days. Probably in the edge of land, or in very high uplands. We disgrearded them here.
