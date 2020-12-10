@@ -181,9 +181,9 @@ siteinfo <-  siteinfo %>% dplyr::mutate(date_start = lubridate::ymd(paste0(year_
 summary(siteinfo)
 
 #2. Input grassland forcing and fapar
-forcing_df <- list.files("/Users/yunpeng/data/grassland/all",full.names = T)
+forcing_df <- list.files("/Users/yunpeng/data/grassland_npp/forcing",full.names = T)
 
-fapar_df <- list.files("/Users/yunpeng/data/modis_subsets_all",full.names = T)
+fapar_df <- list.files("/Users/yunpeng/data/grassland_npp/modis_subsets_all",full.names = T)
 
 #convert fapar from 10-year data to annual average -> and output an unique object for each
 for (i in 1:length(fapar_df)){
@@ -293,7 +293,7 @@ NPP_grassland2$avg_fapar <- siteinfo$avg_fapar
 
 hist(NPP_grassland2$TNPP_1/NPP_grassland2$pred_gpp)
 
-dim(subset(NPP_grassland2,pred_gpp>TNPP_1)) #154
+dim(subset(NPP_grassland2,pred_gpp>TNPP_1)) #157
 dim(subset(NPP_grassland2,pred_gpp<TNPP_1)) #34
 
 outlier<- (subset(NPP_grassland2,pred_gpp<TNPP_1))

@@ -121,9 +121,7 @@ for (i in 1:nrow(NPP_final2)){
 
 summary(NPP_grassland)
 
-######SITE FORCING
-#options(warn=-1)#remove warning - please return back on below!!!!
-#options(warn=0)
+
 #now, start preparing siteinfo for climate focring, based on NPP_grassland
 
 #merge NPP_grassland with NPP_final2 firstly, to get site file name of fapar

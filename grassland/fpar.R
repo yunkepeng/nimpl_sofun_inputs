@@ -1,14 +1,11 @@
-#firstly, including all sites that need to extract fapar
-##it includes two components:
-#type a (sitename: a1, a2, a3....) - all grassland sites, which will be used to calculate its site GPP later on, to investigate its statistical model of npp/gpp and anpp/gpp.
-#type b (sitename: b1, b2, b3....) - all forest sites (used in data validation), because we already finished global simulation predidction vs. observation - but we now further want to see if site simulated GPP would make model performance better.
+#fapar for forest and grassland
+#Original and final data for fapar, in forest, were saved in "/Users/yunpeng/data/forest_npp/modis_orig" and "/Users/yunpeng/data/forest_npp/modis_subsets_all"
+#Original and final data for fapar, in grassland, were saved in "/Users/yunpeng/data/grassland_npp/modis_subsets_orig" and "/Users/yunpeng/data/grassland_npp/modis_subsets_all"
 
-
-#1. Input data
+# fapar -> an example given in forest sites.
 library(dplyr)
 library(ingestr)
 
-#rm(list=ls())
 NPP_SaraVicca <- read.csv(file="~/data/NPP_Yunke/NPP_SaraVicca/NPP_SaraVicca.csv")
 NPP_Malhi <- read.csv(file="~/data/NPP_Yunke/NPP_Malhi/NPP_Malhi.csv")
 NPP_Keith <- read.csv(file="~/data/NPP_Yunke/NPP_Keith/NPP_Keith.csv")
@@ -37,9 +34,9 @@ for (i in 1:nrow(Tiandi_npp)){
     Tiandi_npp$Begin_year[i] <- 1991#convert to long-term
     Tiandi_npp$End_year[i] <- 2010 #convert to long-term 
   } else {
-      Tiandi_npp$Begin_year[i] <- as.numeric(substr(Tiandi_npp$Begin_year[i], start = 1, stop = 4))
-      Tiandi_npp$End_year[i] <- as.numeric(substr(Tiandi_npp$End_year[i], start = nchar(Tiandi_npp$End_year[i])-3, stop = nchar(Tiandi_npp$End_year[i]))) #1-4 or 6-9
-    }
+    Tiandi_npp$Begin_year[i] <- as.numeric(substr(Tiandi_npp$Begin_year[i], start = 1, stop = 4))
+    Tiandi_npp$End_year[i] <- as.numeric(substr(Tiandi_npp$End_year[i], start = nchar(Tiandi_npp$End_year[i])-3, stop = nchar(Tiandi_npp$End_year[i]))) #1-4 or 6-9
+  }
 }
 
 Tiandi_npp$Begin_year <- as.numeric(Tiandi_npp$Begin_year)
@@ -103,94 +100,83 @@ stopifnot( all(NPP_final$End_year == floor(NPP_final$End_year)) )
 #Lastly, create an unique site name, which will be used in ingestr function later on.
 NPP_final$sitename <- NA
 for (i in 1:nrow(NPP_final)){
-  NPP_final$sitename[i] <- paste("NPP",i,sep = "")
+  NPP_final$sitename[i] <- paste("NPP_forest",i,sep = "")
 }
 
 
 settings_modis <- get_settings_modis(
   bundle            = "modis_fpar",
-  data_path         = "~/data/modis_subsets/",
+  data_path         = "~/data/modis_forest/",
   method_interpol   = "loess",
+  keep              = TRUE,
   overwrite_raw     = FALSE,
   overwrite_interpol= TRUE
 )
 
-#select grassland sites only -> this object is what we used to extract all climate forcing
-NPP_grassland <- subset(NPP_final,pft2=="Grassland")
-dim(NPP_grassland)
+#select forest sites only -> this object is what we used to extract all climate forcing
+NPP_forest <- subset(NPP_final,pft2=="Forest")
+NPP_final2_forest <- aggregate(NPP_forest,by=list(NPP_forest$lon,NPP_forest$lat), FUN=mean, na.rm=TRUE) #site-mean
 
-#extract site mean of grasslands -> this object is what we used to extract fapar
-NPP_final2 <- aggregate(NPP_grassland,by=list(NPP_grassland$lon,NPP_grassland$lat), FUN=mean, na.rm=TRUE) #site-mean
-
-for (i in 1:nrow(NPP_final2)){
-  NPP_final2$sitename2[i] <- paste("grassland",i,sep = "")
+for (i in 1:nrow(NPP_final2_forest)){
+  NPP_final2_forest$sitename2[i] <- paste("forest",i,sep = "")
 }
 
 siteinfo <- data.frame(
-  sitename = NPP_final2$sitename2,
-  lon = NPP_final2$lon,
-  lat = NPP_final2$lat,
-  year_start = rep(2010,nrow(NPP_final2)),# for extracting fapar: all set 2003
-  year_end = rep(2019,nrow(NPP_final2)) # for extracting fapar: all set 2019
+  sitename = NPP_final2_forest$sitename2,
+  lon = NPP_final2_forest$lon,
+  lat = NPP_final2_forest$lat,
+  year_start = rep(2010,nrow(NPP_final2_forest)),
+  year_end = rep(2019,nrow(NPP_final2_forest))
 )
 
 #create time frame
 siteinfo <-  siteinfo %>% dplyr::mutate(date_start = lubridate::ymd(paste0(year_start, "-01-01"))) %>%
   dplyr::mutate(date_end = lubridate::ymd(paste0(year_end, "-12-31"))) 
 
-siteinfo
-dim(siteinfo)
+coord_forest <- siteinfo[c("sitename","lon","lat")]
 
-settings_modis <- get_settings_modis(
-  bundle            = "modis_fpar",
-  data_path         = "~/data/modis_subsets5/",
-  method_interpol   = "loess",
-  keep              = TRUE,
-  overwrite_raw     = FALSE,
-  overwrite_interpol= TRUE
-)
-settings <- settings_modis 
+NPP_forest$no <- c(1:nrow(NPP_forest))
+NPP_forest_all <-Reduce(function(x,y) merge(x = x, y = y, by = c("lon","lat"),all.x=TRUE), 
+                         list(NPP_forest,coord_forest))
+
+NPP_forest_all <- NPP_forest_all[order(NPP_forest_all$no), ]
 #df_modis_fpar <- ingest(siteinfo = siteinfo,source= "modis",settings  = settings_modis,verbose   = FALSE,parallel = TRUE,ncore = 8)
-siteinfo2 <- subset(siteinfo[c(10,17,18,246,321),])
-siteinfo2
+summary(siteinfo)
 
-#PS: How to deal with 5 fapar with original data, but failed to run loess to get final data?
-g10 <- read.csv("/Users/yunpeng/data/modis_subsets4/raw/MODIS_FPAR_MCD15A3H_grassland10.csv")
-g17 <- read.csv("/Users/yunpeng/data/modis_subsets4/raw/MODIS_FPAR_MCD15A3H_grassland17.csv")
-g48 <- read.csv("/Users/yunpeng/data/modis_subsets4/raw/MODIS_FPAR_MCD15A3H_grassland48.csv")
-g246 <- read.csv("/Users/yunpeng/data/modis_subsets4/raw/MODIS_FPAR_MCD15A3H_grassland246.csv")
-g321 <- read.csv("/Users/yunpeng/data/modis_subsets4/raw/MODIS_FPAR_MCD15A3H_grassland321.csv")
+library(doSNOW)
+NumberOfCluster <- 8
+cl <- makeCluster(NumberOfCluster, type='SOCK')
+registerDoSNOW(cl)
+x0 <- foreach(i = c(1:nrow(siteinfo)),.combine = "rbind") %dopar% {
+  library(ingestr)
+  library(dplyr)
+  df_modis_fpar <- ingest_bysite(
+    sitename  = siteinfo[i,c("sitename")],  # can be any name
+    source    = "modis",
+    year_start = 2010,
+    year_end  = 2019,
+    lon       = siteinfo[i,c("lon")],
+    lat       = siteinfo[i,c("lat")],
+    settings  = settings_modis,
+    verbose   = FALSE
+  )
+  print(i)
+}
+stopCluster(cl)
+
+forcing_list <- list.files("/Users/yunpeng/data/modis_forest",full.names = T)
+
+nrow(siteinfo) - (length(forcing_list)-1)
+#11 sites are missing
+
+
+#another version, for grassland
+#NPP_grassland <- subset(NPP_final,pft2=="Grassland")
+#NPP_final2 <- aggregate(NPP_grassland,by=list(NPP_grassland$lon,NPP_grassland$lat), FUN=mean, na.rm=TRUE) #site-mean
+#for (i in 1:nrow(NPP_final2)){NPP_final2$sitename2[i] <- paste("grassland",i,sep = "")}
+#siteinfo <- data.frame(sitename = NPP_final2$sitename2,lon = NPP_final2$lon,lat = NPP_final2$lat,year_start = rep(2010,nrow(NPP_final2)),year_end = rep(2019,nrow(NPP_final2)) )
+#siteinfo <-  siteinfo %>% dplyr::mutate(date_start = lubridate::ymd(paste0(year_start, "-01-01"))) %>%dplyr::mutate(date_end = lubridate::ymd(paste0(year_end, "-12-31"))) 
+#then apply parallel computing to start 
 
 
 
-library(ingestr)
-source("/Users/yunpeng/Desktop/phd/nimpl/nimpl_sofun_inputs/package/ingestr/R/ingest_modis_bysite.R")
-
-
-df <- g10 #can be changed to g17, g48, g246, g321 
-
-##--------------------------------------------------------------------
-## Reformat raw data
-##--------------------------------------------------------------------
-df <- df %>%
-  
-  ## put QC info to a separate column
-  dplyr::mutate(date = lubridate::ymd(calendar_date)) %>%
-  dplyr::select(pixel, date, band, value) %>%
-  tidyr::pivot_wider(values_from = value, names_from = band) %>%
-  
-  ## rename to standard
-  rename(value = !!settings$band_var, qc = !!settings$band_qc)
-
-## Determine scale factor from band info and scale values
-bands <- MODISTools::mt_bands(product = settings$prod) %>%
-  as_tibble()
-scale_factor <- bands %>%
-  dplyr::filter(band == settings$band_var) %>%
-  pull(scale_factor) %>%
-  as.numeric()
-df <- df %>%
-  mutate(value = scale_factor * value)
-summary(df)
-
-#results proved that they are all NA, in all days. Probably in the edge of land, or in very high uplands. We disgrearded them here.
