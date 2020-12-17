@@ -102,15 +102,15 @@ GNPP_all <-Reduce(function(x,y) merge(x = x, y = y, by = c("sites.sitename","Beg
                              biomass_ag_foliage_C,biomass_root_C,biomass_root_coarse_C,biomass_root_fine_C))
 
 GNPP_final <- GNPP_all[,c(1,2,3,5,7,9,11,13,15,17,19,21,23,25,27,29,31,33,35,37,39,41,43,
-                        45,47,49,51,53,55,57,59)]
+                        45,47,49,51,53,55,57,59,61)]
 dim(GNPP_final) # 337 samples
 
 names(GNPP_final) <- c("sites.sitename","Begin_year","End_year","NPP_1_C","GPP_C","TBCF_C","NPP_2_C",
                        "NPP_3_C","NPP_4_C","NPP_5_C","NPP_woody_C","NPP_understory_C","ANPP_0_C",
                        "ANPP_1_C","ANPP_2_C","ANPP_woody_C","ANPP_woody_stem_C","ANPP_woody_branch_C",
                        "ANPP_foliage_C","BNPP_root_C","BNPP_root_coarse_C","BNPP_root_fine_C","LAI",
-                       "biomass_C","biomass_ag_OM","biomass_ag_C","biomass_ag_woody_C","biomass_ag_foliage_C",
-                       "biomass_root_C","biomass_root_coarse_C","biomass_root_fine_C")
+                       "leaf_pC","leaf_C2N","leaf_pN","foliage_pN","leaf_pP",
+                       "stem_pC","stem_pN","root_pN","root_pC")
 
 #6. now ForC dataframe was finished, we merged it with existing dataframe, to check repetation, then removing such sites
 sites_NPP <- NPP_all
@@ -124,7 +124,7 @@ new_NPP <- subset(GNPP_final2,is.na(Begin_year.y)==TRUE)
 dim(new_NPP)
 summary(new_NPP)
 
-#8. we seethat some new sites still not have data, so we merged them twice. This time, we aggregate AND merge data only based on sites, rather than sites+measured year. This way will help us generate more available data.
+#8. we see that some new sites still not have data, so we merged them twice. This time, we aggregate AND merge data only based on sites, rather than sites+measured year. This way will help us generate more available data.
 
 newsite1 <- aggregate(NPP_1_C~sites.sitename,data=new_NPP,mean)
 summary(newsite1)

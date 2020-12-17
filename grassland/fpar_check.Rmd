@@ -1,0 +1,54 @@
+---
+output:
+  html_document: default
+  pdf_document: default
+  word_document: default
+---
+
+---
+title: "fapar check between modisvar, loess and filled"
+author: "Yunke Peng"
+date: "Dec 8, 2020"
+output: html_document
+---
+
+
+```{r}
+
+library(dplyr)
+library(ingestr)
+library(ggplot2)
+
+#rm(list=ls())
+fapar_df <- list.files("/Users/yunpeng/data/grassland_npp/modis_subsets_all",full.names = T)
+
+settings_modis <- get_settings_modis(
+  bundle            = "modis_fpar",
+  data_path         = "/Users/yunpeng/data/grassland_npp/modis_subsets_all",
+  method_interpol   = "loess",
+  overwrite_raw     = FALSE,
+  overwrite_interpol= TRUE
+)
+
+for (i in c(6,9,20,23,24,31,35,48,64,68,69,76,78,80)){
+  df1 <- read.csv(fapar_df[i])
+  df1$date <- as.Date(df1$date)
+  df1 <- df1[!(format(df1$date,"%m") == "02" & format(df1$date, "%d") == "29"), , drop = FALSE]
+  gg <- plot_fapar_ingestr_bysite(df1 %>% dplyr::filter(year(date) %in% 2010:2011), 
+  settings_modis)
+  print(gg)
+  print(c(i,(substr(sub('.*daily_', '', fapar_df[i]),1,nchar(sub('.*daily_', '', fapar_df[i]))-4))))
+}
+
+#check how it is consistent with global simulatins
+for (i in 1:length(fapar_df)){
+  df1 <- read.csv(fapar_df[i])
+  df1$date <- as.Date(df1$date)
+  df1 <- df1[!(format(df1$date,"%m") == "02" & format(df1$date, "%d") == "29"), , drop = FALSE]
+}
+
+#grassland142,grassland130,grassland107,grassland104
+
+
+```
+

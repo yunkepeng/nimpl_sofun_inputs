@@ -196,6 +196,7 @@ for (i in 1:length(fapar_df)){
     summarise(fpar = mean(modisvar_filled, na.rm = TRUE))
   assign(substr(sub('.*daily_', '', fapar_df[i]),1,nchar(sub('.*daily_', '', fapar_df[i]))-4), df2) 
 }
+
 #output grassland1, grassland2.....which will be bind with climate forcing data soon
 
 #Input climate forcing, and cbind with fapar for each site -> form final climate focing

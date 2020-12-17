@@ -112,14 +112,14 @@ for (i in 1:nrow(NPP_final)){
 NPP_grassland <- subset(NPP_final,pft2=="Grassland")
 dim(NPP_grassland)
 
+NPP_grassland$no <- 1:nrow(NPP_grassland)
+
 #extract site mean of grasslands -> this object is what we used to extract fapar
 NPP_final2 <- aggregate(NPP_grassland,by=list(NPP_grassland$lon,NPP_grassland$lat), FUN=mean, na.rm=TRUE) #site-mean
 
 for (i in 1:nrow(NPP_final2)){
   NPP_final2$sitename2[i] <- paste("grassland",i,sep = "")
 }
-
-summary(NPP_grassland)
 
 
 #now, start preparing siteinfo for climate focring, based on NPP_grassland
@@ -129,9 +129,9 @@ head(NPP_final2)
 NPP_final3 <- NPP_final2[,c("lon","lat","sitename2")]
 
 NPP_grassland2 <- merge(NPP_grassland,NPP_final3, all.x = TRUE)
-
+NPP_grassland2 <- NPP_grassland2[order(NPP_grassland2$no), ]
 head(NPP_grassland2) #now, added attribute of fapar file
-dim(NPP_grassland) 
+dim(NPP_grassland2) 
 
 siteinfo <- data.frame(
   sitename = NPP_grassland2$sitename,
@@ -142,13 +142,16 @@ siteinfo <- data.frame(
   year_end = NPP_grassland2$End_year
 )
 
+siteinfo$year_start[siteinfo$year_start<=1980] <- 1980
+siteinfo$year_end[siteinfo$year_start<=1980] <- 1989
+
 #create time frame
 siteinfo <-  siteinfo %>% dplyr::mutate(date_start = lubridate::ymd(paste0(year_start, "-01-01"))) %>%
   dplyr::mutate(date_end = lubridate::ymd(paste0(year_end, "-12-31")))  ## add info
 
 siteinfo
 
-nrow(siteinfo)
+summary(siteinfo)
 
 #vpd function
 calc_vpd_inst <- function( qair=NA, tc=NA, patm=NA, elv=NA  ){
@@ -192,25 +195,25 @@ library(doSNOW)
 NumberOfCluster <- 8
 cl <- makeCluster(NumberOfCluster, type='SOCK')
 registerDoSNOW(cl)
-x0 <- foreach(a = 1:nrow(siteinfo),.combine = "rbind") %dopar% {
+x0 <- foreach(i = 1:nrow(siteinfo),.combine = "rbind") %dopar% {
   library(ingestr)
   library(dplyr)
   df_watch <- ingestr::ingest(
-    siteinfo  = siteinfo[a,],
+    siteinfo  = siteinfo[i,],
     source    = "watch_wfdei",
     getvars   = list(temp = "Tair",prec = "Rainf", vpd = "Qair", ppfd = "SWin"), 
-    dir       = "/Volumes/Seagate Backup Plus Drive/data/watch_wfdei/"
+    dir       = "/Users/yunpeng/data/ingestr/watch_wfdei/"
   )
   
   df_cru <- ingestr::ingest(
-    siteinfo  = siteinfo[a,],
+    siteinfo  = siteinfo[i,],
     source    = "cru",
     getvars   = list(ccov = "cld"),
-    dir       = "/Volumes/Seagate Backup Plus Drive/data/cru/ts_4.01/"
+    dir       = "/Users/yunpeng/data/ingestr/cru/"
   )
   
   df_co2 <- ingestr::ingest(
-    siteinfo[a,],
+    siteinfo[i,],
     source  = "co2_mlo",
     verbose = FALSE
   )
@@ -223,21 +226,75 @@ x0 <- foreach(a = 1:nrow(siteinfo),.combine = "rbind") %dopar% {
   
   ddf_meteo <- as_tibble(cbind(as.data.frame(df_watch$data)[,c("date","temp","prec","qair","ppfd")],as.data.frame(df_cru$data)[,c("ccov_int","ccov")],co2))
   
-  ddf_meteo$patm <- calc_patm(elv=siteinfo$elv[a], patm0 = 101325 )
+  elv <- siteinfo$elv[i]
+  
+  ddf_meteo$patm <- calc_patm(elv=elv, patm0 = 101325 )
   
   for (b in 1:length(ddf_meteo$qair)){
-    ddf_meteo$vpd[b] <- calc_vpd_inst( qair=ddf_meteo$qair[b], tc=ddf_meteo$temp[b], ddf_meteo$patm[b], elv=siteinfo$elv[b])
+    ddf_meteo$vpd[b] <- calc_vpd_inst( qair=ddf_meteo$qair[b], tc=ddf_meteo$temp[b], ddf_meteo$patm[b], elv=elv)
   }
   
-  ddf_meteo_final <- ddf_meteo[,c("date","temp","prec","vpd","ppfd","patm","ccov_int","ccov","co2")]
+  ddf_meteo_final <- ddf_meteo[,c("date","temp","prec","qair","vpd","ppfd","patm","ccov_int","ccov","co2")]
   ddf_meteo_final$prec <- ddf_meteo_final$prec/86400
   ddf_meteo_final$ppfd <- ddf_meteo_final$ppfd/86400
-  ddf_meteo_final$sitename <- NPP_grassland2$sitename[a]
-  ddf_meteo_final$sitename2 <- NPP_grassland2$sitename2[a]
-  csvfile <- paste("/Users/yunpeng/data/grassland/forcing/",siteinfo$sitename[a],".csv",sep = "")
+  ddf_meteo_final$sitename <- NPP_grassland2$sitename[i]
+  ddf_meteo_final$sitename2 <- NPP_grassland2$sitename2[i]
+  csvfile <- paste("/Users/yunpeng/data/grassland_npp/forcing2/",siteinfo$sitename[i],".csv",sep = "")
   write.csv(ddf_meteo_final, csvfile, row.names = TRUE)
 }
 stopCluster(cl)
+
+#another way - no parallel
+for (i in 1:nrow(siteinfo)) {
+  tryCatch({
+    df_watch <- ingestr::ingest(
+      siteinfo  = siteinfo[i,],
+      source    = "watch_wfdei",
+      getvars   = list(temp = "Tair",prec = "Rainf", vpd = "Qair", ppfd = "SWin"), 
+      dir       = "/Volumes/Seagate Backup Plus Drive/data/watch_wfdei/"
+    )
+    
+    df_cru <- ingestr::ingest(
+      siteinfo  = siteinfo[i,],
+      source    = "cru",
+      getvars   = list(ccov = "cld"),
+      dir       = "/Volumes/Seagate Backup Plus Drive/data/cru/ts_4.01/"
+    )
+    
+    df_co2 <- ingestr::ingest(
+      siteinfo[i,],
+      source  = "co2_mlo",
+      verbose = FALSE
+    )
+    
+    df_co2_final <- as.data.frame(df_co2$data)
+    
+    df_co2_final2 <- df_co2_final[!(format(df_co2_final$date,"%m") == "02" & format(df_co2_final$date, "%d") == "29"), , drop = FALSE]
+    
+    co2 <- df_co2_final2$co2
+    
+    ddf_meteo <- as_tibble(cbind(as.data.frame(df_watch$data)[,c("date","temp","prec","qair","ppfd")],as.data.frame(df_cru$data)[,c("ccov_int","ccov")],co2))
+    
+    elv <- siteinfo$elv[i]
+    
+    ddf_meteo$patm <- calc_patm(elv=elv, patm0 = 101325 )
+    
+    for (b in 1:length(ddf_meteo$qair)){
+      ddf_meteo$vpd[b] <- calc_vpd_inst( qair=ddf_meteo$qair[b], tc=ddf_meteo$temp[b], ddf_meteo$patm[b], elv=elv)
+    }
+    
+    ddf_meteo_final <- ddf_meteo[,c("date","temp","prec","qair","vpd","ppfd","patm","ccov_int","ccov","co2")]
+    ddf_meteo_final$prec <- ddf_meteo_final$prec/86400
+    ddf_meteo_final$ppfd <- ddf_meteo_final$ppfd/86400
+    ddf_meteo_final$sitename <- NPP_grassland2$sitename[i]
+    ddf_meteo_final$sitename2 <- NPP_grassland2$sitename2[i]
+    csvfile <- paste("/Users/yunpeng/data/grassland_npp/forcing2/",siteinfo$sitename[i],".csv",sep = "")
+    write.csv(ddf_meteo_final, csvfile, row.names = TRUE)
+    print(i)
+  }, error=function(e){})} 
+
+
+
 
 #nor run...
 '''
