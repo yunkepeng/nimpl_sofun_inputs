@@ -1,0 +1,80 @@
+---
+output:
+  html_document: default
+  pdf_document: default
+  word_document: default
+---
+
+---
+title: "Prediction field of c3c4 resampling and output"
+author: "Yunke Peng"
+date: "Dec 20 2020"
+output: html_document
+---
+
+## Introduction about Global nc files
+Input c3c4 data originally, and resampled it to 0.5 deg, and used it as an input in nimpl simulation (fpc_grid = 1 - c4 percentage). The step below shows how it was resampled to 0.5 degree and outputted as prediction nc file in nimpl simulation.
+
+
+
+```{r}
+
+library(rbeni)
+library(raster)
+
+elev_nc <- read_nc_onefile("~/data/watch_wfdei/WFDEI-elevation.nc")
+elev <- as.data.frame(nc_to_df(elev_nc, varnam = "elevation"))
+summary(elev)
+names(elev) <- c("lon","lat","z")
+coordinates(elev) <- ~lon+lat 
+gridded(elev) <- TRUE
+raster_z <- raster(elev, "z") 
+
+bounding_box <- extent(-180, 180, -90, 90)
+raster_z_crop <- crop(raster_z, bounding_box)
+raster_z_crop
+
+#resample
+r <- raster("~/data/c4_still/original/data/c4_percent_1d.asc")
+raster_SLA_crop <- crop(r, bounding_box)
+raster_SLA_crop
+
+res(raster_z_crop)
+res(raster_SLA_crop)
+
+resampled_SLA <- raster::resample(raster_SLA_crop, raster_z_crop, method="ngb")
+df_SLA <- stack(resampled_SLA)
+df_SLA <- as.data.frame(df_SLA,xy = TRUE)
+names(df_SLA) <- c("lon","lat","c4")
+
+subset(df_SLA,c4<0) # a few points were shown to be -999, we converted them to 0
+dim(subset(df_SLA,c4<0))
+
+df_SLA$c4[df_SLA$c4<0] <- 0
+
+df_SLA$c4 <- df_SLA$c4/100
+c4_map <- df_SLA
+summary(c4_map)
+
+c4_map <- c4_map[order(c4_map[,2],c4_map[,1]),]
+
+plot_map3(c4_map, 
+          varnam = "c4",plot_title = "c4 percentage",
+          latmin = -65, latmax = 85)
+
+#prepare lon and lat
+ncin <- nc_open("~/data/watch_wfdei/WFDEI-elevation.nc")
+lon <- ncvar_get(ncin,"lon")
+lat<-ncvar_get(ncin,"lat")
+
+c4_nc <- list(df_to_grid(c4_map,varnam = "c4", lonnam = "lon", latnam = "lat"))
+names(c4_nc) <- "c4"
+varams = "c4"
+
+test <- list(lon,lat,c4_nc,varams)
+names(test) <- c("lon","lat","vars","varams")
+write_nc2(test,varnams = "c4",long_name = "c4 percentage",units = "unitless",
+          path = "/Users/yunpeng/data/c4_still/final/c4_percentage.nc")
+
+
+```

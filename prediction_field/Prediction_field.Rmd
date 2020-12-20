@@ -609,7 +609,9 @@ The processing of LMA map, please see LMA_field.Rmd, which was stored in a same 
 
 
 #9. c3/c4 percentage map
-
+#please see newly created file in c3c4_field.Rmd, as located in the same subfile.
+#the below code is old (by arcgis resampling), and not used anymore!
+#Although I checked the results after arcgis and R resampling is exactly the same, but we don't use arcgis now....
 ```{r}
 library(raster)
 library(ncdf4)
