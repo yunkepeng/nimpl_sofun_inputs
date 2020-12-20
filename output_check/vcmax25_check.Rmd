@@ -87,12 +87,12 @@ outputdata <- function(name,year,min,max,path){
 #2. output them in a dataframe (dim: 259200 rows * 20 years)
 vcmax25_20yrs <- data.frame(matrix(NA))
 
-for (i in 1991:2010){
+for (i in 1991:2005){
   vcmax25_20yrs[1:259200,i-1991+1] <- outputdata("vcmax25",i,-999999,999999,"~/data/output_vcmax25/weight/")[,3]
 }
 
 #3. convert unit from mol/m2/s to umol/m2/s
-vcmax25_final <- (vcmax25_20yrs)*1000000
+vcmax25_final <- (vcmax25_20yrs)
 
 #4. construct coordinates (lon, lat)
 lonlat <- outputdata("vcmax25",i,-999999,999999,"~/data/output_vcmax25/weight/")[,1:2]
@@ -109,16 +109,16 @@ title("Fig.1a Vcmax25 using 'weighted-sum GPP' method in 1991-2010 (umol m-2 s-1
 
 ######Test 2: Vcmax25 using max daily vcmax25
 vcmax25max_20yrs <- data.frame(matrix(NA)) # for final sites climate data
-for (i in 1991:2010){
-  vcmax25max_20yrs[1:259200,i-1991+1] <- outputdata("vcmax25",i,-999999,999999,"~/data/output_vcmax25/max/")[,3]
+for (i in 1991:2005){
+  vcmax25max_20yrs[1:259200,i-1991+1] <- outputdata("annualvcmax25",i,-999999,999999,"~/data/output_vcmax25/max/")[,3]
 }
 
-vcmax25finalmax <- vcmax25max_20yrs*1000000
+vcmax25finalmax <- vcmax25max_20yrs
 vcmax25_max <- cbind(lonlat,rowMeans(vcmax25finalmax,na.rm = TRUE))
-names(vcmax25_max) <- c("lon","lat","vcmax25")
+names(vcmax25_max) <- c("lon","lat","annualvcmax25")
 coordinates(vcmax25_max) <- ~lon+lat 
 gridded(vcmax25_max) <- TRUE
-rmax <- raster(vcmax25_max, "vcmax25") 
+rmax <- raster(vcmax25_max, "annualvcmax25") 
 plot(rmax)
 title("Fig.1b Vcmax25 using daily maximum vcmax25 of year in 1991-2010 (umol m-2 s-1) ")
 
@@ -199,5 +199,15 @@ names(all_vcmax25) <- c("lon","lat","Elevation","obs_vcmax25","pred_vcmax25_weig
 analyse_modobs2(all_vcmax25,"obs_vcmax25","pred_vcmax25_weightsum", type = "points")
 analyse_modobs2(all_vcmax25,"obs_vcmax25","pred_vcmax25_max", type = "points")
 #it is no doubt that max method performs better(no underestimation)!
+
+gg<- plot_map3(subset(vcmax25_weightedsum,vcmax25>0), 
+               varnam = "vcmax25",plot_title = "weighted-sum vcmax25",
+               latmin = -65, latmax = 85) 
+gg
+names(vcmax25_max) <- c("lon","lat","vcmax25")
+gg<- plot_map3(subset(vcmax25_max,vcmax25>0), 
+               varnam = "vcmax25",plot_title = "Max vcmax25",
+               latmin = -65, latmax = 85) 
+gg
 
 ```
