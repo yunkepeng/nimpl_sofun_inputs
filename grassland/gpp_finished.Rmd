@@ -1,0 +1,824 @@
+---
+output:
+  html_document: default
+  pdf_document: default
+  word_document: default
+---
+
+---
+title: "Predict GPP in grassland, and fit NPP/GPP and ANPP/GPP"
+author: "Yunke Peng"
+date: "Dec 7, 2020"
+output: html_document
+---
+
+
+```{r}
+#the work needs to be done in the project!!! "~/rsofun/rsofun.Rproj"
+
+library(dplyr)
+library(ingestr)
+library(rsofun)
+library(ingestr)
+library(tidyverse)  # depends
+library(ncmeta)
+library(viridis)
+library(ggthemes)
+library(LSD)
+library(yardstick)
+library(ggplot2)
+library(RColorBrewer)
+library(gplots)
+library(tidyselect)
+library(extrafont)
+library(rbeni)
+library(raster)
+library(spgwr)
+library(maps)
+library(rworldmap)
+library(cowplot)
+library(spgwr)
+library(lme4)
+library(nlme)
+library(lmerTest)
+library("PerformanceAnalytics")
+library(MuMIn)
+library(rworldmap)
+
+##################Grassland###
+######For grassland
+NPP_SaraVicca <- read.csv(file="~/data/NPP_Yunke/NPP_SaraVicca/NPP_SaraVicca.csv")
+NPP_Malhi <- read.csv(file="~/data/NPP_Yunke/NPP_Malhi/NPP_Malhi.csv")
+NPP_Keith <- read.csv(file="~/data/NPP_Yunke/NPP_Keith/NPP_Keith.csv")
+NPP_Forc <- read.csv(file="~/data/NPP_Yunke/NPP_Forc/NPP_Forc.csv")
+NPP_Schulze <- read.csv(file="~/data/NPP_Yunke/NPP_Schulze/NPP_Schulze.csv")
+
+NPP_all <- rbind(NPP_SaraVicca,NPP_Malhi,NPP_Keith,NPP_Forc,NPP_Schulze)
+
+#add pft data derived from orginal data provided from Sara Vicca, and Schulze's book.
+Evergreen <- read.csv(file="~/data/NPP_Yunke/NPP_SaraVicca/orig/pft.csv")
+NPP_all2 <- merge(NPP_all,Evergreen,by=c("site"),all.x=TRUE)
+NPP_all3 <- NPP_all2[,c("site","lon","lat","z","file","Begin_year","End_year",
+                        "Source","GPP","TNPP_1","ANPP_2","BNPP_1","NPP.foliage","NPP.wood","pft")]
+
+# (2) add data from Tian Di (pft = grassland for all data)
+#firstly, clean our current data
+Tiandi_df <- read.csv(file="~/data/npp_stoichiometry_grasslands_tiandi/npp_stoichiometry_china_grassland_CN_stoichiometry_with_matched_NPP_data_from_Prof_Fang_group_20201026.csv")
+#as proved in Beni's ref, there is no big diff about lon_stoichmenistry and lon_npp, so we used the lon_npp because it is npp analyses now!
+Tiandi_npp <- Tiandi_df[,c("Original_Site_Label_stoichiometry","Longitude_stoichiometry","Latitude_stoichiometry","Altitude_stoichiometry","Sample_time_NPP","Sample_time_NPP","TNPP","ANPP","ANPP","BNPP","CNratio_leaf","CNratio_root","CNratio_soil")]
+#we will go back to c/n ratio later! It is NPP now only...
+names(Tiandi_npp) <- c("site","lon","lat","z","Begin_year","End_year","TNPP_1","ANPP_2","NPP.foliage","BNPP_1","CN_leaf","CN_root","CN_soil")
+
+#correct measurement year!
+for (i in 1:nrow(Tiandi_npp)){
+  if (is.na(Tiandi_npp$Begin_year[i]) == TRUE){ #if measruement year not available
+    Tiandi_npp$Begin_year[i] <- 1991#convert to long-term
+    Tiandi_npp$End_year[i] <- 2010 #convert to long-term 
+  } else {
+    Tiandi_npp$Begin_year[i] <- as.numeric(substr(Tiandi_npp$Begin_year[i], start = 1, stop = 4))
+    Tiandi_npp$End_year[i] <- as.numeric(substr(Tiandi_npp$End_year[i], start = nchar(Tiandi_npp$End_year[i])-3, stop = nchar(Tiandi_npp$End_year[i]))) #1-4 or 6-9
+  }
+}
+
+Tiandi_npp$Begin_year <- as.numeric(Tiandi_npp$Begin_year)
+Tiandi_npp$End_year <- as.numeric(Tiandi_npp$End_year)
+summary(Tiandi_npp$Begin_year)
+summary(Tiandi_npp$End_year)
+
+summary(Tiandi_npp)
+
+# (3) add data from Campioli (pft = grassland for all data)
+Cam_df <- read.csv(file="~/data/campioli/grasslands_MCampioli_20160111.csv")
+#correct coordinates firstly
+for (i in 1:nrow(Cam_df)){
+  if (Cam_df$latitude_sign[i] == "S"){
+    Cam_df$lat[i] <- -(Cam_df$latitude_value[i])
+  } else {
+    Cam_df$lat[i] <- Cam_df$latitude_value[i]
+  }
+  if (Cam_df$longitude_sign[i] == "W"){
+    Cam_df$lon[i] <- -(Cam_df$longitude_value[i])
+  } else {
+    Cam_df$lon[i] <- Cam_df$longitude_value[i]
+  }
+}
+
+Cam_npp <- Cam_df[,c("site","lon","lat","elevation","period_start","period_end","tnpp","anpp","anpp","bnpp","managment","biome")]
+names(Cam_npp) <- c("site","lon","lat","z","Begin_year","End_year","TNPP_1","ANPP_2","NPP.foliage","BNPP_1","management_MCampioli","biome_MCampioli")
+
+#rbind them and manually add some input
+NPP_final <- dplyr::bind_rows(NPP_all3, Tiandi_npp,Cam_npp) 
+
+NPP_final$file[685:1598] <- "Tiandi"
+NPP_final$file[1599:1739] <- "MCampioli"
+
+NPP_final$Source[685:1598] <- "Tiandi in Euler (Tibet dataset)"
+NPP_final$Source[1599:1739] <- "MCampioli in Euler"
+
+NPP_final$pft[685:1739] <- "Grassland"
+
+NPP_final$lnf_obs <- NPP_final$NPP.foliage/NPP_final$CN_leaf
+NPP_final$bnf_obs <- NPP_final$BNPP_1/NPP_final$CN_root
+
+for (i in 1:nrow(NPP_final)){
+  if (NPP_final$pft[i] == "Deciduous"|NPP_final$pft[i] == "Evergreen"|NPP_final$pft[i] == "Forest"|NPP_final$pft[i] == "Mixed"){
+    NPP_final$pft2[i] <- "Forest"
+  } else {
+    NPP_final$pft2[i] <- "Grassland"
+  }
+}
+summary(NPP_final)
+dim(NPP_final)
+
+#finally, add more forest sites from corrected Sara Vicca's dataset, including anpp, npp.leaf and npp.wood.
+Sara2_df <- read.csv(file="~/data/NPP_Yunke/NPP_SaraVicca/orig/validation_data/CORRECTIONS_CascadeHead_Andrews.csv")
+Sara2_df2 <- subset(Sara2_df,Repeat=="no") #remove repeated data as inputted in NPP_SaraVicca
+Sara2_NPP <- Sara2_df2[,c("LONGITUDE","LATITUDE","ELEVATION","YEAR","YEAR","AG_PROD_TREE_TOTAL_AS_CARBON","AG_PROD_TREE_FOLIAGE_AS_CARBON","AG_PROD_TREE_WOOD_AS_CARBON")]
+names(Sara2_NPP) <- c("lon","lat","z","Begin_year","End_year","ANPP_2","NPP.foliage","NPP.wood")
+Sara2_NPP$ANPP_2[Sara2_NPP$ANPP_2<=0] <- NA
+Sara2_NPP$NPP.foliage[Sara2_NPP$NPP.foliage<=0] <- NA
+Sara2_NPP$NPP.wood[Sara2_NPP$NPP.wood <=0] <- NA
+Sara2_NPP$Source <- "Sara Vicca Validation data"
+Sara2_NPP$file <- "/Users/yunpeng/data/NPP_Yunke/NPP_SaraVicca/orig/validation_data"
+Sara2_NPP$pft<-"Forest"
+Sara2_NPP$pft2<-"Forest"
+summary(Sara2_NPP)
+
+NPP_final2 <- dplyr::bind_rows(NPP_final, Sara2_NPP) 
+summary(NPP_final2)
+
+NPP_grassland <- subset(NPP_final2,pft2=="Grassland")
+NPP_grassland$sitename <- NA
+for (i in 1:nrow(NPP_grassland)){
+  NPP_grassland$sitename[i] <- paste("NPP",i,sep = "")
+}
+
+
+siteinfo <- data.frame(
+  sitename = NPP_grassland$sitename,
+  lon = NPP_grassland$lon,
+  lat = NPP_grassland$lat,
+  elv = NPP_grassland$z,
+  year_start = NPP_grassland$Begin_year,
+  year_end = NPP_grassland$End_year
+)
+siteinfo$no <- c(1:nrow(siteinfo))
+
+siteinfo$year_start[siteinfo$year_start<=1980] <- 1980
+siteinfo$year_end[siteinfo$year_start<=1980] <- 1989
+
+siteinfo <-  siteinfo %>% dplyr::mutate(date_start = lubridate::ymd(paste0(year_start, "-01-01"))) %>%
+  dplyr::mutate(date_end = lubridate::ymd(paste0(year_end, "-12-31"))) 
+
+#aggregate by lon, lat, z, year_start, year_end
+siteinfo2 <- aggregate(siteinfo,by=list(siteinfo$lon,siteinfo$lat,siteinfo$elv,siteinfo$year_start,siteinfo$year_end), FUN=mean, na.rm=TRUE) #site-mean
+for (i in 1:nrow(siteinfo2)){
+  siteinfo2$sitename2[i] <- paste("ingestr",i,sep = "")
+}
+
+siteinfo3 <- siteinfo2[,c("sitename2","lon","lat","elv","year_start","year_end")]
+
+NPP_grassland_all <-Reduce(function(x,y) merge(x = x, y = y, by = c("lon","lat","elv","year_start","year_end"),all.x=TRUE), 
+                           list(siteinfo,siteinfo3))
+
+NPP_grassland_all <- NPP_grassland_all[order(NPP_grassland_all$no), ]
+#we will use above data at the end
+summary(NPP_grassland_all)
+
+siteinfo_final <- siteinfo2[,c("sitename2","lon","lat","elv","year_start","year_end","date_start","date_end")]
+names(siteinfo_final) <- c("sitename","lon","lat","elv","year_start","year_end","date_start","date_end")
+summary(siteinfo_final)
+
+#last check
+stopifnot( all(siteinfo_final$year_start == floor(siteinfo_final$year_start)) )
+stopifnot( all(siteinfo_final$year_end == floor(siteinfo_final$year_end)) )
+
+#extract fapar and forcing --》 see forcing_fpar.R
+
+#after forcing and fapar -> 10 sites are missing fapar, though org fapar is available, but is is all NA based on its information in qc.
+fapar_df <- list.files("/Users/yunpeng/data/grassland_npp/fpar_all",full.names = T)
+length(fapar_df)-1
+
+fapar_org_df <- list.files("/Users/yunpeng/data/grassland_npp/fpar_raw",full.names = T)
+length(fapar_org_df)
+
+forcing_df <- list.files("/Users/yunpeng/data/grassland_npp/forcing",full.names = T)
+length(forcing_df)
+
+#fapar - input - (fpar data structure rank: fpar2, fpar, fpar3, fpar4)
+for (i in 1:length(fapar_df)){
+  df1 <- read.csv(fapar_df[i])
+  df1$date <- as.Date(df1$date)
+  df1 <- df1[!(format(df1$date,"%m") == "02" & format(df1$date, "%d") == "29"), , drop = FALSE]
+  df2 <- df1 %>% mutate(ymonth = month(date),
+                        yday = day(date)) %>% 
+    group_by(ymonth, yday) %>% 
+    summarise(fpar = mean(modisvar_filled, na.rm = TRUE))
+  assign(substr(sub('.*daily_', '', fapar_df[i]),1,nchar(sub('.*daily_', '', fapar_df[i]))-4), df2) 
+}
+
+#fapar - check na
+for (i in 1:nrow(siteinfo_final)){
+  siteinfo_final$fpar_avil[i] <- exists(paste("ingestr",i,sep = ""))
+}
+
+#forcing - input
+for (i in 1:length(forcing_df)){
+  tryCatch({
+    df1 <- read.csv(forcing_df[i])
+    df1$date <- as.Date(df1$date)
+    fpar <- as.data.frame(eval(parse(text=df1$sitename[1])))[,3]
+    fapar <- rep(fpar,nrow(df1)/365)
+    df2 <- cbind(df1,fapar)
+    df3 <- df2[,c("date","temp","prec","vpd","ppfd","patm","ccov_int","ccov","fapar","co2")]
+    assign(paste("final",df1$sitename[1],sep="_"), as_tibble(df3))
+  }, error=function(e){})} 
+
+#forcing - check na when either forcing or fapar missing
+for (i in 1:nrow(siteinfo_final)){
+  siteinfo_final$forcing_avil[i] <- exists(paste("final",siteinfo_final$sitename[i],sep="_"))
+}
+
+#show na points (n = 10) for without fapar data.
+na_data <- subset(siteinfo_final,fpar_avil=="FALSE")
+dim(na_data)
+library(rworldmap)
+newmap <- getMap(resolution = "low")
+plot(newmap, xlim = c(-180, 180), ylim = c(-75, 75), asp = 1)
+points(na_data$lon,na_data$lat, col="red", pch=16,cex=1)
+
+
+#now, we can work on predicting gpp
+df_soiltexture <- bind_rows(
+  top    = tibble(layer = "top",    fsand = 0.4, fclay = 0.3, forg = 0.1, fgravel = 0.1),
+  bottom = tibble(layer = "bottom", fsand = 0.4, fclay = 0.3, forg = 0.1, fgravel = 0.1))
+params_modl <- list(
+  kphio           = 0.09423773,
+  soilm_par_a     = 0.33349283,
+  soilm_par_b     = 1.45602286)
+
+
+
+#now, run for loop for collecting each site - by pass points above that do not have fapar
+dim(na_data) #this point needs to be passed
+siteinfo_final$pred_gpp_c3 <- NA
+siteinfo_final$pred_gpp_c4 <- NA
+
+for (i in 1:nrow(siteinfo_final)) {
+  tryCatch({
+    #c3
+    forcing <- (eval(parse(text=(paste("final",siteinfo_final$sitename[i],sep="_")))))
+    modlist <- run_pmodel_f_bysite( 
+      siteinfo_final$sitename[i], 
+      params_siml <- list(
+        spinup             = TRUE,
+        spinupyears        = 10,
+        recycle            = 1,
+        soilmstress        = TRUE,
+        tempstress         = TRUE,
+        calc_aet_fapar_vpd = FALSE,
+        in_ppfd            = TRUE,
+        in_netrad          = FALSE,
+        outdt              = 1,
+        ltre               = FALSE,
+        ltne               = FALSE,
+        ltrd               = FALSE,
+        ltnd               = FALSE,
+        lgr3               = TRUE,
+        lgn3               = FALSE,
+        lgr4               = FALSE,
+        firstyeartrend = siteinfo_final$year_start[i],
+        nyeartrend = siteinfo_final$year_end[i]-siteinfo_final$year_start[i]+1), 
+      siteinfo = siteinfo_final[i,], 
+      forcing, 
+      df_soiltexture, 
+      params_modl = params_modl, 
+      makecheck = TRUE)
+    
+    pred_gpp_list <- modlist %>% mutate(ymonth = month(date),yday = day(date)) %>% group_by(ymonth, yday) %>% summarise(gpp = mean(gpp, na.rm = TRUE))
+    
+    siteinfo_final[i,c("pred_gpp_c3")] <- sum(pred_gpp_list$gpp)
+    
+    #c4
+    modlist <- run_pmodel_f_bysite( 
+      siteinfo_final$sitename[i], 
+      params_siml <- list(
+        spinup             = TRUE,
+        spinupyears        = 10,
+        recycle            = 1,
+        soilmstress        = TRUE,
+        tempstress         = TRUE,
+        calc_aet_fapar_vpd = FALSE,
+        in_ppfd            = TRUE,
+        in_netrad          = FALSE,
+        outdt              = 1,
+        ltre               = FALSE,
+        ltne               = FALSE,
+        ltrd               = FALSE,
+        ltnd               = FALSE,
+        lgr3               = FALSE,
+        lgn3               = FALSE,
+        lgr4               = TRUE,
+        firstyeartrend = siteinfo_final$year_start[i],
+        nyeartrend = siteinfo_final$year_end[i]-siteinfo_final$year_start[i]+1), 
+      siteinfo = siteinfo_final[i,], 
+      forcing, 
+      df_soiltexture, 
+      params_modl = params_modl, 
+      makecheck = TRUE)
+    pred_gpp_list <- modlist %>% mutate(ymonth = month(date),yday = day(date)) %>% group_by(ymonth, yday) %>% summarise(gpp = mean(gpp, na.rm = TRUE))
+    
+    siteinfo_final[i,c("pred_gpp_c4")] <- sum(pred_gpp_list$gpp)
+  }, error=function(e){})} 
+
+#collect gpp and combine it into NPP_grassland
+siteinfo_final_gpp <- siteinfo_final[,c("sitename","pred_gpp_c3","pred_gpp_c4")]
+names(siteinfo_final_gpp) <- c("sitename2","pred_gpp_c3","pred_gpp_c4")
+NPP_grassland_all2 <-Reduce(function(x,y) merge(x = x, y = y, by = c("sitename2"),all.x=TRUE), 
+                            list(NPP_grassland_all,siteinfo_final_gpp))
+
+NPP_grassland_all2 <- NPP_grassland_all2[order(NPP_grassland_all2$no), ]
+
+NPP_grassland$pred_gpp_c3 <- NPP_grassland_all2$pred_gpp_c3
+NPP_grassland$pred_gpp_c4 <- NPP_grassland_all2$pred_gpp_c4
+
+dim(subset(NPP_grassland,pred_gpp_c3>TNPP_1)) #157
+dim(subset(NPP_grassland,pred_gpp_c3<TNPP_1)) #34
+
+outlier<- (subset(NPP_grassland,pred_gpp_c3<TNPP_1))
+
+newmap <- getMap(resolution = "low")
+plot(newmap, xlim = c(-180, 180), ylim = c(-75, 75), asp = 1)
+points(outlier$lon,outlier$lat, col="red", pch=16,cex=1)
+#a few sites are outliers: 34/154
+
+#now, extract all predictors
+#firstly, alpha, Tg, vpd, PPFD
+
+#input nc file
+elev_nc <- read_nc_onefile("~/data/watch_wfdei/WFDEI-elevation.nc")
+elev <- as.data.frame(nc_to_df(elev_nc, varnam = "elevation"))
+
+Tg <- as.data.frame(nc_to_df(read_nc_onefile(
+  "~/data/nimpl_sofun_inputs/map/Final_ncfile/Tg.nc"),
+  varnam = "Tg"))
+
+PPFD <- as.data.frame(nc_to_df(read_nc_onefile(
+  "~/data/nimpl_sofun_inputs/map/Final_ncfile/PPFD.nc"),
+  varnam = "PPFD"))
+
+vpd <- as.data.frame(nc_to_df(read_nc_onefile(
+  "~/data/nimpl_sofun_inputs/map/Final_ncfile/vpd.nc"),
+  varnam = "vpd"))
+
+alpha <- as.data.frame(nc_to_df(read_nc_onefile(
+  "~/data/nimpl_sofun_inputs/map/Final_ncfile/alpha.nc"),
+  varnam = "alpha"))
+
+fAPAR <- as.data.frame(nc_to_df(read_nc_onefile(
+  "~/data/nimpl_sofun_inputs/map/Final_ncfile/fAPAR.nc"),
+  varnam = "fAPAR"))
+
+age <- as.data.frame(nc_to_df(read_nc_onefile(
+  "~/data/nimpl_sofun_inputs/map/Final_ncfile/age.nc"),
+  varnam = "age"))
+
+#cbind all predictors, and its lon, lat, z
+all_predictors <- cbind(elev,Tg$myvar,PPFD$myvar,vpd$myvar,
+                        alpha$myvar,fAPAR$myvar,age$myvar)
+
+names(all_predictors) <- c("lon","lat","z","Tg","PPFD","vpd",
+                           "alpha","fAPAR","age")
+
+Tg_df <- all_predictors[,c("lon","lat","z","Tg")]
+PPFD_df <- all_predictors[,c("lon","lat","z","PPFD")]
+vpd_df <- all_predictors[,c("lon","lat","z","vpd")]
+alpha_df <- all_predictors[,c("lon","lat","z","alpha")]
+fAPAR_df <- all_predictors[,c("lon","lat","z","fAPAR")]
+age_df <- all_predictors[,c("lon","lat","z","age")]
+
+#now, apply gwr to extract site predictors' value
+grassland_site <- NPP_grassland[,c("lon","lat","z")]
+grassland_site$Tg <- NA
+grassland_site$PPFD <- NA
+grassland_site$vpd <- NA
+grassland_site$alpha <- NA
+#grassland_site$age <- NA
+grassland_site$fapar <- NA
+
+a <- 1.5 # which degree (distance) of grid when interpolating gwr from global grids
+
+#Extract Tg, PPFD, vpd, alpha,fAPAR
+
+for (i in 1:nrow(grassland_site)) {
+  tryCatch({
+    #Tg
+    Tg_global <- na.omit(Tg_df)
+    NRE_part <- subset(Tg_global,lon>(grassland_site[i,1]-a)&lon<(grassland_site[i,1]+a)&
+                         lat>(grassland_site[i,2]-a)&lat<(grassland_site[i,2]+a))
+    coordinates(NRE_part) <- c("lon","lat")
+    gridded(NRE_part) <- TRUE
+    NRE_coord <- grassland_site[i,1:3]
+    coordinates(NRE_coord) <- c("lon","lat")
+    grassland_site[i,c("Tg")] <- (gwr(Tg ~ z, NRE_part, bandwidth = 1.06, fit.points =NRE_coord,predictions=TRUE))$SDF$pred
+    #ppfd
+    PPFD_global <- na.omit(PPFD_df)
+    NRE_part <- subset(PPFD_global,lon>(grassland_site[i,1]-a)&lon<(grassland_site[i,1]+a)&
+                         lat>(grassland_site[i,2]-a)&lat<(grassland_site[i,2]+a))
+    coordinates(NRE_part) <- c("lon","lat")
+    gridded(NRE_part) <- TRUE
+    NRE_coord <- grassland_site[i,1:3]
+    coordinates(NRE_coord) <- c("lon","lat")
+    grassland_site[i,c("PPFD")] <- (gwr(PPFD ~ z, NRE_part, bandwidth = 1.06, fit.points =NRE_coord,predictions=TRUE))$SDF$pred
+    #vpd
+    vpd_global <- na.omit(vpd_df)
+    NRE_part <- subset(vpd_global,lon>(grassland_site[i,1]-a)&lon<(grassland_site[i,1]+a)&
+                         lat>(grassland_site[i,2]-a)&lat<(grassland_site[i,2]+a))
+    coordinates(NRE_part) <- c("lon","lat")
+    gridded(NRE_part) <- TRUE
+    NRE_coord <- grassland_site[i,1:3]
+    coordinates(NRE_coord) <- c("lon","lat")
+    grassland_site[i,c("vpd")] <- (gwr(vpd ~ z, NRE_part, bandwidth = 1.06, fit.points =NRE_coord,predictions=TRUE))$SDF$pred
+    #alpha
+    alpha_global <- na.omit(alpha_df)
+    NRE_part <- subset(alpha_global,lon>(grassland_site[i,1]-a)&lon<(grassland_site[i,1]+a)&
+                         lat>(grassland_site[i,2]-a)&lat<(grassland_site[i,2]+a))
+    coordinates(NRE_part) <- c("lon","lat")
+    gridded(NRE_part) <- TRUE
+    NRE_coord <- grassland_site[i,1:3]
+    coordinates(NRE_coord) <- c("lon","lat")
+    grassland_site[i,c("alpha")]  <- (gwr(alpha ~ z, NRE_part, bandwidth = 1.06, fit.points =NRE_coord,predictions=TRUE))$SDF$pred
+    #fAPAR
+    fAPAR_global <- na.omit(fAPAR_df)
+    NRE_part <- subset(fAPAR_global,lon>(grassland_site[i,1]-a)&lon<(grassland_site[i,1]+a)&
+                         lat>(grassland_site[i,2]-a)&lat<(grassland_site[i,2]+a))
+    coordinates(NRE_part) <- c("lon","lat")
+    gridded(NRE_part) <- TRUE
+    NRE_coord <- grassland_site[i,1:3]
+    coordinates(NRE_coord) <- c("lon","lat")
+    grassland_site[i,c("fapar")]<- (gwr(fAPAR ~ z, NRE_part, bandwidth = 1.06, fit.points =NRE_coord,predictions=TRUE))$SDF$pred
+  }, error=function(e){})} 
+
+
+summary(grassland_site)
+
+library(raster)
+library(rgdal)
+library(dplyr)
+library(rbeni)
+library(ncdf4)
+soil <- raster('~/data/ISRIC/data_orig/data/raster/w001000.adf')
+NRE_lonlat <- grassland_site[,c("lon","lat","z")]
+
+sp_sites <- SpatialPoints(NRE_lonlat[,c("lon","lat","z")]) # only select lon and lat
+
+#change its variable name to SUID, this is a unique code that could be used to merged with soil data, which will be further merged with csv below.
+NRE_lonlat2 <- raster::extract(soil, sp_sites, sp = TRUE) %>% as_tibble() %>% 
+  right_join(NRE_lonlat, by = c("lon", "lat","z")) %>% 
+  dplyr::rename( SUID = w001000)
+
+#input soil information data csv
+ISRIC.data<-read.csv(file="~/data/ISRIC/data_orig/data/HW30s_FULL.csv",header=TRUE,sep=";",dec = ".") # Now, input ISRIC database
+data.soil.extract <- merge(NRE_lonlat2,ISRIC.data,by='SUID',all.x=TRUE) # merge site with soil variables by using SUID
+data.soil.extract2 <- subset(data.soil.extract,CNrt>0) # select available CNrt
+data.soil.extract3 <- data.soil.extract2[,c("lon","lat","z","CNrt")] # only select CNrt variable
+
+# note that in each site there might be more than 1 samples measured, so we should aggregate them which make sures that one grid holds one data only.
+ss1 <- aggregate(data.soil.extract3,by=list(data.soil.extract3$lon,data.soil.extract3$lat,data.soil.extract3$z), FUN=mean, na.rm=TRUE) 
+ss2 <- ss1[,c("lon","lat","z","CNrt")] # now,select lon, lat, z and CNrt only
+
+# finally, merging site-based soil c/n data into our current dataframe
+grassland_site$no <- c(1:nrow(grassland_site))
+grassland_site2 <-Reduce(function(x,y) merge(x = x, y = y, by = c("lon","lat","z"),all.x=TRUE), 
+                         list(grassland_site,ss2))
+
+grassland_site3 <- grassland_site2[order(grassland_site2$no), ]
+
+head(grassland_site3)
+
+NPP_grassland_final <- cbind(NPP_grassland,grassland_site3[,c(4,5,6,7,8,10)])
+summary(NPP_grassland_final)
+
+
+#now, process final data, and used in final simulations
+NPP_grassland_final$fapar[NPP_grassland_final$fapar>1] <- NA
+NPP_grassland_final$alpha[NPP_grassland_final$alpha>1] <- NA
+#NPP_grassland_final$age[NPP_grassland_final$age<0] <- NA
+summary(NPP_grassland_final)
+
+
+#1. aggregate based on lat, lon and z
+site_all <- (aggregate(NPP_grassland_final,by=list(NPP_grassland_final$lon,NPP_grassland_final$lat,NPP_grassland_final$z), FUN=mean, na.rm=TRUE))
+site_all <- site_all[,c("lon","lat","z")]
+for (i in 1:nrow(site_all)){
+  site_all$site_xyz[i] <- paste("a",i,sep="")
+}
+dim(site_all)
+# merge back to FINAL INDIVIDUALS DATA
+NPP_grassland_final$no <- c(1:nrow(NPP_grassland_final))
+
+NPP_grassland_final2 <-Reduce(function(x,y) merge(x = x, y = y, by = c("lon","lat","z"),all.x=TRUE), 
+                              list(NPP_grassland_final,site_all))
+
+NPP_grassland_final2 <- NPP_grassland_final2[order(NPP_grassland_final2$no), ]
+
+#2. aggregate based on lon and lat
+site_all2 <- (aggregate(NPP_grassland_final2,by=list(NPP_grassland_final2$lon,NPP_grassland_final2$lat), FUN=mean, na.rm=TRUE))
+site_all2 <- site_all2[,c("lon","lat")]
+for (i in 1:nrow(site_all2)){
+  site_all2$site_xy[i] <- paste("b",i,sep="")
+}
+dim(site_all2)
+# merge back to FINAL INDIVIDUALS DATA
+
+NPP_grassland_final3 <-Reduce(function(x,y) merge(x = x, y = y, by = c("lon","lat"),all.x=TRUE), 
+                              list(NPP_grassland_final2,site_all2))
+
+NPP_grassland_final3 <- NPP_grassland_final3[order(NPP_grassland_final3$no), ]
+
+NPP_grassland_final3$ppfd_fapar <- NPP_grassland_final3$PPFD*NPP_grassland_final3$fapar
+
+NPP_grassland_final3$filter[NPP_grassland_final3$management == "M"] <- "removal"
+NPP_grassland_final3$filter[NPP_grassland_final3$management == "T"] <- "removal"
+NPP_grassland_final3$filter[NPP_grassland_final3$biome == "marsh"] <- "removal"
+NPP_grassland_final3$filter[NPP_grassland_final3$biome == "savannah"] <- "removal"
+
+###########
+#now, it is the time to merge with c3c4 information from three different sources
+###########
+
+
+#1. Tian Di's data
+tiandi_df_sp <- read.csv("/Users/yunpeng/data/npp_stoichiometry_grasslands_tiandi/China_grassland_CN_stoichiometry_with_matched_NPP_species_legume_20201214.csv")
+
+list_df <- vector(mode = "list", length = nrow(tiandi_df_sp))
+
+for (i in (1:nrow(tiandi_df_sp))){
+  list_df[[i]] <- strsplit(tiandi_df_sp$Species_CN[i], "_", fixed = FALSE, perl = FALSE, useBytes = FALSE)
+  
+}
+
+for (a in (1:nrow(tiandi_df_sp))){
+  tiandi_df_sp[a,21:33] <- list_df[[a]][[1]][1:13]
+}
+
+t1 <- tiandi_df_sp[,21:33] 
+for (i in (1:nrow(t1))){
+  t1$no[i] <- i
+}
+
+library(reshape)
+t2 <- melt(t1, id.vars=c('no'),var='species')
+t3 <- na.omit(t2)
+t4 <- t3[order(t3$no), ]
+t5 <- t4[,c("no","value")]
+dim(t5) # number of individuals overall
+
+final_species <- aggregate(no~value,FUN=mean,na.rm=TRUE,data=t5)
+dim(final_species) #number of species type
+
+#separate into genus species
+for (i in (1:nrow(final_species))){
+  final_species[i,3] <- strsplit(final_species$value[i], " ", fixed = FALSE, perl = FALSE, useBytes = FALSE)[[1]][1] #genus
+  final_species[i,4] <- strsplit(final_species$value[i], " ", fixed = FALSE, perl = FALSE, useBytes = FALSE)[[1]][2] #species
+}
+head(final_species)
+final_species <- final_species[,c(1,3,4)] 
+names(final_species) <- c("speciesname","genus","species")
+dim(final_species)
+#csvfile <- paste("/Users/yunpeng/data/npp_stoichiometry_grasslands_tiandi/species_name.csv")
+#write.csv(final_species, csvfile, row.names = TRUE)
+
+#now, input c3/c4 information from TRY database
+c3c4 <- read.csv("/Users/yunpeng/data/c3c4_species/Try20201218143430TRY_Categorical_Traits_Lookup_Table_2012_03_17_TestRelease/TRY_Categorical_Traits_Lookup_Table_2012_03_17_TestRelease.csv")
+data1 <- c3c4[,c(2,4,5,18)]
+dim(data1)
+names(data1) <- c("speciesname","genus","species","c3")
+
+
+final_species2 <- merge(final_species,data1,by=c("speciesname"),all.x=TRUE)
+
+#after having a look at original TRY data, for NA data of final_species2: if the same Genus in TRY database all have recorded c3, then we transfer our NA of same Genus to c3;
+# if c3/c4 existed in the same Genus, or Genus is missing, then we set to unknown.
+final_species2$c3_final <- final_species2$c3
+final_species2$c3_final[6] <- "C4"
+final_species2$c3_final[c(16,17,69,70,91,98,100,106,108,110,111,113,114,
+                          115,116,117,122,123,124,133,142,153,154,177,178,179,180,206)] <- "unknown"
+final_species2$c3_final[final_species2$c3_final==""] <- "tranfered_c3"
+final_species2$c3_final[is.na(final_species2$c3_final)==TRUE] <- "tranfered_c3"
+
+#have a look at finalspecies c3c4 data and create a new variable name for percentage
+final_species2$c3_percentage <- NA
+
+final_species2$c3_percentage[final_species2$c3_final=="C3"] <- 1
+final_species2$c3_percentage[final_species2$c3_final=="tranfered_c3"] <- 1 #with same genus in TRY that all = c3, then also converted to C3
+final_species2$c3_percentage[final_species2$c3_final=="C4"] <- 0
+final_species2$c3_percentage[final_species2$c3_final=="unknown"] <- NA
+
+#now, time to merge with all individuals data
+final_sp_tian <- final_species2[,c("speciesname","c3_percentage")]
+names(t5) <- c("no","speciesname")
+
+all_individuals_tian <- merge(t5,final_sp_tian,by=c("speciesname"),all.x=TRUE)
+all_individuals_tian <- all_individuals_tian[order(all_individuals_tian$no), ]
+#if na occured in certain speciees, then omit (na.rm=TRUE)
+all_individuals_tian2 <- aggregate(all_individuals_tian,by=list(all_individuals_tian$no), FUN=mean, na.rm=TRUE)
+summary(all_individuals_tian2)
+all_individuals_tian2 <- all_individuals_tian2[order(all_individuals_tian2$no), ]
+
+hist(all_individuals_tian2$c3_percentage)
+
+#finally, cbind to original data
+tiandi_df_sp2 <- tiandi_df_sp[,1:20]
+tiandi_df_sp2$c3_percentage <- all_individuals_tian2$c3_percentage
+summary(tiandi_df_sp2)
+subset(tiandi_df_sp2,is.na(c3_percentage)==TRUE)
+
+tiandi_df_sp3 <- tiandi_df_sp2[,c("Longitude_CN","Latitude_CN","Altitude_CN","CN_ratio_leaf","ANPP","c3_percentage")]
+names(tiandi_df_sp3) <- c("lon","lat","z","CN_leaf","ANPP_2","c3_percentage_tiandi")
+
+head(NPP_grassland_final3)
+
+NPP_grassland_final4 <- merge(NPP_grassland_final3,tiandi_df_sp3,by=c("lon","lat","z","CN_leaf","ANPP_2"),all.x=TRUE)
+summary(NPP_grassland_final4)
+
+
+#2. Keith's data
+keith_c3c4 <- read.csv("/Users/yunpeng/data/NPP_Yunke/NPP_Keith/orig/ABPE.csv")
+keith2 <- keith_c3c4[,c("Site","ANPP","C_cycle")]
+keith2$c3_percentage_keith[keith2$C_cycle=="C3"] <- 1
+keith2$c3_percentage_keith[keith2$C_cycle=="C4"] <- 0
+keith2$c3_percentage_keith[keith2$C_cycle=="NA"] <- NA
+
+keith2 <- keith2[,c("Site","ANPP","c3_percentage_keith")]
+names(keith2) <- c("site","ANPP_2","c3_percentage_keith")
+#merged with site and ANPP_2 (so that each individual is unique).
+NPP_grassland_final5 <- merge(NPP_grassland_final4,keith2,by=c("site","ANPP_2"),all.x=TRUE)
+summary(NPP_grassland_final5) # 1097-1053 = 44 points were filled now
+
+#3. Campioli
+Campioli_c3c4 <- read.csv("/Users/yunpeng/data/campioli/structured_Database1Grassland.csv")
+Campioli2 <- Campioli_c3c4[,c("ID","type")]
+Campioli2$c3_percentage_Campioli[Campioli2$type=="c3"] <- 1
+Campioli2$c3_percentage_Campioli[Campioli2$type=="c4"] <- 0
+Campioli2$c3_percentage_Campioli[Campioli2$type=="c3c4"] <- NA # we don't know how much percentage they have (i.e. species number) so we can only extract them from c3c4 percentage map.
+Campioli2$c3_percentage_Campioli[Campioli2$type=="NA"] <- NA
+
+Campioli2 <- Campioli2[,c("ID","c3_percentage_Campioli")]
+names(Campioli2) <- c("site","c3_percentage_Campioli")
+NPP_grassland_final6 <- merge(NPP_grassland_final5,Campioli2,by=c("site"),all.x=TRUE)
+summary(NPP_grassland_final6) 
+#1097-1012 = 86 points were filled now, which is much less than 142 --> have a look at na table and see which site' missing c3c4 can be filled manually (because the site information given by Cambiopli in two times email are NOT completely the same!!!)
+atest <- subset(NPP_grassland_final6,file=="MCampioli" & is.na(c3_percentage_Campioli)==TRUE)
+#below is the manually step to fill the c3c4 based on orig c3c4 data given (it was missing in merge because the sitename was not perfectly matached)
+NPP_grassland_final6$c3_percentage_Campioli[c(18,19,20,21,22,23,27,28,29,30,31,32,858,859)] <- 1
+NPP_grassland_final6$c3_percentage_Campioli[c(807,808,809,810,846,853,856,857,877,878)] <- 0 #US-ccc-D01, US-ccc-D02,US-Kon-D05, US-paw-D01,US-Seg-D01,VE-ori-D01,VE-ori-D02
+summary(NPP_grassland_final6) 
+
+##Finally, combine the three above to one dataset
+NPP_grassland_final7 <- NPP_grassland_final6 %>% 
+  mutate(c3_percentage = coalesce(c3_percentage_tiandi,c3_percentage_keith,c3_percentage_Campioli))
+summary(NPP_grassland_final7)
+
+#Alternatively (last), now let's use c3c4 map to fill in those 82 points.
+c4_still <- as.data.frame(nc_to_df(read_nc_onefile(
+  "/Users/yunpeng/data/c4_still/final/c4_percentage.nc"),
+  varnam = "c4"))
+
+#use extract function to extract c4 (not gwr!)
+names(c4_still) <- c("lon","lat","c4")
+coordinates(c4_still) <- ~lon+lat 
+gridded(c4_still) <- TRUE
+rc4_global <- raster(c4_still, "c4") 
+
+#aggregate based on lon and lat firstly
+NPP_grassland_final7_site <- aggregate(NPP_grassland_final7,by=list(NPP_grassland_final7$lon,NPP_grassland_final7$lat), FUN=mean, na.rm=TRUE) #site-mean
+NPP_grassland_final7_site <- NPP_grassland_final7_site[,c("lon","lat")]
+
+sp_sites <- SpatialPoints(NPP_grassland_final7_site) # only select lon and lat
+
+NPP_grassland_final7_site <- extract(rc4_global, sp_sites, sp = TRUE) %>% as_tibble() %>% 
+  right_join(NPP_grassland_final7_site, by = c("lon", "lat")) %>% 
+  dplyr::rename( c4_percentage_map = c4)
+dim(NPP_grassland_final7_site)
+hist(NPP_grassland_final7_site$c4_percentage_map) # most c4 percentage =0, which is great.
+
+#now, merge back to site
+NPP_grassland_final7_site$c3_precentage_map <- 1-NPP_grassland_final7_site$c4_percentage_map
+NPP_grassland_final7_site <- NPP_grassland_final7_site[,c("lon","lat","c3_precentage_map")]
+
+NPP_grassland_final8 <- merge(NPP_grassland_final7,NPP_grassland_final7_site,by=c("lon","lat"),all.x=TRUE)
+dim(NPP_grassland_final8)
+
+summary(NPP_grassland_final8)
+
+#compare measured and predicted c3 percentage --> very different!
+plot(NPP_grassland_final8$c3_percentage~NPP_grassland_final8$c3_precentage_map)
+
+NPP_grassland_final8 <- NPP_grassland_final8[order(NPP_grassland_final8$no), ]
+
+#now, combine them: primary based on measured data, alternatively based on map data.
+NPP_grassland_final9 <- NPP_grassland_final8 %>% 
+  mutate(c3_percentage_final = coalesce(c3_percentage,c3_precentage_map))
+#which points were filled by map
+subset(NPP_grassland_final9,is.na(c3_percentage)==TRUE)$c3_percentage_final
+
+
+
+##########NOW, final calculating gpp based on weighted sum method --> the first is only based on measured c3c4, the second is the combination of measured + map c3c4.
+NPP_grassland_final9$weightedgpp_measured_c3 <- (NPP_grassland_final9$pred_gpp_c3 * NPP_grassland_final9$c3_percentage)+(NPP_grassland_final9$pred_gpp_c4 * (1-NPP_grassland_final9$c3_percentage))
+NPP_grassland_final9$weightedgpp_all <- (NPP_grassland_final9$pred_gpp_c3 * NPP_grassland_final9$c3_percentage_final)+(NPP_grassland_final9$pred_gpp_c4 * (1-NPP_grassland_final9$c3_percentage_final))
+
+
+NPP_grassland_final9$npp_gpp <- NPP_grassland_final9$TNPP_1/NPP_grassland_final9$weightedgpp_all  
+#NPP_grassland_final9$npp_gpp[NPP_grassland_final9$npp_gpp>1] <- NA
+NPP_grassland_final9$anpp_gpp <- NPP_grassland_final9$ANPP_2/NPP_grassland_final9$weightedgpp_all  
+#NPP_grassland_final9$anpp_gpp[NPP_grassland_final9$anpp_gpp>1] <- NA
+NPP_grassland_final9$anpp_npp <- NPP_grassland_final9$ANPP_2/NPP_grassland_final9$TNPP_1  
+
+
+hist(NPP_grassland_final9$anpp_gpp)
+hist(NPP_grassland_final9$npp_gpp)
+
+
+library(tidyverse)
+library(ggplot2)
+
+
+#try model for measured ratio only?
+summary(lmer(log((ANPP_2/TNPP_1)/(1-(ANPP_2/TNPP_1)))~Tg+alpha+(1|site_xy),data=NPP_grassland_final9))
+r.squaredGLMM(lmer(log((ANPP_2/TNPP_1)/(1-(ANPP_2/TNPP_1)))~Tg+alpha+(1|site_xy),data=NPP_grassland_final9))
+
+NPP_grassland_final10 <- subset(NPP_grassland_final9,is.na(filter)==TRUE)
+summary(lmer(log((ANPP_2/TNPP_1)/(1-(ANPP_2/TNPP_1)))~Tg+alpha+(1|site_xy),data=NPP_grassland_final10))
+
+summary(lm(GPP~weightedgpp_all,data=NPP_grassland_final9))
+
+#1. select the most important predictor -> disregard MAT and MAP, as replaced by Tg and vpd (or alpha)
+#NRE_all <- NRE_final[,c("NRE","MAT","MAP","Tg","PPFD","vpd","alpha","fAPAR","CNrt","age","LMA_halfdeg")]
+target <- "npp_gpp"
+NRE_all <- NPP_grassland_final9[,c(target,"Tg","PPFD","vpd","alpha","fapar","CNrt","ppfd_fapar")]
+NRE_all <- na.omit(NRE_all)
+dim(NRE_all)
+#determine targets and preds.
+preds <- c("Tg","PPFD","vpd","alpha","fapar","CNrt","ppfd_fapar")
+
+r_list <- c()
+
+#For loop functions, include all predictor's r2 at the end
+for (var in preds){
+  forml <- paste( 'lm(', target, '~', var, ', data = NRE_all)')
+  fit_lin <- eval(parse(text = forml)) 
+  rsq <- summary(fit_lin)[["r.squared"]]
+  r_list <- c(r_list,rsq)
+}
+
+#convert to a dataframe, including all r2
+All_rsquare <- data.frame (
+  preds = factor(preds,levels=preds), 
+  rsq = r_list)
+
+#select max r2 in all predictors
+max(r_list)
+
+new_All_rsquare <- All_rsquare %>% 
+  arrange(desc(rsq))
+
+ggplot(All_rsquare, aes(x = reorder(preds, -rsq), y = rsq)) + geom_point() + theme(axis.text.x = element_text(angle = 60, hjust = 1))
+
+
+#anpp_gpp
+target <- "anpp_gpp"
+NRE_all <- NPP_grassland_final9[,c(target,"Tg","PPFD","vpd","alpha","fapar","CNrt","ppfd_fapar")]
+NRE_all <- na.omit(NRE_all)
+dim(NRE_all)
+#determine targets and preds.
+preds <- c("Tg","PPFD","vpd","alpha","fapar","CNrt","ppfd_fapar")
+
+r_list <- c()
+
+#For loop functions, include all predictor's r2 at the end
+for (var in preds){
+  forml <- paste( 'lm(', target, '~', var, ', data = NRE_all)')
+  fit_lin <- eval(parse(text = forml)) 
+  rsq <- summary(fit_lin)[["r.squared"]]
+  r_list <- c(r_list,rsq)
+}
+
+#convert to a dataframe, including all r2
+All_rsquare <- data.frame (
+  preds = factor(preds,levels=preds), 
+  rsq = r_list)
+
+#select max r2 in all predictors
+max(r_list)
+
+new_All_rsquare <- All_rsquare %>% 
+  arrange(desc(rsq))
+
+ggplot(All_rsquare, aes(x = reorder(preds, -rsq), y = rsq)) + geom_point() + theme(axis.text.x = element_text(angle = 60, hjust = 1))
+
+
+
+```
+
