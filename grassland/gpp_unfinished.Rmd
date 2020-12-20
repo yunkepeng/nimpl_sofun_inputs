@@ -6,7 +6,7 @@ output:
 ---
 
 ---
-title: "Predict GPP in grassland, and fit NPP/GPP and ANPP/GPP"
+title: "Old file, with some (wrong coordinates). Not used anymore. Please see gpp_finished.Rmd"
 author: "Yunke Peng"
 date: "Dec 7, 2020"
 output: html_document

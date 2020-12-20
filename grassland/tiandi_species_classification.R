@@ -38,6 +38,27 @@ head(final_species)
 final_species <- final_species[,c(1,3,4)] 
 names(final_species) <- c("speciesname","genus","species")
 dim(final_species)
+#csvfile <- paste("/Users/yunpeng/data/npp_stoichiometry_grasslands_tiandi/species_name.csv")
+#write.csv(final_species, csvfile, row.names = TRUE)
 
-csvfile <- paste("/Users/yunpeng/data/npp_stoichiometry_grasslands_tiandi/species_name.csv")
-write.csv(final_species, csvfile, row.names = TRUE)
+
+#now, input c3/c4 information 
+c3c4 <- read.csv("/Users/yunpeng/data/c3c4_species/Try20201218143430TRY_Categorical_Traits_Lookup_Table_2012_03_17_TestRelease/TRY_Categorical_Traits_Lookup_Table_2012_03_17_TestRelease.csv")
+data1 <- c3c4[,c(2,4,5,18)]
+head(data1)
+names(data1) <- c("speciesname","genus","species","c3")
+
+
+final_species2 <- merge(final_species,data1,by=c("speciesname"),all.x=TRUE)
+
+#after having a look at original TRY data, for NA data of final_species2: if the same Genus in TRY database all have recorded c3, then we transfer our NA of same Genus to c3;
+# if c3/c4 existed in the same Genus, or Genus is missing, then we set to unknown.
+final_species2$c3_final <- final_species2$c3
+final_species2$c3_final[6] <- "C4"
+final_species2$c3_final[c(16,17,69,70,91,98,100,106,108,110,111,113,114,
+                          115,116,117,122,123,124,133,142,153,154,177,178,179,180,206)] <- "unknown"
+final_species2$c3_final[final_species2$c3_final==""] <- "tranfered_c3"
+final_species2$c3_final[is.na(final_species2$c3_final)==TRUE] <- "tranfered_c3"
+
+#csvfile <- paste("/Users/yunpeng/species2.csv")
+#write.csv(final_species2, csvfile, row.names = TRUE)
