@@ -174,7 +174,7 @@ final_sites5 <- merge(final_sites4,Evergreen,by=c("site"),all.x=TRUE)
 summary(final_sites5$pft)
 
 
-####7. Output of analyses
+####7. Output of analyses --> by all means we should use original sitename!!!Because it is the original data recorded by fields. Using coordinates to create sitenname is not reasonable - see evidence for Andrews 2 and Andrews 4 - they have the same coordinates (in 0.01 dec) but different site collection!!!!
 ######(1) NPP/GPP function
 ######Predictors: Measured soil C/N, Measured stand-age(yrs), alpha (from SPLASH) and observed fAPAR (calculated from measured LAI based on Beer's law).
 summary(lmer(log((TNPP_1/GPP)/(1-(TNPP_1/GPP)))~log(CN)+log(age)+alpha+observedfAPAR+(1|site),data=final_sites5))
