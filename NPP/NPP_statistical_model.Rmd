@@ -128,7 +128,8 @@ vpd <- 0.611*exp(17.27*(Tg_K-273.15)/((Tg_K-273.15)+237.3))-vap*0.1      #monthl
 PPFD <- radi*0.5*4.6 + Tg - Tg # here " + Tg - Tg " means we only need PPFD at growing season, and this will remove the month when Tg is NA.
 
 ####(4) observed fAPAR derived from measured LAI, based on Beer's law
-NPP_all$observedfAPAR <- 1-(1/exp(NPP_all$LAI*0.5))
+#NPP_all$observedfAPAR <- 1-(1/exp(NPP_all$LAI*0.5))
+NPP_all$observedfAPAR <- 1 - exp(-NPP_all$LAI*0.5)
 
 ###4. calculate average of climate data, and attach into NPP_all dataframe.
 
@@ -177,7 +178,8 @@ summary(final_sites5$pft)
 ####7. Output of analyses --> by all means we should use original sitename!!!Because it is the original data recorded by fields. Using coordinates to create sitenname is not reasonable - see evidence for Andrews 2 and Andrews 4 - they have the same coordinates (in 0.01 dec) but different site collection!!!!
 ######(1) NPP/GPP function
 ######Predictors: Measured soil C/N, Measured stand-age(yrs), alpha (from SPLASH) and observed fAPAR (calculated from measured LAI based on Beer's law).
-summary(lmer(log((TNPP_1/GPP)/(1-(TNPP_1/GPP)))~log(CN)+log(age)+alpha+observedfAPAR+(1|site),data=final_sites5))
+final_sites6 <- subset(final_sites5,CN>0 & age>0 & observedfAPAR>0  & alpha>0 & GPP>TNPP_1) # prevent one site when measured npp > gpp.
+summary(lmer(log((TNPP_1/GPP)/(1-(TNPP_1/GPP)))~log(CN)+log(age)+alpha+observedfAPAR+(1|site),data=final_sites6))
 
 ######(2) ANPP/GPP function
 ######Predictors: Measured soil C/N, Measured stand-age(yrs), alpha (from SPLASH) and observed fAPAR (calculated from measured LAI based on Beer's law).
