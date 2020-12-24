@@ -129,7 +129,7 @@ PPFD <- radi*0.5*4.6 + Tg - Tg # here " + Tg - Tg " means we only need PPFD at g
 
 ####(4) observed fAPAR derived from measured LAI, based on Beer's law
 #NPP_all$observedfAPAR <- 1-(1/exp(NPP_all$LAI*0.5))
-NPP_all$observedfAPAR <- 1 - exp(-NPP_all$LAI*0.5)
+NPP_all$observedfAPAR <- 1-exp(-0.5 * NPP_all$LAI)
 
 ###4. calculate average of climate data, and attach into NPP_all dataframe.
 
