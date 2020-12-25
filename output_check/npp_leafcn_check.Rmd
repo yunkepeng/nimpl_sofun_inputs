@@ -384,6 +384,16 @@ for (i in 1:nrow(NPP)) {
   }, error=function(e){}) # bnf
 }
 
+#some predictions were NA, which is because literatures data were wrong, for example 7 points in sea is due to Malhi et al. 2011's paper having wrong coordinates, where missing lon/lat - we just disregarded them here.
+#also, hawaii's data was also not be able to get the predictions...just disregarding them...
+
+na_pred <- subset(NPP,is.na(pred_anpp)==TRUE)
+summary(na_pred)
+library(rworldmap)
+newmap <- getMap(resolution = "low")
+plot(newmap, xlim = c(-180, 180), ylim = c(-75, 75), asp = 1)
+points(na_pred$lon,na_pred$lat, col="red", pch=16,cex=1)
+
 
 #for leafcn
 NPP$pred_leafcn <- NA
