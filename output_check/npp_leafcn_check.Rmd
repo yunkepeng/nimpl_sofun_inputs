@@ -6,7 +6,7 @@ output:
 ---
 
 ---
-title: "Output GPP, NPP, NPP[tissues], leaf C/N，NRE, N flux in leaf, wood and root from sofun/yunkebranch, and compare it with site-level data"
+title: "THIS file is old now...for latest one see Forest_Global_check"
 author: "Yunke Peng"
 date: "Nov 25 2020"
 output: html_document
