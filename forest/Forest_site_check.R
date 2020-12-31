@@ -22,7 +22,7 @@ library(cowplot)
 library(spgwr)
 
 
-load(file = "/Users/yunpeng/yunkepeng/nimpl_sofun_inputs/output_check/Forest_site_check.Rdata")
+#load(file = "/Users/yunpeng/yunkepeng/nimpl_sofun_inputs/forest/Forest_site_check.Rdata")
 #at the end of code...
 
 
@@ -320,7 +320,7 @@ leafcn_df <- inputnc("leafcn",1982,2011)
 #cbind all predictors, and its lon, lat, z
 all_predictors <- cbind(elev,Tg$myvar,PPFD$myvar,vpd$myvar,
                         alpha$myvar,fAPAR$myvar,age$myvar,
-                        CNrt$myvar,LMA$myvar,vcmax25_df$annualvcmax25,leafcn_df$leafcn)
+                        CNrt$myvar,LMA$myvar,vcmax25_df$vcmax25,leafcn_df$leafcn)
 
 names(all_predictors) <- c("lon","lat","z","Tg","PPFD","vpd",
                            "alpha","fAPAR","age","CNrt","LMA","Vcmax25","leafcn")
@@ -528,7 +528,7 @@ ggplot(data=forest_site2, aes(x=pred_lnf, y=lnf_obs)) +
   xlab("Prediction")+ylab("Observation")+theme_classic()
 summary(lm(lnf_obs~pred_lnf,forest_site2))
 
-save.image(file = "/Users/yunpeng/yunkepeng/nimpl_sofun_inputs/output_check/Forest_site_check.Rdata")
+save.image(file = "/Users/yunpeng/yunkepeng/nimpl_sofun_inputs/forest/Forest_site_check.Rdata")
 
 
 #since lnf is not predicted well (comparing with site simulation), it is expected that max vcmax25 was somewhere not so large, so that underestimation of lnf occurred.
@@ -838,8 +838,12 @@ forest_site$pred_lnpp <- forest_site$pred_anpp * (1/(1 + exp(-(1.2350* log(fores
 forest_site$pred_wnpp <- forest_site$pred_anpp - forest_site$pred_lnpp
 
 
-#use rsofun - site-species
+#use rsofun - site-species --> use max of 30 years
 forest_site$pred_leafnc <- (0.0161/0.5) + (0.0041/0.5) * siteinfo_final4$max_vcmax25_30yrs/forest_site$LMA
+
+#finally, still using default design
+forest_site$pred_leafnc <- (0.0161/0.5) + (0.0041/0.5) * siteinfo_final$max_vcmax25/forest_site$LMA
+
 
 forest_site$pred_lnf <- forest_site$pred_lnpp*forest_site$pred_leafnc
 

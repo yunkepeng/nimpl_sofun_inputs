@@ -103,7 +103,7 @@ summary(lm(nmass~vcmax25_lma ,data=sitemean))
 #intercept = 0.0144 (Ns)
 #slope = 0.0050 (Nr)
 
-#Narea/LMA (Nmass,unitness) * C/N ratio (as shown firstly) = Cmass (unitness) 
+#Narea/LMA (Nmass,unitness) * C/N ratio (as shown in /Users/yunpeng/data/CN_leaf/final_leafCN.csv) = Cmass (unitness) 
 #This value below was therefore used in nimpl simulation: Cmass (unitness) = 0.47
 mean(sitemean$nmass) * 27.18
 

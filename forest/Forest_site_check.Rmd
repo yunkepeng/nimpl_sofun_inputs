@@ -42,7 +42,7 @@ library(cowplot)
 library(spgwr)
 
 #load image directly, for working process please Forest_site_check.R in the same file
-load(file = "/Users/yunpeng/yunkepeng/nimpl_sofun_inputs/output_check/Forest_site_check.Rdata")
+load(file = "/Users/yunpeng/yunkepeng/nimpl_sofun_inputs/forest/Forest_site_check.Rdata")
 
 
 forest_site2 <- subset(forest_site,rep_info!="rep" & rep_info!="rep1"& rep_info!="rep3")

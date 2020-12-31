@@ -746,6 +746,8 @@ gg <- plot_map3(cue_df[,c(1,2,4)],
 gg$ggmap
 gg$gglegend
 
+save.image(file = "/Users/yunpeng/yunkepeng/nimpl_sofun_inputs/forest/Forest_Global_check.Rdata")
+
 
 
 ```
