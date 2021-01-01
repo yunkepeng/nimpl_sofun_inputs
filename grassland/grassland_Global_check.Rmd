@@ -1,0 +1,284 @@
+---
+output:
+  html_document: default
+  pdf_document: default
+  word_document: default
+---
+
+---
+title: "Check Global Nitrogen uptake"
+author: "Yunke Peng"
+date: "Dec 13 2020"
+output: html_document
+---
+
+## GPP data description
+
+Here it firstly extracts FOREST leaf, stem, wood, root c/n from very different sources - and then after calculating with NPP.leaf, stem, root...it will get N flux in different compartments, and finally N uptake. And therefore could be used to compare with simulated N flux.
+
+
+```{r}
+
+library(ingestr)
+library(dplyr)
+library(tidyverse)  # depends
+library(ncmeta)
+library(viridis)
+library(ggthemes)
+library(LSD)
+library(yardstick)
+library(ggplot2)
+library(RColorBrewer)
+library(dplyr)
+library(gplots)
+library(tidyselect)
+library(extrafont)
+library(rbeni)
+library(raster)
+library(spgwr)
+library(maps)
+library(rworldmap)
+library(cowplot)
+library(spgwr)
+
+#input cleaned grassland dataset from site fimulation of grassland sites
+load(file = "/Users/yunpeng/yunkepeng/nimpl_sofun_inputs/grassland/grassland_site_simulation.Rdata")
+
+summary(NPP_grassland_final11)
+
+#1. In our path (with multiple years data), identify which is the first year and end year of those files
+firstyr_data <- 1982 # In data file, which is the first year
+endyr_data <- 2011 # In data file, which is the last year
+location <- "/Users/yunpeng/data/output/latest_noNRE_grass/"
+alloutput_list <- list.files(location,full.names = T)
+
+#input elevation nc file, which will be cbind with global df directly
+elev_nc <- read_nc_onefile("~/data/watch_wfdei/WFDEI-elevation.nc")
+#elev_nc <- read_nc_onefile("D:/PhD/nimpl_sofun_inputs/Data/Elevation/WFDEI-elevation.nc")
+elev <- as.data.frame(nc_to_df(elev_nc, varnam = "elevation"))
+head(elev) # this is consistent with df coord below
+
+#2. Create a function to specify path, loop many years nc file and output a dataframe (lon, lat, var).
+inputnc <- function(name,start_year,end_year){
+  #-----------------------------------------------------------------------
+  # Input: 
+  # name: gpp, npp, anpp, vcmax25, leafcn, nuptake...
+  # start_year: e.g. 1981
+  # end_year: e.g. 2016
+  # location: e.g "D:/PhD/nimpl_sofun_inputs/Data/output/" or in Euler: "~/yunkebranch_units/outputnc/"
+  #-----------------------------------------------------------------------
+  output_allyears <- data.frame(matrix(NA))
+  # first, include all years annual data into a daframe
+  for (i in firstyr_data:endyr_data){
+    if (name == "npp_grass"){
+      nc <- read_nc_onefile(alloutput_list[grepl("a.npp_grass.nc", list.files(location,full.names = T))][i-firstyr_data+1]) #we only rely this to filter npp.nc file...
+    } else {
+      nc <- read_nc_onefile(alloutput_list[grepl(name, list.files(location,full.names = T))][i-firstyr_data+1]) #Input nc
+    }
+    output_year <- nc_to_df(nc, varnam = name)[,3] #Yearly output
+    output_allyears[1:259200,i-firstyr_data+1] <- output_year #here first column represents first year of data file 's output
+  }
+  names(output_allyears) <- paste(name,firstyr_data:endyr_data,sep="")
+  #this variable above (output_allyears), could be end of the function, which is variable at multiple years. But for our purporses, we need mean of select years
+  #then, only calculate means of selected years
+  output_selected_yrs <- rowMeans(output_allyears[,(start_year-firstyr_data+1):(end_year-firstyr_data+1)],na.rm = TRUE) # only calculated means based on selected start and end year (see function)
+  coord <- nc_to_df(nc, varnam = name)[,1:2] # obtain lon and lat
+  final_output <- cbind(coord,elev[,3],output_selected_yrs) # combine lon, lat,z with rowmeans variable
+  names(final_output) <- c("lon","lat","z",name)
+  return(final_output)
+  #-----------------------------------------------------------------------
+  # Output: output_final: the output data (259200 * 3) including lon, lat and value
+  #-----------------------------------------------------------------------
+}
+
+#select data over 30 years, each df includes lon, lat, z, var
+
+npp_df <- inputnc("npp_grass",1982,2011)
+names(npp_df) <- c("lon","lat","z","npp")
+
+anpp_df <- inputnc("anpp_grass",1982,2011)
+names(anpp_df) <- c("lon","lat","z","anpp")
+
+bnpp_df <- inputnc("bnpp_grass",1982,2011)
+names(bnpp_df) <- c("lon","lat","z","bnpp")
+
+lnf_df <- inputnc("lnf_grass",1982,2011) 
+names(lnf_df) <- c("lon","lat","z","lnf")
+
+bnf_df <- inputnc("bnf_grass",1982,2011) 
+names(bnf_df) <- c("lon","lat","z","bnf")
+
+nuptake_df <- inputnc("nuptake_grass",1982,2011) 
+names(nuptake_df) <- c("lon","lat","z","nuptake")
+
+a <- 1.5 #distance
+NPP <- NPP_grassland_final11
+NPP$pred_npp <- NA
+NPP$pred_anpp <- NA
+NPP$pred_bnpp <- NA
+NPP$pred_lnf <- NA
+NPP$pred_bnf <- NA
+
+#for gpp, npp, anpp, bnpp, lnpp, wnpp, lnf, bnf.
+for (i in 1:nrow(NPP)) {
+  tryCatch({
+    grid_global <- subset(npp_df,npp_df[,4]>0 & npp_df[,3]>0)
+    grid_part <- subset(grid_global,lon>(NPP$lon[i]-a)&lon<(NPP$lon[i]+a)&
+                          lat>(NPP$lat[i]-a)&lat<(NPP$lat[i]+a))
+    coordinates(grid_part) <- c("lon","lat")
+    gridded(grid_part) <- TRUE
+    site_coord <- NPP[i,c("lon","lat","z")]
+    coordinates(site_coord) <- c("lon","lat")
+    NPP$pred_npp[i] <- (gwr(npp ~ z, grid_part, bandwidth = 1.06, fit.points =site_coord,predictions=TRUE))$SDF$pred
+  }, error=function(e){}) # npp
+  tryCatch({
+    grid_global <- subset(anpp_df,anpp_df[,4]>0 & anpp_df[,3]>0)
+    grid_part <- subset(grid_global,lon>(NPP$lon[i]-a)&lon<(NPP$lon[i]+a)&
+                          lat>(NPP$lat[i]-a)&lat<(NPP$lat[i]+a))
+    coordinates(grid_part) <- c("lon","lat")
+    gridded(grid_part) <- TRUE
+    site_coord <- NPP[i,c("lon","lat","z")]
+    coordinates(site_coord) <- c("lon","lat")
+    NPP$pred_anpp[i] <- (gwr(anpp ~ z, grid_part, bandwidth = 1.06, fit.points =site_coord,predictions=TRUE))$SDF$pred
+  }, error=function(e){}) # anpp
+  tryCatch({
+    grid_global <- subset(bnpp_df,bnpp_df[,4]>0 & bnpp_df[,3]>0)
+    grid_part <- subset(grid_global,lon>(NPP$lon[i]-a)&lon<(NPP$lon[i]+a)&
+                          lat>(NPP$lat[i]-a)&lat<(NPP$lat[i]+a))
+    coordinates(grid_part) <- c("lon","lat")
+    gridded(grid_part) <- TRUE
+    site_coord <- NPP[i,c("lon","lat","z")]
+    coordinates(site_coord) <- c("lon","lat")
+    NPP$pred_bnpp[i] <- (gwr(bnpp ~ z, grid_part, bandwidth = 1.06, fit.points =site_coord,predictions=TRUE))$SDF$pred
+  }, error=function(e){}) # bnpp
+  tryCatch({
+    grid_global <- subset(lnf_df,lnf_df[,4]>0 & lnf_df[,3]>0)
+    grid_part <- subset(grid_global,lon>(NPP$lon[i]-a)&lon<(NPP$lon[i]+a)&
+                          lat>(NPP$lat[i]-a)&lat<(NPP$lat[i]+a))
+    coordinates(grid_part) <- c("lon","lat")
+    gridded(grid_part) <- TRUE
+    site_coord <- NPP[i,c("lon","lat","z")]
+    coordinates(site_coord) <- c("lon","lat")
+    NPP$pred_lnf[i] <- (gwr(lnf ~ z, grid_part, bandwidth = 1.06, fit.points =site_coord,predictions=TRUE))$SDF$pred
+  }, error=function(e){}) # lnf
+  tryCatch({
+    grid_global <- subset(bnf_df,bnf_df[,4]>0 & bnf_df[,3]>0)
+    grid_part <- subset(grid_global,lon>(NPP$lon[i]-a)&lon<(NPP$lon[i]+a)&
+                          lat>(NPP$lat[i]-a)&lat<(NPP$lat[i]+a))
+    coordinates(grid_part) <- c("lon","lat")
+    gridded(grid_part) <- TRUE
+    site_coord <- NPP[i,c("lon","lat","z")]
+    coordinates(site_coord) <- c("lon","lat")
+    NPP$pred_bnf[i] <- (gwr(bnf ~ z, grid_part, bandwidth = 1.06, fit.points =site_coord,predictions=TRUE))$SDF$pred
+  }, error=function(e){}) # bnf
+}
+
+
+#Now, check data
+
+gg <- plot_map3(lnf_df[,c(1,2,4)], 
+                varnam = "lnf",plot_title = " N uptake in leaf (gN/m2/yr)",
+                latmin = -65, latmax = 85, combine = FALSE)
+
+#(1) lnf
+gg$ggmap + geom_point(data=subset(NPP,lnf_obs_final>0 & pred_lnf>0),aes(lon,lat),col="red")
+gg$gglegend
+#analyse_modobs2(subset(NPP,lnf_obs_final>0 & pred_lnf>0),"pred_lnf", "lnf_obs_final",type = "points")
+
+
+#(2) bnf
+gg <- plot_map3(bnf_df[,c(1,2,4)], 
+                varnam = "bnf",plot_title = " N uptake in root (gN/m2/yr)",
+                latmin = -65, latmax = 85, combine = FALSE)
+
+gg$ggmap + geom_point(data=subset(NPP,bnf_obs_final>0 & pred_bnf>0),aes(lon,lat),col="red")
+gg$gglegend
+#analyse_modobs2(subset(NPP,bnf_obs_final>0 & pred_bnf>0 & pft2 == "Forest"),"bnf_obs_final","pred_bnf", type = "points")
+
+#sites are too less in wnf and bnf
+
+#(3) npp
+gg <- plot_map3(npp_df[,c(1,2,4)], 
+                varnam = "npp",plot_title = " NPP (gC/m2/yr)",
+                latmin = -65, latmax = 85, combine = FALSE)
+
+gg$ggmap + geom_point(data=subset(NPP,pred_npp>0 & TNPP_1>0),aes(lon,lat),col="red")
+gg$gglegend
+#analyse_modobs2(subset(NPP2,pred_npp>0 & TNPP_1>0),"pred_npp","TNPP_1", type = "points")
+
+#(4) anpp
+gg <- plot_map3(anpp_df[,c(1,2,4)], 
+                varnam = "anpp",plot_title = " ANPP (gC/m2/yr)",
+                latmin = -65, latmax = 85, combine = FALSE)
+
+gg$ggmap + geom_point(data=subset(NPP,pred_anpp>0 & ANPP_2>0),aes(lon,lat),col="red") 
+gg$gglegend
+#analyse_modobs2(subset(NPP2,pred_anpp>0 & ANPP_2>0 ),"pred_anpp","ANPP_2" ,type = "points")
+
+#(5) bnpp
+gg <- plot_map3(bnpp_df[,c(1,2,4)], 
+                varnam = "bnpp",plot_title = " NPP in belowground (gC/m2/yr)",
+                latmin = -65, latmax = 85, combine = FALSE)
+
+gg$ggmap + geom_point(data=subset(NPP,BNPP_1>0 & pred_bnpp>0),aes(lon,lat),col="red") 
+gg$gglegend
+#analyse_modobs2(subset(NPP2,BNPP_1>0 & pred_bnpp>0),"pred_bnpp", "BNPP_1",type = "points")
+
+
+
+save.image(file = "/Users/yunpeng/yunkepeng/nimpl_sofun_inputs/grassland/grassland_Global_check.Rdata")
+
+# add gpp
+location <- "/Users/yunpeng/data/output/latest_noNRE_forest/"
+alloutput_list <- list.files(location,full.names = T)
+
+#input elevation nc file, which will be cbind with global df directly
+elev_nc <- read_nc_onefile("~/data/watch_wfdei/WFDEI-elevation.nc")
+#elev_nc <- read_nc_onefile("D:/PhD/nimpl_sofun_inputs/Data/Elevation/WFDEI-elevation.nc")
+elev <- as.data.frame(nc_to_df(elev_nc, varnam = "elevation"))
+head(elev) # this is consistent with df coord below
+
+#2. Create a function to specify path, loop many years nc file and output a dataframe (lon, lat, var).
+inputnc <- function(name,start_year,end_year){
+  #-----------------------------------------------------------------------
+  # Input: 
+  # name: gpp, npp, anpp, vcmax25, leafcn, nuptake...
+  # start_year: e.g. 1981
+  # end_year: e.g. 2016
+  # location: e.g "D:/PhD/nimpl_sofun_inputs/Data/output/" or in Euler: "~/yunkebranch_units/outputnc/"
+  #-----------------------------------------------------------------------
+  output_allyears <- data.frame(matrix(NA))
+  # first, include all years annual data into a daframe
+  for (i in firstyr_data:endyr_data){
+    if (name == "npp"){
+      nc <- read_nc_onefile(alloutput_list[grepl("a.npp.nc", list.files(location,full.names = T))][i-firstyr_data+1]) #we only rely this to filter npp.nc file...
+    } else {
+      nc <- read_nc_onefile(alloutput_list[grepl(name, list.files(location,full.names = T))][i-firstyr_data+1]) #Input nc
+    }
+    output_year <- nc_to_df(nc, varnam = name)[,3] #Yearly output
+    output_allyears[1:259200,i-firstyr_data+1] <- output_year #here first column represents first year of data file 's output
+  }
+  names(output_allyears) <- paste(name,firstyr_data:endyr_data,sep="")
+  #this variable above (output_allyears), could be end of the function, which is variable at multiple years. But for our purporses, we need mean of select years
+  #then, only calculate means of selected years
+  output_selected_yrs <- rowMeans(output_allyears[,(start_year-firstyr_data+1):(end_year-firstyr_data+1)],na.rm = TRUE) # only calculated means based on selected start and end year (see function)
+  coord <- nc_to_df(nc, varnam = name)[,1:2] # obtain lon and lat
+  final_output <- cbind(coord,elev[,3],output_selected_yrs) # combine lon, lat,z with rowmeans variable
+  names(final_output) <- c("lon","lat","z",name)
+  return(final_output)
+  #-----------------------------------------------------------------------
+  # Output: output_final: the output data (259200 * 3) including lon, lat and value
+  #-----------------------------------------------------------------------
+}
+
+#select data over 30 years, each df includes lon, lat, z, var
+gpp_df <- inputnc("gpp",1982,2011)
+
+gg <- plot_map3(gpp_df[,c(1,2,4)], 
+                varnam = "gpp",plot_title = " GPP (gC/m2/yr)",
+                latmin = -65, latmax = 85, combine = FALSE)
+
+gg$ggmap + geom_point(data=subset(NPP,GPP>0),aes(lon,lat),col="red")
+gg$gglegend
+
+```

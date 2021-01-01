@@ -23,7 +23,7 @@ library(spgwr)
 
 #load(file = "/Users/yunpeng/yunkepeng/nimpl_sofun_inputs/grassland/grassland_site_simulation.Rdata")
 
-#read complete dataset for measurement, after L1-L300 in /Users/yunpeng/yunkepeng/nimpl_sofun_inputs/output_check/Forest_Global_check.Rmd
+#read complete dataset for measurement, after L1-L300 in /Users/yunpeng/yunkepeng/nimpl_sofun_inputs/forest/Forest_Global_check.Rmd
 NPP <- read.csv("/Users/yunpeng/data/forest_npp/NPP_final.csv")
 #extract forest only
 NPP_grassland <- subset(NPP,pft2=="Grassland")
@@ -143,10 +143,13 @@ params_modl <- list(
 dim(na_data) #this point needs to be passed
 siteinfo_final$pred_gpp_c3 <- NA
 siteinfo_final$pred_gpp_c4 <- NA
+siteinfo_final$max_vcmax25_c3 <- NA
+siteinfo_final$max_vcmax25_c4 <- NA
+
 
 for (i in 1:nrow(siteinfo_final)) {
   tryCatch({
-    #c3
+    #c3 gpp
     forcing <- (eval(parse(text=(paste("final",siteinfo_final$sitename[i],sep="_")))))
     modlist <- run_pmodel_f_bysite( 
       siteinfo_final$sitename[i], 
@@ -179,7 +182,7 @@ for (i in 1:nrow(siteinfo_final)) {
     
     siteinfo_final[i,c("pred_gpp_c3")] <- sum(pred_gpp_list$gpp)
     
-    #c4
+    #c4 gpp
     modlist <- run_pmodel_f_bysite( 
       siteinfo_final$sitename[i], 
       params_siml <- list(
@@ -209,11 +212,71 @@ for (i in 1:nrow(siteinfo_final)) {
     pred_gpp_list <- modlist %>% mutate(ymonth = month(date),yday = day(date)) %>% group_by(ymonth, yday) %>% summarise(gpp = mean(gpp, na.rm = TRUE))
     
     siteinfo_final[i,c("pred_gpp_c4")] <- sum(pred_gpp_list$gpp)
+    
+    #max_vcmax25 - c3
+    modlist <- run_pmodel_f_bysite( 
+      siteinfo_final$sitename[i], 
+      params_siml <- list(
+        spinup             = TRUE,
+        spinupyears        = 10,
+        recycle            = 1,
+        soilmstress        = TRUE,
+        tempstress         = TRUE,
+        calc_aet_fapar_vpd = FALSE,
+        in_ppfd            = TRUE,
+        in_netrad          = FALSE,
+        outdt              = 1,
+        ltre               = FALSE,
+        ltne               = FALSE,
+        ltrd               = FALSE,
+        ltnd               = FALSE,
+        lgr3               = TRUE,
+        lgn3               = FALSE,
+        lgr4               = FALSE,
+        firstyeartrend = siteinfo_final$year_start[i],
+        nyeartrend = siteinfo_final$year_end[i]-siteinfo_final$year_start[i]+1), 
+      siteinfo = siteinfo_final[i,], 
+      forcing, 
+      df_soiltexture, 
+      params_modl = params_modl, 
+      makecheck = TRUE)
+    max_vcmax25 <- max(modlist$vcmax25)*1000000
+    siteinfo_final[i,c("max_vcmax25_c3")] <- max_vcmax25
+    
+    #max_vcmax25 - c4
+    modlist <- run_pmodel_f_bysite( 
+      siteinfo_final$sitename[i], 
+      params_siml <- list(
+        spinup             = TRUE,
+        spinupyears        = 10,
+        recycle            = 1,
+        soilmstress        = TRUE,
+        tempstress         = TRUE,
+        calc_aet_fapar_vpd = FALSE,
+        in_ppfd            = TRUE,
+        in_netrad          = FALSE,
+        outdt              = 1,
+        ltre               = FALSE,
+        ltne               = FALSE,
+        ltrd               = FALSE,
+        ltnd               = FALSE,
+        lgr3               = FALSE,
+        lgn3               = FALSE,
+        lgr4               = TRUE,
+        firstyeartrend = siteinfo_final$year_start[i],
+        nyeartrend = siteinfo_final$year_end[i]-siteinfo_final$year_start[i]+1), 
+      siteinfo = siteinfo_final[i,], 
+      forcing, 
+      df_soiltexture, 
+      params_modl = params_modl, 
+      makecheck = TRUE)
+    max_vcmax25 <- max(modlist$vcmax25)*1000000
+    siteinfo_final[i,c("max_vcmax25_c4")] <- max_vcmax25
   }, error=function(e){})} 
 
 #collect gpp and combine it into NPP_grassland
-siteinfo_final_gpp <- siteinfo_final[,c("sitename","pred_gpp_c3","pred_gpp_c4")]
-names(siteinfo_final_gpp) <- c("sitename2","pred_gpp_c3","pred_gpp_c4")
+siteinfo_final_gpp <- siteinfo_final[,c("sitename","pred_gpp_c3","pred_gpp_c4","max_vcmax25_c3","max_vcmax25_c4")]
+names(siteinfo_final_gpp) <- c("sitename2","pred_gpp_c3","pred_gpp_c4","max_vcmax25_c3","max_vcmax25_c4")
 NPP_grassland_all2 <-Reduce(function(x,y) merge(x = x, y = y, by = c("sitename2"),all.x=TRUE), 
                             list(NPP_grassland_all,siteinfo_final_gpp))
 
@@ -221,6 +284,8 @@ NPP_grassland_all2 <- NPP_grassland_all2[order(NPP_grassland_all2$no), ]
 
 NPP_grassland$pred_gpp_c3 <- NPP_grassland_all2$pred_gpp_c3
 NPP_grassland$pred_gpp_c4 <- NPP_grassland_all2$pred_gpp_c4
+NPP_grassland$max_vcmax25_c3 <- NPP_grassland_all2$max_vcmax25_c3
+NPP_grassland$max_vcmax25_c4 <- NPP_grassland_all2$max_vcmax25_c4
 
 dim(subset(NPP_grassland,pred_gpp_c3>TNPP_1)) #157
 dim(subset(NPP_grassland,pred_gpp_c3<TNPP_1)) #34
@@ -701,6 +766,160 @@ r.squaredGLMM(lmer(log((ANPP_2/TNPP_1)/(1-(ANPP_2/TNPP_1)))~Tg+alpha+(1|site),da
 
 summary(NPP_grassland_final11$CN_root_final)
 
+
+#calculate weighted MAX vcmax25 from max_vcmax25_c3 and max_vcmax25_c4, based on final measured c3/c4 percentage.
+NPP_grassland_final11$maxvcmax25_all <- (NPP_grassland_final11$max_vcmax25_c3 * NPP_grassland_final11$c3_percentage_final)+
+  (NPP_grassland_final11$max_vcmax25_c4 * (1-NPP_grassland_final11$c3_percentage_final))
+
+
+NPP_grassland_final11$pred_npp <- NPP_grassland_final11$weightedgpp_all * 0.4046
+NPP_grassland_final11$pred_anpp <- NPP_grassland_final11$pred_npp * 
+  (1/(1+exp(-(1.8720 * NPP_grassland_final11$alpha + 0.0385 * NPP_grassland_final11$Tg + -2.5642))))
+
+NPP_grassland_final11$pred_bnpp <- NPP_grassland_final11$pred_npp - NPP_grassland_final11$pred_anpp
+
+#input max vcmax25
+
+firstyr_data <- 1982 # In data file, which is the first year
+endyr_data <- 2011 # In data file, which is the last year
+location <- "~/data/output/latest/"
+alloutput_list <- list.files(location,full.names = T)
+
+#input elevation nc file, which will be cbind with global df directly
+elev_nc <- read_nc_onefile("~/data/watch_wfdei/WFDEI-elevation.nc")
+#elev_nc <- read_nc_onefile("D:/PhD/nimpl_sofun_inputs/Data/Elevation/WFDEI-elevation.nc")
+elev <- as.data.frame(nc_to_df(elev_nc, varnam = "elevation"))
+head(elev) # this is consistent with df coord below
+
+#2. Create a function to specify path, loop many years nc file and output a dataframe (lon, lat, var).
+inputnc <- function(name,start_year,end_year){
+  output_allyears <- data.frame(matrix(NA))
+  # first, include all years annual data into a daframe
+  for (i in firstyr_data:endyr_data){
+    if (name == "npp"){
+      nc <- read_nc_onefile(alloutput_list[grepl("a.npp.nc", list.files(location,full.names = T))][i-firstyr_data+1]) #we only rely this to filter npp.nc file...
+    } else {
+      nc <- read_nc_onefile(alloutput_list[grepl(name, list.files(location,full.names = T))][i-firstyr_data+1]) #Input nc
+    }
+    output_year <- nc_to_df(nc, varnam = name)[,3] #Yearly output
+    output_allyears[1:259200,i-firstyr_data+1] <- output_year #here first column represents first year of data file 's output
+  }
+  names(output_allyears) <- paste(name,firstyr_data:endyr_data,sep="")
+  #this variable above (output_allyears), could be end of the function, which is variable at multiple years. But for our purporses, we need mean of select years
+  #then, only calculate means of selected years
+  output_selected_yrs <- rowMeans(output_allyears[,(start_year-firstyr_data+1):(end_year-firstyr_data+1)],na.rm = TRUE) # only calculated means based on selected start and end year (see function)
+  coord <- nc_to_df(nc, varnam = name)[,1:2] # obtain lon and lat
+  final_output <- cbind(coord,elev[,3],output_selected_yrs) # combine lon, lat,z with rowmeans variable
+  names(final_output) <- c("lon","lat","z",name)
+  return(final_output)
+  #-----------------------------------------------------------------------
+  # Output: output_final: the output data (259200 * 3) including lon, lat and value
+  #-----------------------------------------------------------------------
+}
+
+#vcmax25_df <- inputnc("annualvcmax25",1982,2011)
+vcmax25_df <- inputnc("vcmax25",1982,2011)
+
+Vcmax25_df <- cbind(elev,vcmax25_df$vcmax25)
+names(Vcmax25_df) <- c("lon","lat","z","Vcmax25")
+
+LMA <- as.data.frame(nc_to_df(read_nc_onefile(
+  "~/data/nimpl_sofun_inputs/map/Final_ncfile/LMA.nc"),varnam = "LMA"))
+
+LMA_df <- cbind(elev,LMA$myvar)
+names(LMA_df) <- c("lon","lat","z","LMA")
+a <- 1.5
+
+NPP_grassland_final11$Vcmax25 <- NA
+NPP_grassland_final11$LMA <- NA
+
+for (i in 1:nrow(NPP_grassland_final11)) {
+  tryCatch({
+   #LMA
+    LMA_global <- na.omit(LMA_df)
+    NRE_part <- subset(LMA_global,lon>(NPP_grassland_final11[i,1]-a)&lon<(NPP_grassland_final11[i,1]+a)&
+                         lat>(NPP_grassland_final11[i,2]-a)&lat<(NPP_grassland_final11[i,2]+a))
+    coordinates(NRE_part) <- c("lon","lat")
+    gridded(NRE_part) <- TRUE
+    NRE_coord <- NPP_grassland_final11[i, c("lon","lat","z")]
+    coordinates(NRE_coord) <- c("lon","lat")
+    NPP_grassland_final11[i,c("LMA")]  <- (gwr(LMA ~ z, NRE_part, bandwidth = 1.06, fit.points =NRE_coord,predictions=TRUE))$SDF$pred
+    #Vcmax25
+    Vcmax25_global <- na.omit(Vcmax25_df)
+    NRE_part <- subset(Vcmax25_global,lon>(NPP_grassland_final11[i,1]-a)&lon<(NPP_grassland_final11[i,1]+a)&
+                         lat>(NPP_grassland_final11[i,2]-a)&lat<(NPP_grassland_final11[i,2]+a))
+    coordinates(NRE_part) <- c("lon","lat")
+    gridded(NRE_part) <- TRUE
+    NRE_coord <- NPP_grassland_final11[i, c("lon","lat","z")]
+    coordinates(NRE_coord) <- c("lon","lat")
+    NPP_grassland_final11[i,c("Vcmax25")]  <- (gwr(Vcmax25 ~ z, NRE_part, bandwidth = 1.06, fit.points =NRE_coord,predictions=TRUE))$SDF$pred
+  }, error=function(e){})} 
+  
+#using simulated vcmax25
+NPP_grassland_final11$pred_leafnc <- (0.0161/0.5) + (0.0041/0.5) * NPP_grassland_final11$Vcmax25/NPP_grassland_final11$LMA 
+
+#using weighted max vcmax25 from rsofun, from c3/c4 measured info
+NPP_grassland_final11$pred_leafnc <- (0.0161/0.5) + (0.0041/0.5) * NPP_grassland_final11$maxvcmax25_all/NPP_grassland_final11$LMA 
+
+#a new statistical model for grassland only?
+cnmodel <- NPP_grassland_final11
+cnmodel$nc <- 1/ cnmodel$CN_leaf_final
+cnmodel$vc25_lma <- cnmodel$maxvcmax25_all/cnmodel$LMA
+cnmodel2 <- aggregate(cnmodel,by=list(cnmodel$site), FUN=mean, na.rm=TRUE) #site-mean
+
+summary(lmer((nc)~vc25_lma+(1|site_xy),data=cnmodel))
+NPP_grassland_final11$pred_leafnc <- (0.160673/0.5) + (-0.071485/0.5) * NPP_grassland_final11$maxvcmax25_all/NPP_grassland_final11$LMA 
+
+summary(lmer((nc)~maxvcmax25_all+LMA+(1|site_xy),data=cnmodel))
+NPP_grassland_final11$pred_leafnc <- 7.956e-02 -9.698e-04*NPP_grassland_final11$maxvcmax25_all + 1.114e-03*NPP_grassland_final11$LMA 
+
+summary(NPP_grassland_final11$CN_leaf_final)
+NPP_grassland_final11$pred_leafnc <- 1/19.100
+
+NPP_grassland_final11$pred_lnf <- NPP_grassland_final11$pred_anpp*NPP_grassland_final11$pred_leafnc
+NPP_grassland_final11$pred_bnf <- NPP_grassland_final11$pred_bnpp/46
+
+#Now, time to examine our data
+
+analyse_modobs2(NPP_grassland_final11,
+                "pred_lnf", "lnf_obs_final",type = "points")
+ggplot(NPP_grassland_final11, aes(x=pred_lnf, y=lnf_obs_final)) +
+  geom_point()+geom_abline(intercept=0,slope=1)+geom_smooth(method = "lm", se = TRUE)+ xlim(c(0,10))+
+  xlab("Prediction")+ylab("Observation")+theme_classic()
+
+
+analyse_modobs2(subset(NPP_grassland_final11,TNPP_1/weightedgpp_all > 0.2 & TNPP_1/weightedgpp_all <1),
+                "pred_lnf", "lnf_obs_final",type = "points")
+
+hist(NPP_grassland_final11$lnf_obs_final)
+
+analyse_modobs2(NPP_grassland_final11,"weightedgpp_all", "GPP",type = "points")
+ggplot(NPP_grassland_final11, aes(x=weightedgpp_all, y=GPP)) +
+  geom_point()+geom_abline(intercept=0,slope=1)+geom_smooth(method = "lm", se = TRUE)+
+  xlab("Prediction")+ylab("Observation")+theme_classic()
+
+
+analyse_modobs2(subset(NPP_grassland_final11,TNPP_1/weightedgpp_all > 0.2 & TNPP_1/weightedgpp_all <1),"pred_npp", "TNPP_1",type = "points")
+analyse_modobs2(NPP_grassland_final11,"pred_npp", "TNPP_1",type = "points")
+
+ggplot(NPP_grassland_final11, aes(x=pred_npp, y=TNPP_1)) +
+  geom_point()+geom_abline(intercept=0,slope=1)+geom_smooth(method = "lm", se = TRUE)+
+  xlab("Prediction")+ylab("Observation")+theme_classic()
+
+analyse_modobs2(subset(NPP_grassland_final11,TNPP_1/weightedgpp_all > 0.2 & TNPP_1/weightedgpp_all <1),
+                "pred_anpp", "ANPP_2",type = "points")
+
+analyse_modobs2(NPP_grassland_final11,
+                "pred_anpp", "ANPP_2",type = "points")
+ggplot(NPP_grassland_final11, aes(x=pred_anpp, y=ANPP_2)) +
+  geom_point()+geom_abline(intercept=0,slope=1)+geom_smooth(method = "lm", se = TRUE)+
+  xlab("Prediction")+ylab("Observation")+theme_classic()
+
+
+analyse_modobs2(NPP_grassland_final11,
+                "pred_bnpp", "BNPP_1",type = "points")
+
+analyse_modobs2(NPP_grassland_final11,
+                "pred_bnf", "bnf_obs_final",type = "points")
+
 save.image(file = "/Users/yunpeng/yunkepeng/nimpl_sofun_inputs/grassland/grassland_site_simulation.Rdata")
-
-
