@@ -22,13 +22,13 @@ library(cowplot)
 library(spgwr)
 
 
-#load(file = "/Users/yunpeng/yunkepeng/nimpl_sofun_inputs/forest/Forest_site_check.Rdata")
+load(file = "/Users/yunpeng/yunkepeng/nimpl_sofun_inputs/forest/Forest_site_check.Rdata")
 #at the end of code...
 
 
 #read complete dataset for measurement, after L1-L300 in /Users/yunpeng/yunkepeng/nimpl_sofun_inputs/output_check/Forest_Global_check.Rmd
 NPP <- read.csv("/Users/yunpeng/data/forest_npp/NPP_final.csv")
-#extract forest only
+#extract forest only -->with corrected sitename in all (no NA)
 NPP_Forest <- subset(NPP,pft2=="Forest")
 
 
@@ -38,6 +38,7 @@ NPP_Forest <- subset(NPP,pft2=="Forest")
 #for details about climate forcing and fapar code, please have a look at example in  /Users/yunpeng/yunkepeng/nimpl_sofun_inputs/forest/forcing_fpar.R
 NPP_final2 <- read.csv("/Users/yunpeng/data/forest_npp/forest_forcing_info.csv")
 #pass some data
+NPP_final2$site <- NPP_Forest$site
 NPP_final2$rep_info <- NPP_Forest$rep_info
 NPP_final2$CN_leaf <-NPP_Forest$CN_leaf_final
 NPP_final2$CN_root <-NPP_Forest$CN_root_final
@@ -816,6 +817,9 @@ for (i in 1:nrow(siteinfo_final4)) {
   }, error=function(e){})} 
 
 
+forest_site$vpd[forest_site$vpd<0] <- NA
+forest_site$alpha[forest_site$alpha>=1] <- NA
+forest_site$age[forest_site$age<0] <- NA
 
 forest_site$pred_gpp <- siteinfo_final4$pred_gpp_c3_30yrs
 
@@ -867,7 +871,7 @@ forest_site2 <- subset(forest_site,rep_info!="rep" & rep_info!="rep1"& rep_info!
 #forest_site2 <- aggregate(forest_site,by=list(forest_site$lon,forest_site$lat,forest_site$z), FUN=mean, na.rm=TRUE) #site-mean
 
 #check
-#analyse_modobs2(forest_site2,"pred_gpp", "GPP",type = "points")
+analyse_modobs2(forest_site2,"pred_gpp", "GPP",type = "points")
 ggplot(data=forest_site2, aes(x=pred_gpp, y=GPP)) +
   geom_point()+geom_abline(intercept=0,slope=1)+geom_smooth(method = "lm", se = TRUE)+
   xlab("Prediction")+ylab("Observation")+theme_classic()
@@ -879,14 +883,13 @@ ggplot(data=forest_site2, aes(x=pred_npp, y=TNPP_1)) +
   xlab("Prediction")+ylab("Observation")+theme_classic()
 summary(lm(TNPP_1~pred_npp,forest_site2))
 
-
 #analyse_modobs2(forest_site2,"pred_anpp", "ANPP_2",type = "points")
 ggplot(data=forest_site2, aes(x=pred_anpp, y=ANPP_2)) +
   geom_point()+geom_abline(intercept=0,slope=1)+geom_smooth(method = "lm", se = TRUE)+
   xlab("Prediction")+ylab("Observation")+theme_classic()
 summary(lm(ANPP_2~pred_anpp,forest_site2))
-
 #analyse_modobs2(forest_site2,"pred_lnpp", "NPP.foliage",type = "points")
+
 ggplot(data=forest_site2, aes(x=pred_lnpp, y=NPP.foliage)) +
   geom_point()+geom_abline(intercept=0,slope=1)+geom_smooth(method = "lm", se = TRUE)+
   xlab("Prediction")+ylab("Observation")+theme_classic()
@@ -909,4 +912,33 @@ ggplot(data=forest_site2, aes(x=pred_lnf, y=lnf_obs)) +
   geom_point()+geom_abline(intercept=0,slope=1)+geom_smooth(method = "lm", se = TRUE)+
   xlab("Prediction")+ylab("Observation")+theme_classic()
 summary(lm(lnf_obs~pred_lnf,forest_site2))
+
+
+
+#check leaf c/n
+SP_input <- read.csv(file="~/data/CN_leaf/final_individuals.csv") #all individuals
+SP_input2 <- SP_input[,c("lat","lon","Elevation","Vcmax.25","narea","lma")]
+sitemean <- aggregate(SP_input2,by=list(SP_input2$lon,SP_input2$lat), FUN=mean, na.rm=TRUE) 
+dim(sitemean)
+
+sitemean$pred_leafnc <- (0.0161/0.5) + (0.0041/0.5)* sitemean$Vcmax.25/sitemean$lma
+sitemean$pred_leafnmass <- sitemean$pred_leafnc*0.5 #unitness
+sitemean$obs_leafnmass <- sitemean$narea/sitemean$lma #unitness
+
+ggplot(data=sitemean, aes(x=pred_leafnmass, y=obs_leafnmass)) +
+  geom_point()+geom_abline(intercept=0,slope=1)+geom_smooth(method = "lm", se = TRUE)+
+  xlab("Prediction")+ylab("Observation")+theme_classic()
+summary(lm(obs_leafnmass~pred_leafnmass,sitemean))
+
+leafcn_df <- inputnc("leafcn",1982,2011)
+leafcn <-leafcn_df
+leafcn$leafcn <- 1/leafcn$leafcn
+leafcn$leafcn[leafcn$leafcn == Inf] <- NA
+
+gg <- plot_map3(leafcn[,c(1,2,4)], 
+                varnam = "leafcn",plot_title = "Leaf carbon to nitrogen ratio",
+                latmin = -65, latmax = 85, combine = FALSE)
+
+gg$ggmap + geom_point(data=subset(sitemean,obs_leafnmass>0 & pred_leafnmass>0),aes(lon,lat),col="red") 
+gg$gglegend
 

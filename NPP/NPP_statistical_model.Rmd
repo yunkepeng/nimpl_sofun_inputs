@@ -140,15 +140,16 @@ NPP_all$alpha <- alphalist3
 ###5. merge MEASURED soil (orginally provided from Sara Vicca)
 ####(1) For our purpose, we only need CN, pH, age
 
-soil <-read.csv(file="~/data/NPP_Yunke/NPP_SaraVicca/orig/soil.csv")
+soil2 <-read.csv(file="~/data/NPP_Yunke/NPP_SaraVicca/orig/soil.csv")
 #soil <-read.csv(file="D:/PhD/nimpl_sofun_inputs/Data/NPP/NPP_SaraVicca/orig/soil.csv")
-soil2 <- soil[,c(1,2,3,42,43,77)]
-names(soil2)<-c("site","lon","lat","CN","pH","age")
+#soil <-read.csv(file="/Users/yunpeng/Desktop/phd/code/tempory_nimpl/soil.csv")
+#orig: /Volumes/Seagate Backup Plus Drive/HP/E/C-N cycling/Carbon allocation/next-step/soil_colin.csv + literatures data from Malhi
+names(soil2)<-c("site","lon","lat","soilC","soilN","CN","pH")
 
 ####(2) we na.omit() each variable, and merge them separately.
-CN <- na.omit(soil2[,c(1,4)])
+CN <- na.omit(soil2[,c("site","CN")])
 final_sites1 <- merge(NPP_all,CN,by=c("site"),all.x=TRUE)
-pH <- na.omit(soil2[,c(1,5)])
+pH <- na.omit(soil2[,c("site","pH")])
 final_sites2 <- merge(final_sites1,pH,by=c("site"),all.x=TRUE)
 
 ###6. merge MEASURED management-type and stand-age data (the csv was derived from original data of Sara Vicca).
@@ -161,7 +162,9 @@ names(manage) <- c("site","management")
 final_sites3 <- merge(final_sites2,manage,by=c("site"),all.x=TRUE)
 
 ####(2) merge stand-age data into dataframe. There might be more than 1 sample measured in a site (as collected from different sources). So we need to aggregate them firstly.
-agee <- na.omit(manage_age[,3:4])
+agee <- na.omit(manage_age[1:230,3:4]) #we only need original stand-age data from Sara Vicca's original dataset (see ~/data/NPP_Yunke/NPP_SaraVicca/orig/Forests_Colin.xlsx  --> stand description/age) to finish npp/gpp and anpp/gpp analyses. 
+#agee <- na.omit(manage_age[,3:4])# I have added more stand age sites when extracted from Forc's original data but that did not help to expand our sites for npp/gpp and anpp/gpp analysis (considering that they did not have gpp, or some others.). So they did not included here.
+
 names(agee) <- c("site","age")
 agee2 <- aggregate(age~site,data=agee,mean,na.rm=TRUE)
 final_sites4 <- merge(final_sites3,agee2,by=c("site"),all.x=TRUE)

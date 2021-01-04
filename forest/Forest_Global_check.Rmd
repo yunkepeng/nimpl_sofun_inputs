@@ -625,6 +625,8 @@ gg$ggmap + geom_point(data=subset(NPP2,lnf_obs_final>0 & pred_lnf>0),aes(lon,lat
 gg$gglegend
 analyse_modobs2(subset(NPP2,lnf_obs_final>0 & pred_lnf>0),"pred_lnf", "lnf_obs_final",type = "points")
 
+
+
 ggplot(data=subset(NPP2,lnf_obs_final>0 & pred_lnf>0), aes(x=pred_lnf, y=lnf_obs_final)) +
     geom_point()+geom_abline(intercept=0,slope=1)+geom_smooth(method = "lm", se = TRUE)+
     xlab("Prediction")+ylab("Observation")+theme_classic()
@@ -636,7 +638,15 @@ gg <- plot_map3(wnf_df[,c(1,2,4)],
 
 gg$ggmap + geom_point(data=subset(NPP2,wnf_obs_final>0 & pred_wnf>0 & pft2 == "Forest"),aes(lon,lat),col="red") 
 gg$gglegend
-#analyse_modobs2(subset(NPP,wnf_obs_final>0 & pred_wnf>0 & pft2 == "Forest"),"pred_wnf","wnf_obs_final", type = "points")
+
+summary(NPP2$CN_wood_final)
+
+
+analyse_modobs2(subset(NPP2,wnf_obs_final>0 & pred_wnf>0),"pred_wnf","wnf_obs_final", type = "points")
+
+ggplot(subset(NPP2,wnf_obs_final>0 & pred_wnf>0), aes(x=pred_wnf, y=wnf_obs_final)) +
+    geom_point()+geom_abline(intercept=0,slope=1)+geom_smooth(method = "lm", se = TRUE)+
+    xlab("Prediction")+ylab("Observation")+theme_classic()
 
 #sites are too less
 
@@ -644,10 +654,82 @@ gg$gglegend
 gg <- plot_map3(bnf_df[,c(1,2,4)], 
                 varnam = "bnf",plot_title = " N uptake in root (gN/m2/yr)",
                 latmin = -65, latmax = 85, combine = FALSE)
+gg$gglegend
+
+#corrected obs. cn_root data
+CN_Schulz <- read.csv(file="~/data/NPP_Yunke/npp_cn/CN_Schulze.csv")
+CN_Schulz2 <- CN_Schulz[,c(5,48:58)]
+
+cn_root_df <- subset(NPP2,bnf_obs_final>0)
+cn_root_df$site
+CN_Schulz2 <- CN_Schulz2[order(CN_Schulz2$site), ]
+CN_Schulz2$site
+
+cn_root_df$CN_root_final <- (CN_Schulz2$c_fineroot + CN_Schulz2$c_coarseroot) / CN_Schulz2$n_root
+hist(cn_root_df$CN_root_final)
+
+cn_root_df$bnf_obs_final <- cn_root_df$BNPP_1 / cn_root_df$CN_root_final 
+hist(cn_root_df$bnf_obs_final)
+analyse_modobs2(subset(cn_root_df,bnf_obs_final>0 & pred_bnf>0 & pft2 == "Forest"),"bnf_obs_final","pred_bnf", type = "points")
+
+ggplot(subset(cn_root_df,bnf_obs_final>0 & pred_bnf>0 & pft2 == "Forest"), aes(x=pred_bnf, y=bnf_obs_final)) +
+    geom_point()+geom_abline(intercept=0,slope=1)+geom_smooth(method = "lm", se = TRUE)+
+    xlab("Prediction")+ylab("Observation")+theme_classic()
 
 gg$ggmap + geom_point(data=subset(NPP2,bnf_obs_final>0 & pred_bnf>0 & pft2 == "Forest"),aes(lon,lat),col="red")
 gg$gglegend
-#analyse_modobs2(subset(NPP,bnf_obs_final>0 & pred_bnf>0 & pft2 == "Forest"),"bnf_obs_final","pred_bnf", type = "points")
+
+#finally, total nuptake
+cn_root_df$obs_nuptake <- cn_root_df$bnf_obs_final + cn_root_df$lnf_obs_final + cn_root_df$wnf_obs_final
+cn_root_df$pred_nuptake <- cn_root_df$pred_bnf + cn_root_df$pred_lnf + cn_root_df$pred_wnf
+
+ggplot(subset(cn_root_df,pred_nuptake>0 & obs_nuptake>0 & pft2 == "Forest"), aes(x=pred_nuptake, y=obs_nuptake)) +
+    geom_point()+geom_abline(intercept=0,slope=1)+geom_smooth(method = "lm", se = TRUE)+
+    xlab("Prediction")+ylab("Observation")+theme_classic()
+#analyse_modobs2(subset(cn_root_df,pred_nuptake>0 & obs_nuptake>0 & pft2 == "Forest"),"obs_nuptake","pred_nuptake", type = "points")
+
+#use gwr to extract nuptake again
+nuptake_df <- inputnc("nuptake",1982,2011) 
+cn_root_df$pred_nuptake_gwr <- NA
+a <- 1.5
+for (i in 1:nrow(cn_root_df)) {
+  tryCatch({
+    grid_global <- subset(nuptake_df,nuptake_df[,4]>0 & nuptake_df[,3]>0)
+    grid_part <- subset(grid_global,lon>(cn_root_df$lon[i]-a)&lon<(cn_root_df$lon[i]+a)&
+                          lat>(cn_root_df$lat[i]-a)&lat<(cn_root_df$lat[i]+a))
+    coordinates(grid_part) <- c("lon","lat")
+    gridded(grid_part) <- TRUE
+    site_coord <- cn_root_df[i,c("lon","lat","z")]
+    coordinates(site_coord) <- c("lon","lat")
+    cn_root_df$pred_nuptake_gwr[i] <- (gwr(nuptake ~ z, grid_part, bandwidth = 1.06, fit.points =site_coord,predictions=TRUE))$SDF$pred
+  }, error=function(e){})} 
+
+
+ggplot(subset(cn_root_df,pred_nuptake_gwr>0 & obs_nuptake>0 & pft2 == "Forest"), aes(x=pred_nuptake_gwr, y=obs_nuptake)) +
+    geom_point()+geom_abline(intercept=0,slope=1)+geom_smooth(method = "lm", se = TRUE)+
+    xlab("Prediction")+ylab("Observation")+theme_classic()
+summary(lm(obs_nuptake~pred_nuptake_gwr,cn_root_df))
+
+gg <- plot_map3(nuptake_df[,c(1,2,4)], 
+                varnam = "nuptake",plot_title = " Total N uptake in ecosystem (gN/m2/yr)",
+                latmin = -65, latmax = 85, combine = FALSE)
+gg$ggmap + geom_point(data=subset(cn_root_df,obs_nuptake>0 & pred_nuptake_gwr>0 & pft2 == "Forest"),aes(lon,lat),col="red")
+gg$gglegend
+
+#calculate percentage of each part
+all_nflux <- cbind(nuptake_df,lnf_df$lnf,wnf_df$wnf,bnf_df$bnf)
+
+all_nflux <- na.omit(all_nflux)
+summary(all_nflux)
+names(all_nflux) <- c("lon","lat","z","nuptake","lnf","wnf","bnf")
+dim(subset(all_nflux,lnf==0))
+dim(subset(all_nflux,wnf==0))
+dim(subset(all_nflux,bnf==0))
+#subset lnf_df >0
+all_nflux2 <- subset(all_nflux,lnf>0)
+summary(all_nflux2$lnf/all_nflux2$nuptake)
+summary(all_nflux2$wnf/all_nflux2$nuptake)
+summary(all_nflux2$bnf/all_nflux2$nuptake)
 
 #sites are too less in wnf and bnf
 
@@ -730,7 +812,24 @@ ggplot(data=subset(df,obs>0&pred<1), aes(x=pred, y=obs)) +
     xlab("Prediction")+ylab("Observation")+theme_classic()
 
 
+
 #(9) leafcn
+#check leaf c/n
+SP_input <- read.csv(file="~/data/CN_leaf/final_individuals.csv") #all individuals
+SP_input2 <- SP_input[,c("lat","lon","Elevation","Vcmax.25","narea","lma")]
+sitemean <- aggregate(SP_input2,by=list(SP_input2$lon,SP_input2$lat), FUN=mean, na.rm=TRUE) 
+dim(sitemean)
+
+sitemean$pred_leafnc <- (0.0161/0.5) + (0.0041/0.5)* sitemean$Vcmax.25/sitemean$lma
+sitemean$pred_leafnmass <- sitemean$pred_leafnc*0.5 #unitness
+sitemean$obs_leafnmass <- sitemean$narea/sitemean$lma #unitness
+
+ggplot(data=sitemean, aes(x=pred_leafnmass, y=obs_leafnmass)) +
+  geom_point()+geom_abline(intercept=0,slope=1)+geom_smooth(method = "lm", se = TRUE)+
+  xlab("Prediction")+ylab("Observation")+theme_classic()
+summary(lm(obs_leafnmass~pred_leafnmass,sitemean))
+
+leafcn_df <- inputnc("leafcn",1982,2011)
 leafcn <-leafcn_df
 leafcn$leafcn <- 1/leafcn$leafcn
 leafcn$leafcn[leafcn$leafcn == Inf] <- NA
@@ -739,8 +838,7 @@ gg <- plot_map3(leafcn[,c(1,2,4)],
                 varnam = "leafcn",plot_title = "Leaf carbon to nitrogen ratio",
                 latmin = -65, latmax = 85, combine = FALSE)
 
-
-gg$ggmap + geom_point(data=subset(NPP2,CN_leaf_final>0 & predicted_leafcn>0),aes(lon,lat),col="red") 
+gg$ggmap + geom_point(data=subset(sitemean,obs_leafnmass>0 & pred_leafnmass>0),aes(lon,lat),col="red") 
 gg$gglegend
 #analyse_modobs2(subset(NPP2,CN_leaf_final>0 & predicted_leafcn>0 ),"predicted_leafcn","CN_leaf_final", type = "points")
 
@@ -756,6 +854,48 @@ gg$gglegend
 
 save.image(file = "/Users/yunpeng/yunkepeng/nimpl_sofun_inputs/forest/Forest_Global_check.Rdata")
 
+#accounting for three main parts 
+summary(lnpp_df)
+summary(leafcn_df)
+summary(nre_df)
 
+lnf_final <- cbind(lnpp_df,leafcn_df$leafcn,nre_df$nre)
+names(lnf_final) <- c("lon","lat","z","lnpp","leafnc","nre")
+
+lnf_final2 <- na.omit(lnf_final)
+
+lnf_final3 <- subset(lnf_final2,lnpp>0)
+summary(lnf_final3)
+
+#holding each factor as constant
+lnf_final3$lnf1_lnpp <- lnf_final3$lnpp*0.04440* (1-0.5464)
+lnf_final3$lnf2_leafnc <- 127.105*lnf_final3$leafnc* (1-0.5464)
+lnf_final3$lnf3_nre <- 127.105*0.04440* (1-lnf_final3$nre)
+
+a1 <- lnf_final3$lnf1_lnpp
+a2 <- lnf_final3$lnf2_leafnc
+a3 <- lnf_final3$lnf3_nre
+
+var(a1)/(var(a1)+var(a2)+var(a3))
+var(a2)/(var(a1)+var(a2)+var(a3))
+var(a3)/(var(a1)+var(a2)+var(a3))
+
+results <- c(a1,a2,a3)
+group <- c(rep("Leaf NPP: 95% of variance",length(a1)),rep("Leaf N/C : 2% of variance",length(a1)),rep("Nitrogen resorption efficiency: 3% of variance",length(a1)))
+
+results_final <- as.data.frame(cbind(results,group))
+results_final$results <- as.numeric(results_final$results)
+ggplot(results_final, aes(x=results, fill=group)) + geom_density(alpha=.3)+xlab("Leaf N flux (gN/m2/yr)")+ggtitle("Leaf N flux = NPP.leaf * leaf N/C * (1-NRE)")+ labs(fill = "Variance of factor (when holding other 2 factors as constant)")+theme_classic()
+
+#quanfitying each part
+allocation <- cbind(gpp_df,npp_df[,4],anpp_df[,4],lnpp_df[,4],wnpp_df[,4],bnpp_df[,4])
+names(allocation) <- c("lon","lat","z","gpp","npp","anpp","lnpp","wnpp","bnpp")
+summary(allocation)
+allocation <- na.omit(allocation)
+allocation2 <- subset(allocation,npp>0 & lnpp>0) #excluding 0 value grids (set as 0 when in global simulations - prediction fields in land was empty)
+summary(allocation2$npp/allocation2$gpp)
+summary(allocation2$anpp/allocation2$npp)
+summary(allocation2$bnpp/allocation2$npp)
+summary(allocation2$lnpp/allocation2$anpp)
 
 ```

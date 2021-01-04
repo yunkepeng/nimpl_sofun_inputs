@@ -281,4 +281,7 @@ gg <- plot_map3(gpp_df[,c(1,2,4)],
 gg$ggmap + geom_point(data=subset(NPP,GPP>0),aes(lon,lat),col="red")
 gg$gglegend
 
+
+
+
 ```
