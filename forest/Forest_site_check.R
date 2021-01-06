@@ -26,36 +26,36 @@ load(file = "/Users/yunpeng/yunkepeng/nimpl_sofun_inputs/forest/Forest_site_chec
 #at the end of code...
 
 
-#read complete dataset for measurement, after L1-L300 in /Users/yunpeng/yunkepeng/nimpl_sofun_inputs/output_check/Forest_Global_check.Rmd
-NPP <- read.csv("/Users/yunpeng/data/forest_npp/NPP_final.csv")
+#read complete dataset for measurement, after L1-L352 in /Users/yunpeng/yunkepeng/nimpl_sofun_inputs/output_check/Forest_Global_check.Rmd
+NPP <- read.csv("/Users/yunpeng/data/forest_npp/NPP_final_all.csv")
 #extract forest only -->with corrected sitename in all (no NA)
 NPP_Forest <- subset(NPP,pft2=="Forest")
 
 
 ########read sitename and sitename2, which was created when used for dowloading climate forcing and fapar forcing separately
-#for details about how to create this sitename, please run L1-L160 /Users/yunpeng/yunkepeng/nimpl_sofun_inputs/forest/forest_gpp_simulation.R
+#for details about how to create this sitename, please run /Users/yunpeng/yunkepeng/nimpl_sofun_inputs/forest/forest_sitename_preparation.R
+#for info about climate forcing and fapar code, please have a look at example in  /Users/yunpeng/yunkepeng/nimpl_sofun_inputs/forest/forcing_fpar.R
 
-#for details about climate forcing and fapar code, please have a look at example in  /Users/yunpeng/yunkepeng/nimpl_sofun_inputs/forest/forcing_fpar.R
-NPP_final2 <- read.csv("/Users/yunpeng/data/forest_npp/forest_forcing_info.csv")
-#pass some data
-NPP_final2$site <- NPP_Forest$site
-NPP_final2$rep_info <- NPP_Forest$rep_info
-NPP_final2$CN_leaf <-NPP_Forest$CN_leaf_final
-NPP_final2$CN_root <-NPP_Forest$CN_root_final
-NPP_final2$lnf_obs <- NPP_Forest$lnf_obs_final
-NPP_final2$bnf_obs <- NPP_Forest$bnf_obs_final
-NPP_final2$wnf_obs <- NPP_Forest$wnf_obs_final
+NPP_final2 <- read.csv("/Users/yunpeng/data/forest_npp/forest_forcing_info_all.csv")
+#pass some sitename and sitename2 data
+NPP_Forest$sitename <- NPP_final2$sitename
+NPP_Forest$sitename2 <- NPP_final2$sitename2
 
 #check two df is consistent..
 summary(NPP_Forest$lat-NPP_final2$lat)
 summary(NPP_Forest$lon-NPP_final2$lon)
 summary(NPP_Forest$z-NPP_final2$z)
+summary(NPP_Forest$Begin_year-NPP_final2$Begin_year)
+summary(NPP_Forest$End_year-NPP_final2$End_year)
 summary(NPP_Forest$GPP-NPP_final2$GPP)
 summary(NPP_Forest$TNPP_1 - NPP_final2$TNPP_1)
 summary(NPP_Forest$ANPP_2 - NPP_final2$ANPP_2)
 summary(NPP_Forest$NPP.foliage - NPP_final2$NPP.foliage)
+summary(NPP_Forest$lnf_obs_final - NPP_final2$lnf_obs_final)
+summary(NPP_Forest$wnf_obs - NPP_final2$wnf_obs)
 
-
+NPP_final2 <- NPP_Forest
+dim(NPP_final2)
 ####now, input forcing data from two times simulation
 forcing_df <- list.files("/Users/yunpeng/data/forest_npp/forcing/",full.names = T)
 length(forcing_df) # all data was included
@@ -92,9 +92,9 @@ newmap <- getMap(resolution = "low")
 plot(newmap, xlim = c(-180, 180), ylim = c(-75, 75), asp = 1)
 points(na_fapar$lon,na_fapar$lat, col="red", pch=16,cex=1)
 points(na_fapar$lon[c(1,2,3,5,8,9,10)],na_fapar$lat[c(1,2,3,5,8,9,10)], col="blue", pch=16,cex=1)
-#12 samples were missing fapar, which is under expected.
+#13 samples were missing fapar, which was expected.
 
-#2. forcing - input - all 842 points were available
+#2. forcing - input - all 935 points were available
 for (i in 1:length(forcing_df)){
   tryCatch({
     df1 <- read.csv(forcing_df[i])
@@ -118,8 +118,6 @@ params_modl <- list(
   soilm_par_b     = 1.45602286)
 
 NPP_final2$pred_gpp_c3 <- NA
-NPP_final2$pred_gpp_c4 <- NA
-
 
 siteinfo_final <- NPP_final2
 
@@ -162,37 +160,6 @@ for (i in 1:nrow(siteinfo_final)) {
     pred_gpp_list <- modlist %>% mutate(ymonth = month(date),yday = day(date)) %>% group_by(ymonth, yday) %>% summarise(gpp = mean(gpp, na.rm = TRUE))
     
     siteinfo_final[i,c("pred_gpp_c3")] <- sum(pred_gpp_list$gpp)
-    
-    #c4
-    modlist <- run_pmodel_f_bysite( 
-      siteinfo_final$sitename[i], 
-      params_siml <- list(
-        spinup             = TRUE,
-        spinupyears        = 10,
-        recycle            = 1,
-        soilmstress        = TRUE,
-        tempstress         = TRUE,
-        calc_aet_fapar_vpd = FALSE,
-        in_ppfd            = TRUE,
-        in_netrad          = FALSE,
-        outdt              = 1,
-        ltre               = FALSE,
-        ltne               = FALSE,
-        ltrd               = FALSE,
-        ltnd               = FALSE,
-        lgr3               = FALSE,
-        lgn3               = FALSE,
-        lgr4               = TRUE,
-        firstyeartrend = siteinfo_final$year_start[i],
-        nyeartrend = siteinfo_final$year_end[i]-siteinfo_final$year_start[i]+1), 
-      siteinfo = siteinfo_final[i,], 
-      forcing, 
-      df_soiltexture, 
-      params_modl = params_modl, 
-      makecheck = TRUE)
-    pred_gpp_list <- modlist %>% mutate(ymonth = month(date),yday = day(date)) %>% group_by(ymonth, yday) %>% summarise(gpp = mean(gpp, na.rm = TRUE))
-    
-    siteinfo_final[i,c("pred_gpp_c4")] <- sum(pred_gpp_list$gpp)
   }, error=function(e){})} 
 
 #for vcmax25
@@ -235,7 +202,7 @@ for (i in 1:nrow(siteinfo_final)) {
   }, error=function(e){})} 
 
 siteinfo_final$max_vcmax25 <- siteinfo_final$max_vcmax25*1000000
-summary(siteinfo_final$max_vcmax25) #12 points were missing, as expected
+summary(siteinfo_final$max_vcmax25) #13 points were missing, as expected
 
 #now, extracting site values from Tg, alpha, c/n.....
 elev_nc <- read_nc_onefile("~/data/watch_wfdei/WFDEI-elevation.nc")
@@ -278,7 +245,7 @@ LMA <- as.data.frame(nc_to_df(read_nc_onefile(
 #use max vcmax25 from nimpl output
 firstyr_data <- 1982 # In data file, which is the first year
 endyr_data <- 2011 # In data file, which is the last year
-location <- "~/data/output/new/"
+location <- "~/data/output/latest_noNRE_forest/"
 alloutput_list <- list.files(location,full.names = T)
 
 #input elevation nc file, which will be cbind with global df directly
@@ -351,7 +318,7 @@ forest_site$LMA <- NA
 forest_site$Vcmax25 <- NA
 
 a <- 1.5 # which degree (distance) of grid when interpolating gwr from global grids
-
+dim(forest_site)
 #Extract Tg, PPFD, vpd, alpha,fAPAR,age,CNrt,LMA, max-vcmax25
 for (i in 1:nrow(forest_site)) {
   tryCatch({
@@ -453,6 +420,9 @@ forest_site$pred_anpp <- forest_site$pred_gpp * (1/(1 + exp(-(-0.6075 * log(fore
 
 forest_site$pred_bnpp <- forest_site$pred_npp - forest_site$pred_anpp
 
+#use a new model - based on new coefficients?
+
+
 forest_site$pred_lnpp <- forest_site$pred_anpp * (1/(1 + exp(-(1.2350* log(forest_site$PPFD) +
                                                                  0.0731 * (forest_site$Tg) + 
                                                                  -1.0192 * log(forest_site$vpd) + -9.2375))))
@@ -475,15 +445,19 @@ forest_site$BNPP_1 <- siteinfo_final$BNPP_1
 forest_site$NPP.foliage <- siteinfo_final$NPP.foliage
 forest_site$NPP.wood <- siteinfo_final$NPP.wood
 forest_site$CN_leaf <- siteinfo_final$CN_leaf
-forest_site$lnf_obs <- siteinfo_final$lnf_obs
-forest_site$wnf_obs <- siteinfo_final$wnf_obs
-forest_site$bnf_obs <- siteinfo_final$bnf_obs
+forest_site$lnf_obs <- siteinfo_final$lnf_obs_final
+forest_site$wnf_obs <- siteinfo_final$wnf_obs_final
+forest_site$bnf_obs <- siteinfo_final$bnf_obs_final
 forest_site$GPP <- siteinfo_final$GPP
-forest_site$rep_info <- siteinfo_final$rep_info
 
+siteinfo_final$rep_info[838]
+
+forest_site$rep_info <- siteinfo_final$rep_info
+#correct new dataset's rep_info
+forest_site$rep_info[875:935] <- ""
 forest_site2 <- subset(forest_site,rep_info!="rep" & rep_info!="rep1"& rep_info!="rep3")
 
-#forest_site2 <- aggregate(forest_site,by=list(forest_site$lon,forest_site$lat,forest_site$z), FUN=mean, na.rm=TRUE) #site-mean
+forest_site3 <- aggregate(forest_site2,by=list(forest_site2$lon,forest_site2$lat,forest_site2$z), FUN=mean, na.rm=TRUE) #site-mean
 
 #check
 #analyse_modobs2(forest_site2,"pred_gpp", "GPP",type = "points")
@@ -531,11 +505,10 @@ summary(lm(lnf_obs~pred_lnf,forest_site2))
 
 save.image(file = "/Users/yunpeng/yunkepeng/nimpl_sofun_inputs/forest/Forest_site_check.Rdata")
 
-
 #since lnf is not predicted well (comparing with site simulation), it is expected that max vcmax25 was somewhere not so large, so that underestimation of lnf occurred.
 #use max vcmax25 of 30 years and run it year by year --> not work as extracted from site simulation
 #site-mean
-siteinfo_final2 <- aggregate(siteinfo_final,by=list(siteinfo_final$lon,siteinfo_final$lat,siteinfo_final$z), FUN=mean, na.rm=TRUE) #site-mean
+siteinfo_final2 <- aggregate(forest_site2,by=list(siteinfo_final$lon,siteinfo_final$lat,siteinfo_final$z), FUN=mean, na.rm=TRUE) #site-mean
 
 for (i in 1:nrow(siteinfo_final2)){
   siteinfo_final2$sitename3[i] <- paste("forest_long",i,sep = "")
@@ -942,3 +915,137 @@ gg <- plot_map3(leafcn[,c(1,2,4)],
 gg$ggmap + geom_point(data=subset(sitemean,obs_leafnmass>0 & pred_leafnmass>0),aes(lon,lat),col="red") 
 gg$gglegend
 
+
+#include forest new sites from Tian Di
+tiandi_forest <- read.csv("/Users/yunpeng/data/npp_stoichiometry_forests_tiandi/Site_level_forest_CN_NPP_China_TD_20210104_for_Beni_Yunke.csv")
+tiandi_forest2 <- tiandi_forest[,c(1:4)]
+names(tiandi_forest2) <- c("sitename","lon","lat","elv")
+head(tiandi_forest2)
+
+library(rworldmap)
+newmap <- getMap(resolution = "low")
+plot(newmap, xlim = c(-180, 180), ylim = c(-75, 75), asp = 1)
+points(tiandi_forest2$lon,tiandi_forest2$lat, col="red", pch=16,cex=1)
+#reasonable
+
+siteinfo <- data.frame(
+  sitename = tiandi_forest2$sitename,
+  lon = tiandi_forest2$lon,
+  lat = tiandi_forest2$lat,
+  elv = tiandi_forest2$elv,
+  year_start = rep(2006,nrow(tiandi_forest2)),
+  year_end = rep(2015,nrow(tiandi_forest2))
+)
+
+#create time frame
+siteinfo <-  siteinfo %>% dplyr::mutate(date_start = lubridate::ymd(paste0(year_start, "-01-01"))) %>%
+  dplyr::mutate(date_end = lubridate::ymd(paste0(year_end, "-12-31"))) 
+
+calc_vpd_inst <- function( qair=NA, tc=NA, patm=NA, elv=NA  ){
+  ##-----------------------------------------------------------------------
+  ## Ref:      Eq. 5.1, Abtew and Meleese (2013), Ch. 5 Vapor Pressure 
+  ##           Calculation Methods, in Evaporation and Evapotranspiration: 
+  ##           Measurements and Estimations, Springer, London.
+  ##             vpd = 0.611*exp[ (17.27 tc)/(tc + 237.3) ] - ea
+  ##             where:
+  ##                 tc = average daily air temperature, deg C
+  ##                 eact  = actual vapor pressure, Pa
+  ##-----------------------------------------------------------------------
+  kTo = 288.15   # base temperature, K (Prentice, unpublished)
+  kR  = 8.3143   # universal gas constant, J/mol/K (Allen, 1973)
+  kMv = 18.02    # molecular weight of water vapor, g/mol (Tsilingiris, 2008)
+  kMa = 28.963   # molecular weight of dry air, g/mol (Tsilingiris, 2008)
+  
+  ## calculate the mass mixing ratio of water vapor to dry air (dimensionless)
+  wair <- qair / (1 - qair)
+  
+  ## calculate water vapor pressure 
+  rv <- kR / kMv
+  rd <- kR / kMa
+  eact = patm * wair * rv / (rd + wair * rv)  
+  
+  ## calculate saturation water vapour pressure in Pa
+  esat <- 611.0 * exp( (17.27 * tc)/(tc + 237.3) )
+  
+  ## calculate VPD in units of Pa
+  vpd <- ( esat - eact )    
+  
+  ## this empirical equation may lead to negative values for VPD (happens very rarely). assume positive...
+  vpd <- max( 0.0, vpd )
+  
+  return( vpd )
+  
+}
+library(ingestr)
+
+for (i in 1:nrow(siteinfo)) {
+  tryCatch({
+    df_watch <- ingestr::ingest(
+      siteinfo  = siteinfo[i,],
+      source    = "watch_wfdei",
+      getvars   = list(temp = "Tair",prec = "Rainf", vpd = "Qair", ppfd = "SWin"), 
+      dir       = "/Volumes/Seagate Backup Plus Drive/data/watch_wfdei/"
+    )
+    
+    df_cru <- ingestr::ingest(
+      siteinfo  = siteinfo[i,],
+      source    = "cru",
+      getvars   = list(ccov = "cld"),
+      dir       = "/Volumes/Seagate Backup Plus Drive/data/cru/ts_4.01/"
+    )
+    
+    df_co2 <- ingestr::ingest(
+      siteinfo[i,],
+      source  = "co2_mlo",
+      verbose = FALSE
+    )
+    
+    df_co2_final <- as.data.frame(df_co2$data)
+    
+    df_co2_final2 <- df_co2_final[!(format(df_co2_final$date,"%m") == "02" & format(df_co2_final$date, "%d") == "29"), , drop = FALSE]
+    
+    co2 <- df_co2_final2$co2
+    
+    ddf_meteo <- as_tibble(cbind(as.data.frame(df_watch$data)[,c("date","temp","prec","qair","ppfd")],as.data.frame(df_cru$data)[,c("ccov_int","ccov")],co2))
+    
+    elv <- siteinfo$elv[i]
+    
+    ddf_meteo$patm <- calc_patm(elv=elv, patm0 = 101325 )
+    
+    for (b in 1:length(ddf_meteo$qair)){
+      ddf_meteo$vpd[b] <- calc_vpd_inst( qair=ddf_meteo$qair[b], tc=ddf_meteo$temp[b], ddf_meteo$patm[b], elv=elv)
+    }
+    
+    ddf_meteo_final <- ddf_meteo[,c("date","temp","prec","qair","vpd","ppfd","patm","ccov_int","ccov","co2")]
+    ddf_meteo_final$prec <- ddf_meteo_final$prec/86400
+    ddf_meteo_final$ppfd <- ddf_meteo_final$ppfd/86400
+    ddf_meteo_final$sitename <- siteinfo$sitename[i]
+    csvfile <- paste("/Users/yunpeng/data/forest_npp/forcing2/",siteinfo$sitename[i],".csv",sep = "")
+    write.csv(ddf_meteo_final, csvfile, row.names = TRUE)
+    print(i)    
+  }, error=function(e){})} 
+
+#change site year to 2010-2019, for extracting fapar
+siteinfo <- data.frame(
+  sitename = tiandi_forest2$sitename,
+  lon = tiandi_forest2$lon,
+  lat = tiandi_forest2$lat,
+  #elv = tiandi_forest2$elv,
+  year_start = rep(2010,nrow(tiandi_forest2)),
+  year_end = rep(2019,nrow(tiandi_forest2))
+)
+
+#create time frame
+siteinfo <-  siteinfo %>% dplyr::mutate(date_start = lubridate::ymd(paste0(year_start, "-01-01"))) %>%
+  dplyr::mutate(date_end = lubridate::ymd(paste0(year_end, "-12-31"))) 
+
+settings_modis <- get_settings_modis(
+  bundle            = "modis_fpar",
+  data_path         = "~/data/forest_npp/modis_tiandi/",
+  method_interpol   = "loess",
+  keep              = TRUE,
+  overwrite_raw     = FALSE,
+  overwrite_interpol= TRUE
+)
+
+df_modis_fpar <- ingest(siteinfo = siteinfo,source= "modis",settings  = settings_modis,verbose   = FALSE,parallel = TRUE,ncore = 8)

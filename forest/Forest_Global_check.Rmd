@@ -302,24 +302,59 @@ NPP_final3$bnf_obs_final  <- NPP_final3$BNPP_1/NPP_final3$CN_root_final
 NPP_final3$wnf_obs_final  <- NPP_final3$NPP.wood/NPP_final3$CN_wood_final
 
 summary(NPP_final3) 
-
-##############here##############
-# this is final data we used for all samples' forest+grassland
-#############here##############
-
-
 #Important!!!Input repeated data info
 rep_info <- read.csv("/Users/yunpeng/data/NPP_Yunke/NPP_final_rep.csv")
 summary(rep_info$lat-NPP_final3$lat)
 NPP_final3$rep_info <- rep_info$rep_info
+
+####Finally, add Tiandi's latest forest data (the last data we need!)
+tiandi_forest <- read.csv(file="~/data/npp_stoichiometry_forests_tiandi/Site_level_forest_CN_NPP_China_TD_20210104_for_Beni_Yunke.csv")
+tiandi_forest <- tiandi_forest[,c(1,2,3,4,11,14,17,18,19,20,21,22)]
+head(tiandi_forest)
+names(tiandi_forest) <- c("site","lon","lat","z","CN_leaf_final","CN_stem_final","CN_root_final","TNPP_1","ANPP_2",
+                          "NPP.foliage","NPP.wood","BNPP_1")
+
+#extend CN_leaf version, as classified in NPP_final3
+tiandi_forest$CN_leaf <- tiandi_forest$CN_leaf_final
+tiandi_forest$CN_leaf_near_final <- tiandi_forest$CN_leaf_final
+tiandi_forest$CN_leaf_org <- tiandi_forest$CN_leaf_final
+tiandi_forest$CN_root <- tiandi_forest$CN_root_final
+
+
+#convert unit from tC/ha/yr to gC/m2/yr --> *100
+tiandi_forest$TNPP_1 <- 100*tiandi_forest$TNPP_1
+tiandi_forest$ANPP_2 <- 100*tiandi_forest$ANPP_2
+tiandi_forest$NPP.foliage <- 100*tiandi_forest$NPP.foliage
+tiandi_forest$NPP.wood <- 100*tiandi_forest$NPP.wood
+tiandi_forest$BNPP_1 <- 100*tiandi_forest$BNPP_1
+tiandi_forest$file <- "/Users/yunpeng/data/npp_stoichiometry_forests_tiandi/"
+tiandi_forest$Begin_year <- 2006
+tiandi_forest$End_year <- 2015
+tiandi_forest$Source <- "Fang, Wang, Tian Di prepared forest data in China"
+tiandi_forest$pft <- "Forest"
+tiandi_forest$pft2 <- "Forest"
+
+tiandi_forest$lnf_obs_final <-tiandi_forest$NPP.foliage/tiandi_forest$CN_leaf_final
+tiandi_forest$lnf_obs_nearfinal <-tiandi_forest$NPP.foliage/tiandi_forest$CN_leaf_final
+tiandi_forest$lnf_obs_org <-tiandi_forest$NPP.foliage/tiandi_forest$CN_leaf_final
+tiandi_forest$bnf_obs_final  <- tiandi_forest$BNPP_1/tiandi_forest$CN_root_final
+tiandi_forest$wnf_obs_final  <- tiandi_forest$NPP.wood/tiandi_forest$CN_stem_final #assume stem ratio as wood ratio here?
+
+NPP_final4 <- dplyr::bind_rows(NPP_final3, tiandi_forest) 
+
+summary(NPP_final4)
+
+##############here##############
+# this is final data we used for all samples' forest+grassland
+#############here##############
 #output to csv, which will be further used in site simulation of gpp
-csvfile <- paste("/Users/yunpeng/data/forest_npp/NPP_final.csv")
-write.csv(NPP_final3, csvfile, row.names = TRUE)
+#csvfile <- paste("/Users/yunpeng/data/forest_npp/NPP_final_all.csv")
+#write.csv(NPP_final4, csvfile, row.names = TRUE)
 
 
 
 #extract forest only
-NPP_Forest <- subset(NPP_final3,pft2=="Forest")
+NPP_Forest <- subset(NPP_final4,pft2=="Forest")
 NPP <- NPP_Forest
 #NPP_Forest_site <- aggregate(NPP_Forest, by=list(NPP_Forest$lon,NPP_Forest$lat,NPP_Forest$z), mean,na.rm=TRUE)
 #NPP_Forest_site <- NPP_Forest_site[,-c(1,2,3,4)]
@@ -609,11 +644,18 @@ newmap <- getMap(resolution = "low")
 plot(newmap, xlim = c(-180, 180), ylim = c(-75, 75), asp = 1)
 points(na_pred$lon,na_pred$lat, col="red", pch=16,cex=1)
 
+My_Theme = theme(
+  axis.title.x = element_text(size = 14),
+  axis.text.x = element_text(size = 20),
+  axis.title.y = element_text(size = 14),
+  axis.text.y = element_text(size = 20))
 
 #Now, check data
 #remove repeated data
 NPP$predicted_leafcn <- 1/NPP$pred_leafcn
+NPP$rep_info[NPP$file=="/Users/yunpeng/data/npp_stoichiometry_forests_tiandi/"] <- ""
 NPP2 <- subset(NPP,rep_info!="rep" & rep_info!="rep1"& rep_info!="rep3")
+dim(NPP2)
 nrow(NPP2) - nrow(NPP) #remove 38 repeated points
 
 gg <- plot_map3(lnf_df[,c(1,2,4)], 
@@ -625,28 +667,29 @@ gg$ggmap + geom_point(data=subset(NPP2,lnf_obs_final>0 & pred_lnf>0),aes(lon,lat
 gg$gglegend
 analyse_modobs2(subset(NPP2,lnf_obs_final>0 & pred_lnf>0),"pred_lnf", "lnf_obs_final",type = "points")
 
-
+summary(lm(lnf_obs_final~pred_lnf,subset(NPP2,lnf_obs_final>0 & pred_lnf>0)))
 
 ggplot(data=subset(NPP2,lnf_obs_final>0 & pred_lnf>0), aes(x=pred_lnf, y=lnf_obs_final)) +
-    geom_point()+geom_abline(intercept=0,slope=1)+geom_smooth(method = "lm", se = TRUE)+
-    xlab("Prediction")+ylab("Observation")+theme_classic()
+  geom_point()+geom_abline(intercept=0,slope=1)+geom_smooth(method = "lm", se = TRUE)+
+  xlab("Prediction")+ylab("Observation")+theme_classic()+My_Theme
 
-#(2) wnf
+#(2) wnf - still remove tiandi data at the end, since it is for stem.cn
 gg <- plot_map3(wnf_df[,c(1,2,4)], 
                 varnam = "wnf",plot_title = " N uptake in wood (gN/m2/yr)",
                 latmin = -65, latmax = 85, combine = FALSE)
 
-gg$ggmap + geom_point(data=subset(NPP2,wnf_obs_final>0 & pred_wnf>0 & pft2 == "Forest"),aes(lon,lat),col="red") 
+gg$ggmap + geom_point(data=subset(NPP2,wnf_obs_final>0 & pred_wnf>0 &file!="/Users/yunpeng/data/npp_stoichiometry_forests_tiandi/"),aes(lon,lat),col="red") 
 gg$gglegend
 
-summary(NPP2$CN_wood_final)
-
-
-analyse_modobs2(subset(NPP2,wnf_obs_final>0 & pred_wnf>0),"pred_wnf","wnf_obs_final", type = "points")
+#analyse_modobs2(subset(NPP2,wnf_obs_final>0 & pred_wnf>0 &file!="/Users/yunpeng/data/npp_stoichiometry_forests_tiandi/"),"pred_wnf","wnf_obs_final", type = "points")
 
 ggplot(subset(NPP2,wnf_obs_final>0 & pred_wnf>0), aes(x=pred_wnf, y=wnf_obs_final)) +
-    geom_point()+geom_abline(intercept=0,slope=1)+geom_smooth(method = "lm", se = TRUE)+
-    xlab("Prediction")+ylab("Observation")+theme_classic()
+  geom_point()+geom_abline(intercept=0,slope=1)+geom_smooth(method = "lm", se = TRUE)+
+  xlab("Prediction")+ylab("Observation")+theme_classic()+My_Theme
+
+ggplot(data=subset(NPP2,wnf_obs_final>0 & pred_wnf>0 &file!="/Users/yunpeng/data/npp_stoichiometry_forests_tiandi/"), aes(x=pred_wnf, y=wnf_obs_final)) +
+  geom_point()+geom_abline(intercept=0,slope=1)+geom_smooth(method = "lm", se = TRUE)+
+  xlab("Prediction")+ylab("Observation")+theme_classic()+My_Theme
 
 #sites are too less
 
@@ -665,7 +708,7 @@ cn_root_df$site
 CN_Schulz2 <- CN_Schulz2[order(CN_Schulz2$site), ]
 CN_Schulz2$site
 
-cn_root_df$CN_root_final <- (CN_Schulz2$c_fineroot + CN_Schulz2$c_coarseroot) / CN_Schulz2$n_root
+cn_root_df$CN_root_final[1:length(CN_Schulz2$site)] <- (CN_Schulz2$c_fineroot + CN_Schulz2$c_coarseroot) / CN_Schulz2$n_root
 hist(cn_root_df$CN_root_final)
 
 cn_root_df$bnf_obs_final <- cn_root_df$BNPP_1 / cn_root_df$CN_root_final 
@@ -673,19 +716,18 @@ hist(cn_root_df$bnf_obs_final)
 analyse_modobs2(subset(cn_root_df,bnf_obs_final>0 & pred_bnf>0 & pft2 == "Forest"),"bnf_obs_final","pred_bnf", type = "points")
 
 ggplot(subset(cn_root_df,bnf_obs_final>0 & pred_bnf>0 & pft2 == "Forest"), aes(x=pred_bnf, y=bnf_obs_final)) +
-    geom_point()+geom_abline(intercept=0,slope=1)+geom_smooth(method = "lm", se = TRUE)+
-    xlab("Prediction")+ylab("Observation")+theme_classic()
+  geom_point()+geom_abline(intercept=0,slope=1)+geom_smooth(method = "lm", se = TRUE)+
+  xlab("Prediction")+ylab("Observation")+theme_classic()+My_Theme
 
-gg$ggmap + geom_point(data=subset(NPP2,bnf_obs_final>0 & pred_bnf>0 & pft2 == "Forest"),aes(lon,lat),col="red")
+gg$ggmap + geom_point(data=subset(cn_root_df,bnf_obs_final>0 & pred_bnf>0 & pft2 == "Forest"),aes(lon,lat),col="red")
 gg$gglegend
 
 #finally, total nuptake
 cn_root_df$obs_nuptake <- cn_root_df$bnf_obs_final + cn_root_df$lnf_obs_final + cn_root_df$wnf_obs_final
 cn_root_df$pred_nuptake <- cn_root_df$pred_bnf + cn_root_df$pred_lnf + cn_root_df$pred_wnf
 
-ggplot(subset(cn_root_df,pred_nuptake>0 & obs_nuptake>0 & pft2 == "Forest"), aes(x=pred_nuptake, y=obs_nuptake)) +
-    geom_point()+geom_abline(intercept=0,slope=1)+geom_smooth(method = "lm", se = TRUE)+
-    xlab("Prediction")+ylab("Observation")+theme_classic()
+
+
 #analyse_modobs2(subset(cn_root_df,pred_nuptake>0 & obs_nuptake>0 & pft2 == "Forest"),"obs_nuptake","pred_nuptake", type = "points")
 
 #use gwr to extract nuptake again
@@ -704,16 +746,18 @@ for (i in 1:nrow(cn_root_df)) {
     cn_root_df$pred_nuptake_gwr[i] <- (gwr(nuptake ~ z, grid_part, bandwidth = 1.06, fit.points =site_coord,predictions=TRUE))$SDF$pred
   }, error=function(e){})} 
 
+ggplot(subset(cn_root_df,pred_nuptake_gwr>0 & obs_nuptake>0 & pft2 == "Forest"), aes(x=pred_nuptake, y=obs_nuptake)) +
+  geom_point()+geom_abline(intercept=0,slope=1)+geom_smooth(method = "lm", se = TRUE)+
+  xlab("Prediction")+ylab("Observation")+theme_classic()+My_Theme
 
-ggplot(subset(cn_root_df,pred_nuptake_gwr>0 & obs_nuptake>0 & pft2 == "Forest"), aes(x=pred_nuptake_gwr, y=obs_nuptake)) +
-    geom_point()+geom_abline(intercept=0,slope=1)+geom_smooth(method = "lm", se = TRUE)+
-    xlab("Prediction")+ylab("Observation")+theme_classic()
-summary(lm(obs_nuptake~pred_nuptake_gwr,cn_root_df))
+ggplot(subset(cn_root_df,pred_nuptake_gwr>0 & obs_nuptake>0 & pft2 == "Forest"&file!="/Users/yunpeng/data/npp_stoichiometry_forests_tiandi/"), aes(x=pred_nuptake, y=obs_nuptake)) +
+  geom_point()+geom_abline(intercept=0,slope=1)+geom_smooth(method = "lm", se = TRUE)+
+  xlab("Prediction")+ylab("Observation")+theme_classic()+My_Theme
 
 gg <- plot_map3(nuptake_df[,c(1,2,4)], 
                 varnam = "nuptake",plot_title = " Total N uptake in ecosystem (gN/m2/yr)",
                 latmin = -65, latmax = 85, combine = FALSE)
-gg$ggmap + geom_point(data=subset(cn_root_df,obs_nuptake>0 & pred_nuptake_gwr>0 & pft2 == "Forest"),aes(lon,lat),col="red")
+gg$ggmap + geom_point(data=subset(cn_root_df,obs_nuptake>0 & pred_nuptake_gwr>0 & pft2 == "Forest"&file!="/Users/yunpeng/data/npp_stoichiometry_forests_tiandi/"),aes(lon,lat),col="red")
 gg$gglegend
 
 #calculate percentage of each part
@@ -744,6 +788,11 @@ gg$ggmap + geom_point(data=subset(NPP2,GPP>0 & pred_gpp>0),aes(lon,lat),col="red
 gg$gglegend
 analyse_modobs2(subset(NPP2,pred_gpp>0 & GPP>0 ),"pred_gpp","GPP", type = "points")
 
+
+ggplot(subset(NPP2,pred_gpp>0 & GPP>0 ), aes(x=pred_gpp, y=GPP)) +
+  geom_point()+geom_abline(intercept=0,slope=1)+geom_smooth(method = "lm", se = TRUE)+
+  xlab("Prediction")+ylab("Observation")+theme_classic()+My_Theme
+
 #(2) npp
 gg <- plot_map3(npp_df[,c(1,2,4)], 
                 varnam = "npp",plot_title = " NPP (gC/m2/yr)",
@@ -753,6 +802,10 @@ gg$ggmap + geom_point(data=subset(NPP2,pred_npp>0 & TNPP_1>0),aes(lon,lat),col="
 gg$gglegend
 analyse_modobs2(subset(NPP2,pred_npp>0 & TNPP_1>0),"pred_npp","TNPP_1", type = "points")
 
+ggplot(subset(NPP2,pred_npp>0 & TNPP_1>0), aes(x=pred_npp, y=TNPP_1)) +
+  geom_point()+geom_abline(intercept=0,slope=1)+geom_smooth(method = "lm", se = TRUE)+
+  xlab("Prediction")+ylab("Observation")+theme_classic()+My_Theme
+
 #(3) anpp
 gg <- plot_map3(anpp_df[,c(1,2,4)], 
                 varnam = "anpp",plot_title = " ANPP (gC/m2/yr)",
@@ -761,6 +814,10 @@ gg <- plot_map3(anpp_df[,c(1,2,4)],
 gg$ggmap + geom_point(data=subset(NPP2,pred_anpp>0 & ANPP_2>0),aes(lon,lat),col="red") 
 gg$gglegend
 analyse_modobs2(subset(NPP2,pred_anpp>0 & ANPP_2>0 ),"pred_anpp","ANPP_2" ,type = "points")
+
+ggplot(subset(NPP2,pred_anpp>0 & ANPP_2>0), aes(x=pred_anpp, y=ANPP_2)) +
+  geom_point()+geom_abline(intercept=0,slope=1)+geom_smooth(method = "lm", se = TRUE)+
+  xlab("Prediction")+ylab("Observation")+theme_classic()+My_Theme
 
 #(4) npp leaf
 gg <- plot_map3(lnpp_df[,c(1,2,4)], 
@@ -772,6 +829,10 @@ gg$gglegend
 
 analyse_modobs2(subset(NPP2,NPP.foliage>0 & pred_lnpp>0),"pred_lnpp", "NPP.foliage",type = "points")
 
+ggplot(subset(NPP2,NPP.foliage>0 & pred_lnpp>0), aes(x=pred_lnpp, y=NPP.foliage)) +
+  geom_point()+geom_abline(intercept=0,slope=1)+geom_smooth(method = "lm", se = TRUE)+
+  xlab("Prediction")+ylab("Observation")+theme_classic()+My_Theme
+
 #(5) npp wood
 gg <- plot_map3(wnpp_df[,c(1,2,4)], 
                 varnam = "wnpp",plot_title = " NPP in wood (gC/m2/yr)",
@@ -781,6 +842,10 @@ gg$ggmap + geom_point(data=subset(NPP2,NPP.wood>0 & pred_wnpp>0),aes(lon,lat),co
 gg$gglegend
 analyse_modobs2(subset(NPP2,NPP.wood>0 & pred_wnpp>0 ),"pred_wnpp","NPP.wood",type = "points")
 
+ggplot(subset(NPP2,NPP.wood>0 & pred_wnpp>0 ), aes(x=pred_wnpp, y=NPP.wood)) +
+  geom_point()+geom_abline(intercept=0,slope=1)+geom_smooth(method = "lm", se = TRUE)+
+  xlab("Prediction")+ylab("Observation")+theme_classic()+My_Theme
+
 #(6) bnpp
 gg <- plot_map3(bnpp_df[,c(1,2,4)], 
                 varnam = "bnpp",plot_title = " NPP in belowground (gC/m2/yr)",
@@ -789,6 +854,11 @@ gg <- plot_map3(bnpp_df[,c(1,2,4)],
 gg$ggmap + geom_point(data=subset(NPP2,BNPP_1>0 & pred_bnpp>0),aes(lon,lat),col="red") 
 gg$gglegend
 analyse_modobs2(subset(NPP2,BNPP_1>0 & pred_bnpp>0),"pred_bnpp", "BNPP_1",type = "points")
+
+ggplot(subset(NPP2,BNPP_1>0 & pred_bnpp>0), aes(x=pred_bnpp, y=BNPP_1)) +
+  geom_point()+geom_abline(intercept=0,slope=1)+geom_smooth(method = "lm", se = TRUE)+
+  xlab("Prediction")+ylab("Observation")+theme_classic()+My_Theme
+
 
 #(7) nre
 NRE_df$obs_nre <- NRE_df$NRE/100
@@ -808,8 +878,8 @@ df$pred <- pred
 analyse_modobs2(subset(df,obs>0&pred<1),"pred","obs", type = "points")
 
 ggplot(data=subset(df,obs>0&pred<1), aes(x=pred, y=obs)) +
-    geom_point()+geom_abline(intercept=0,slope=1)+geom_smooth(method = "lm", se = TRUE)+
-    xlab("Prediction")+ylab("Observation")+theme_classic()
+  geom_point()+geom_abline(intercept=0,slope=1)+geom_smooth(method = "lm", se = TRUE)+
+  xlab("Prediction")+ylab("Observation")+theme_classic()+My_Theme
 
 
 
@@ -826,7 +896,7 @@ sitemean$obs_leafnmass <- sitemean$narea/sitemean$lma #unitness
 
 ggplot(data=sitemean, aes(x=pred_leafnmass, y=obs_leafnmass)) +
   geom_point()+geom_abline(intercept=0,slope=1)+geom_smooth(method = "lm", se = TRUE)+
-  xlab("Prediction")+ylab("Observation")+theme_classic()
+  xlab("Prediction")+ylab("Observation")+theme_classic()+My_Theme
 summary(lm(obs_leafnmass~pred_leafnmass,sitemean))
 
 leafcn_df <- inputnc("leafcn",1982,2011)

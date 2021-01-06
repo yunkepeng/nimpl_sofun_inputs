@@ -702,6 +702,9 @@ calc_vpd_inst <- function( qair=NA, tc=NA, patm=NA, elv=NA  ){
 #NumberOfCluster <- 8
 #cl <- makeCluster(NumberOfCluster, type='SOCK')
 #registerDoSNOW(cl)
+
+
+
 for (i in 1:nrow(siteinfo)) {
   tryCatch({
     df_watch <- ingestr::ingest(

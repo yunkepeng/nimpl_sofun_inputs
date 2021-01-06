@@ -22,7 +22,7 @@ library(cowplot)
 library(spgwr)
 
 load(file = "/Users/yunpeng/yunkepeng/nimpl_sofun_inputs/grassland/grassland_site_simulation.Rdata")
-
+default_10yrs_fpar <- NPP_grassland_final11
 #read complete dataset for measurement, after L1-L300 in /Users/yunpeng/yunkepeng/nimpl_sofun_inputs/forest/Forest_Global_check.Rmd
 NPP <- read.csv("/Users/yunpeng/data/forest_npp/NPP_final.csv")
 #extract forest only
@@ -85,15 +85,13 @@ length(fapar_org_df)
 forcing_df <- list.files("/Users/yunpeng/data/grassland_npp/forcing",full.names = T)
 length(forcing_df)
 
-#fapar - input - (fpar data structure rank: fpar2, fpar, fpar3, fpar4)
+#fapar - input - (fpar data structure rank: fpar2, fpar, fpar3, fpar4) # select for 2012 only (3rd year)
 for (i in 1:length(fapar_df)){
   df1 <- read.csv(fapar_df[i])
   df1$date <- as.Date(df1$date)
   df1 <- df1[!(format(df1$date,"%m") == "02" & format(df1$date, "%d") == "29"), , drop = FALSE]
-  df2 <- df1 %>% mutate(ymonth = month(date),
-                        yday = day(date)) %>% 
-    group_by(ymonth, yday) %>% 
-    summarise(fpar = mean(modisvar_filled, na.rm = TRUE))
+  df2 <- df1[(1+365+365):(365+365+365),c("date","year_dec","modisvar_filled")]
+  names(df2) <- c("date","year_dec","fapar")
   assign(substr(sub('.*daily_', '', fapar_df[i]),1,nchar(sub('.*daily_', '', fapar_df[i]))-4), df2) 
 }
 
@@ -297,149 +295,7 @@ plot(newmap, xlim = c(-180, 180), ylim = c(-75, 75), asp = 1)
 points(outlier$lon,outlier$lat, col="red", pch=16,cex=1)
 #a few sites are outliers: 34/154
 
-#now, extract all predictors
-#firstly, alpha, Tg, vpd, PPFD
-
-#input nc file
-elev_nc <- read_nc_onefile("~/data/watch_wfdei/WFDEI-elevation.nc")
-elev <- as.data.frame(nc_to_df(elev_nc, varnam = "elevation"))
-
-Tg <- as.data.frame(nc_to_df(read_nc_onefile(
-  "~/data/nimpl_sofun_inputs/map/Final_ncfile/Tg.nc"),
-  varnam = "Tg"))
-
-PPFD <- as.data.frame(nc_to_df(read_nc_onefile(
-  "~/data/nimpl_sofun_inputs/map/Final_ncfile/PPFD.nc"),
-  varnam = "PPFD"))
-
-vpd <- as.data.frame(nc_to_df(read_nc_onefile(
-  "~/data/nimpl_sofun_inputs/map/Final_ncfile/vpd.nc"),
-  varnam = "vpd"))
-
-alpha <- as.data.frame(nc_to_df(read_nc_onefile(
-  "~/data/nimpl_sofun_inputs/map/Final_ncfile/alpha.nc"),
-  varnam = "alpha"))
-
-fAPAR <- as.data.frame(nc_to_df(read_nc_onefile(
-  "~/data/nimpl_sofun_inputs/map/Final_ncfile/fAPAR.nc"),
-  varnam = "fAPAR"))
-
-age <- as.data.frame(nc_to_df(read_nc_onefile(
-  "~/data/nimpl_sofun_inputs/map/Final_ncfile/age.nc"),
-  varnam = "age"))
-
-#cbind all predictors, and its lon, lat, z
-all_predictors <- cbind(elev,Tg$myvar,PPFD$myvar,vpd$myvar,
-                        alpha$myvar,fAPAR$myvar,age$myvar)
-
-names(all_predictors) <- c("lon","lat","z","Tg","PPFD","vpd",
-                           "alpha","fAPAR","age")
-
-Tg_df <- all_predictors[,c("lon","lat","z","Tg")]
-PPFD_df <- all_predictors[,c("lon","lat","z","PPFD")]
-vpd_df <- all_predictors[,c("lon","lat","z","vpd")]
-alpha_df <- all_predictors[,c("lon","lat","z","alpha")]
-fAPAR_df <- all_predictors[,c("lon","lat","z","fAPAR")]
-age_df <- all_predictors[,c("lon","lat","z","age")]
-
-#now, apply gwr to extract site predictors' value
-grassland_site <- NPP_grassland[,c("lon","lat","z")]
-grassland_site$Tg <- NA
-grassland_site$PPFD <- NA
-grassland_site$vpd <- NA
-grassland_site$alpha <- NA
-#grassland_site$age <- NA
-grassland_site$fapar <- NA
-
-a <- 1.5 # which degree (distance) of grid when interpolating gwr from global grids
-
-#Extract Tg, PPFD, vpd, alpha,fAPAR
-
-for (i in 1:nrow(grassland_site)) {
-  tryCatch({
-    #Tg
-    Tg_global <- na.omit(Tg_df)
-    NRE_part <- subset(Tg_global,lon>(grassland_site[i,1]-a)&lon<(grassland_site[i,1]+a)&
-                         lat>(grassland_site[i,2]-a)&lat<(grassland_site[i,2]+a))
-    coordinates(NRE_part) <- c("lon","lat")
-    gridded(NRE_part) <- TRUE
-    NRE_coord <- grassland_site[i,1:3]
-    coordinates(NRE_coord) <- c("lon","lat")
-    grassland_site[i,c("Tg")] <- (gwr(Tg ~ z, NRE_part, bandwidth = 1.06, fit.points =NRE_coord,predictions=TRUE))$SDF$pred
-    #ppfd
-    PPFD_global <- na.omit(PPFD_df)
-    NRE_part <- subset(PPFD_global,lon>(grassland_site[i,1]-a)&lon<(grassland_site[i,1]+a)&
-                         lat>(grassland_site[i,2]-a)&lat<(grassland_site[i,2]+a))
-    coordinates(NRE_part) <- c("lon","lat")
-    gridded(NRE_part) <- TRUE
-    NRE_coord <- grassland_site[i,1:3]
-    coordinates(NRE_coord) <- c("lon","lat")
-    grassland_site[i,c("PPFD")] <- (gwr(PPFD ~ z, NRE_part, bandwidth = 1.06, fit.points =NRE_coord,predictions=TRUE))$SDF$pred
-    #vpd
-    vpd_global <- na.omit(vpd_df)
-    NRE_part <- subset(vpd_global,lon>(grassland_site[i,1]-a)&lon<(grassland_site[i,1]+a)&
-                         lat>(grassland_site[i,2]-a)&lat<(grassland_site[i,2]+a))
-    coordinates(NRE_part) <- c("lon","lat")
-    gridded(NRE_part) <- TRUE
-    NRE_coord <- grassland_site[i,1:3]
-    coordinates(NRE_coord) <- c("lon","lat")
-    grassland_site[i,c("vpd")] <- (gwr(vpd ~ z, NRE_part, bandwidth = 1.06, fit.points =NRE_coord,predictions=TRUE))$SDF$pred
-    #alpha
-    alpha_global <- na.omit(alpha_df)
-    NRE_part <- subset(alpha_global,lon>(grassland_site[i,1]-a)&lon<(grassland_site[i,1]+a)&
-                         lat>(grassland_site[i,2]-a)&lat<(grassland_site[i,2]+a))
-    coordinates(NRE_part) <- c("lon","lat")
-    gridded(NRE_part) <- TRUE
-    NRE_coord <- grassland_site[i,1:3]
-    coordinates(NRE_coord) <- c("lon","lat")
-    grassland_site[i,c("alpha")]  <- (gwr(alpha ~ z, NRE_part, bandwidth = 1.06, fit.points =NRE_coord,predictions=TRUE))$SDF$pred
-    #fAPAR
-    fAPAR_global <- na.omit(fAPAR_df)
-    NRE_part <- subset(fAPAR_global,lon>(grassland_site[i,1]-a)&lon<(grassland_site[i,1]+a)&
-                         lat>(grassland_site[i,2]-a)&lat<(grassland_site[i,2]+a))
-    coordinates(NRE_part) <- c("lon","lat")
-    gridded(NRE_part) <- TRUE
-    NRE_coord <- grassland_site[i,1:3]
-    coordinates(NRE_coord) <- c("lon","lat")
-    grassland_site[i,c("fapar")]<- (gwr(fAPAR ~ z, NRE_part, bandwidth = 1.06, fit.points =NRE_coord,predictions=TRUE))$SDF$pred
-  }, error=function(e){})} 
-
-
-summary(grassland_site)
-
-library(raster)
-library(rgdal)
-library(dplyr)
-library(rbeni)
-library(ncdf4)
-soil <- raster('~/data/ISRIC/data_orig/data/raster/w001000.adf')
-NRE_lonlat <- grassland_site[,c("lon","lat","z")]
-
-sp_sites <- SpatialPoints(NRE_lonlat[,c("lon","lat","z")]) # only select lon and lat
-
-#change its variable name to SUID, this is a unique code that could be used to merged with soil data, which will be further merged with csv below.
-NRE_lonlat2 <- raster::extract(soil, sp_sites, sp = TRUE) %>% as_tibble() %>% 
-  right_join(NRE_lonlat, by = c("lon", "lat","z")) %>% 
-  dplyr::rename( SUID = w001000)
-
-#input soil information data csv
-ISRIC.data<-read.csv(file="~/data/ISRIC/data_orig/data/HW30s_FULL.csv",header=TRUE,sep=";",dec = ".") # Now, input ISRIC database
-data.soil.extract <- merge(NRE_lonlat2,ISRIC.data,by='SUID',all.x=TRUE) # merge site with soil variables by using SUID
-data.soil.extract2 <- subset(data.soil.extract,CNrt>0) # select available CNrt
-data.soil.extract3 <- data.soil.extract2[,c("lon","lat","z","CNrt")] # only select CNrt variable
-
-# note that in each site there might be more than 1 samples measured, so we should aggregate them which make sures that one grid holds one data only.
-ss1 <- aggregate(data.soil.extract3,by=list(data.soil.extract3$lon,data.soil.extract3$lat,data.soil.extract3$z), FUN=mean, na.rm=TRUE) 
-ss2 <- ss1[,c("lon","lat","z","CNrt")] # now,select lon, lat, z and CNrt only
-
-# finally, merging site-based soil c/n data into our current dataframe
-grassland_site$no <- c(1:nrow(grassland_site))
-grassland_site2 <-Reduce(function(x,y) merge(x = x, y = y, by = c("lon","lat","z"),all.x=TRUE), 
-                         list(grassland_site,ss2))
-
-grassland_site3 <- grassland_site2[order(grassland_site2$no), ]
-
-head(grassland_site3)
+#all environmental variables already loaded first
 
 NPP_grassland_final <- cbind(NPP_grassland,grassland_site3[,c(4,5,6,7,8,10)])
 summary(NPP_grassland_final)
@@ -778,151 +634,21 @@ NPP_grassland_final11$pred_anpp <- NPP_grassland_final11$pred_npp *
 
 NPP_grassland_final11$pred_bnpp <- NPP_grassland_final11$pred_npp - NPP_grassland_final11$pred_anpp
 
-#input max vcmax25
+summary(NPP_grassland_final11$weightedgpp_all)
+NPP_grassland_final11$weightedgpp_all_fpar10 <- default_10yrs_fpar$weightedgpp_all
 
-firstyr_data <- 1982 # In data file, which is the first year
-endyr_data <- 2011 # In data file, which is the last year
-location <- "~/data/output/latest/"
-alloutput_list <- list.files(location,full.names = T)
+check2012 <- subset(NPP_grassland_final11,Begin_year==2012)
 
-#input elevation nc file, which will be cbind with global df directly
-elev_nc <- read_nc_onefile("~/data/watch_wfdei/WFDEI-elevation.nc")
-#elev_nc <- read_nc_onefile("D:/PhD/nimpl_sofun_inputs/Data/Elevation/WFDEI-elevation.nc")
-elev <- as.data.frame(nc_to_df(elev_nc, varnam = "elevation"))
-head(elev) # this is consistent with df coord below
+analyse_modobs2(check2012,"weightedgpp_all_fpar10","weightedgpp_all", type = "points")
 
-#2. Create a function to specify path, loop many years nc file and output a dataframe (lon, lat, var).
-inputnc <- function(name,start_year,end_year){
-  output_allyears <- data.frame(matrix(NA))
-  # first, include all years annual data into a daframe
-  for (i in firstyr_data:endyr_data){
-    if (name == "npp"){
-      nc <- read_nc_onefile(alloutput_list[grepl("a.npp.nc", list.files(location,full.names = T))][i-firstyr_data+1]) #we only rely this to filter npp.nc file...
-    } else {
-      nc <- read_nc_onefile(alloutput_list[grepl(name, list.files(location,full.names = T))][i-firstyr_data+1]) #Input nc
-    }
-    output_year <- nc_to_df(nc, varnam = name)[,3] #Yearly output
-    output_allyears[1:259200,i-firstyr_data+1] <- output_year #here first column represents first year of data file 's output
-  }
-  names(output_allyears) <- paste(name,firstyr_data:endyr_data,sep="")
-  #this variable above (output_allyears), could be end of the function, which is variable at multiple years. But for our purporses, we need mean of select years
-  #then, only calculate means of selected years
-  output_selected_yrs <- rowMeans(output_allyears[,(start_year-firstyr_data+1):(end_year-firstyr_data+1)],na.rm = TRUE) # only calculated means based on selected start and end year (see function)
-  coord <- nc_to_df(nc, varnam = name)[,1:2] # obtain lon and lat
-  final_output <- cbind(coord,elev[,3],output_selected_yrs) # combine lon, lat,z with rowmeans variable
-  names(final_output) <- c("lon","lat","z",name)
-  return(final_output)
-  #-----------------------------------------------------------------------
-  # Output: output_final: the output data (259200 * 3) including lon, lat and value
-  #-----------------------------------------------------------------------
-}
+check2012$pred_npp_measured <- check2012$weightedgpp_all * 0.4
+check2012$pred_npp_10yrs <- check2012$weightedgpp_all_fpar10 * 0.4
 
-#vcmax25_df <- inputnc("annualvcmax25",1982,2011)
-vcmax25_df <- inputnc("vcmax25",1982,2011)
+check2012$pred_anpp_measured <- check2012$pred_npp_measured * 
+  (1/(1+exp(-(1.8720 * check2012$alpha + 0.0385 * check2012$Tg + -2.5642))))
 
-Vcmax25_df <- cbind(elev,vcmax25_df$vcmax25)
-names(Vcmax25_df) <- c("lon","lat","z","Vcmax25")
+check2012$pred_anpp_10yrs <- check2012$pred_npp_10yrs * 
+  (1/(1+exp(-(1.8720 * check2012$alpha + 0.0385 * check2012$Tg + -2.5642))))
 
-LMA <- as.data.frame(nc_to_df(read_nc_onefile(
-  "~/data/nimpl_sofun_inputs/map/Final_ncfile/LMA.nc"),varnam = "LMA"))
-
-LMA_df <- cbind(elev,LMA$myvar)
-names(LMA_df) <- c("lon","lat","z","LMA")
-a <- 1.5
-
-NPP_grassland_final11$Vcmax25 <- NA
-NPP_grassland_final11$LMA <- NA
-
-for (i in 1:nrow(NPP_grassland_final11)) {
-  tryCatch({
-   #LMA
-    LMA_global <- na.omit(LMA_df)
-    NRE_part <- subset(LMA_global,lon>(NPP_grassland_final11[i,1]-a)&lon<(NPP_grassland_final11[i,1]+a)&
-                         lat>(NPP_grassland_final11[i,2]-a)&lat<(NPP_grassland_final11[i,2]+a))
-    coordinates(NRE_part) <- c("lon","lat")
-    gridded(NRE_part) <- TRUE
-    NRE_coord <- NPP_grassland_final11[i, c("lon","lat","z")]
-    coordinates(NRE_coord) <- c("lon","lat")
-    NPP_grassland_final11[i,c("LMA")]  <- (gwr(LMA ~ z, NRE_part, bandwidth = 1.06, fit.points =NRE_coord,predictions=TRUE))$SDF$pred
-    #Vcmax25
-    Vcmax25_global <- na.omit(Vcmax25_df)
-    NRE_part <- subset(Vcmax25_global,lon>(NPP_grassland_final11[i,1]-a)&lon<(NPP_grassland_final11[i,1]+a)&
-                         lat>(NPP_grassland_final11[i,2]-a)&lat<(NPP_grassland_final11[i,2]+a))
-    coordinates(NRE_part) <- c("lon","lat")
-    gridded(NRE_part) <- TRUE
-    NRE_coord <- NPP_grassland_final11[i, c("lon","lat","z")]
-    coordinates(NRE_coord) <- c("lon","lat")
-    NPP_grassland_final11[i,c("Vcmax25")]  <- (gwr(Vcmax25 ~ z, NRE_part, bandwidth = 1.06, fit.points =NRE_coord,predictions=TRUE))$SDF$pred
-  }, error=function(e){})} 
-  
-#using simulated vcmax25
-NPP_grassland_final11$pred_leafnc <- (0.0161/0.5) + (0.0041/0.5) * NPP_grassland_final11$Vcmax25/NPP_grassland_final11$LMA 
-
-#using weighted max vcmax25 from rsofun, from c3/c4 measured info
-NPP_grassland_final11$pred_leafnc <- (0.0161/0.5) + (0.0041/0.5) * NPP_grassland_final11$maxvcmax25_all/NPP_grassland_final11$LMA 
-
-#a new statistical model for grassland only?
-cnmodel <- NPP_grassland_final11
-cnmodel$nc <- 1/ cnmodel$CN_leaf_final
-cnmodel$vc25_lma <- cnmodel$maxvcmax25_all/cnmodel$LMA
-cnmodel2 <- aggregate(cnmodel,by=list(cnmodel$site), FUN=mean, na.rm=TRUE) #site-mean
-
-summary(lmer((nc)~vc25_lma+(1|site_xy),data=cnmodel))
-NPP_grassland_final11$pred_leafnc <- (0.160673/0.5) + (-0.071485/0.5) * NPP_grassland_final11$maxvcmax25_all/NPP_grassland_final11$LMA 
-
-summary(lmer((nc)~maxvcmax25_all+LMA+(1|site_xy),data=cnmodel))
-NPP_grassland_final11$pred_leafnc <- 7.956e-02 -9.698e-04*NPP_grassland_final11$maxvcmax25_all + 1.114e-03*NPP_grassland_final11$LMA 
-
-summary(NPP_grassland_final11$CN_leaf_final)
-NPP_grassland_final11$pred_leafnc <- 1/19.100
-
-NPP_grassland_final11$pred_lnf <- NPP_grassland_final11$pred_anpp*NPP_grassland_final11$pred_leafnc
-NPP_grassland_final11$pred_bnf <- NPP_grassland_final11$pred_bnpp/46
-
-#Now, time to examine our data
-
-analyse_modobs2(NPP_grassland_final11,
-                "pred_lnf", "lnf_obs_final",type = "points")
-ggplot(NPP_grassland_final11, aes(x=pred_lnf, y=lnf_obs_final)) +
-  geom_point()+geom_abline(intercept=0,slope=1)+geom_smooth(method = "lm", se = TRUE)+ xlim(c(0,10))+
-  xlab("Prediction")+ylab("Observation")+theme_classic()
-
-
-analyse_modobs2(subset(NPP_grassland_final11,TNPP_1/weightedgpp_all > 0.2 & TNPP_1/weightedgpp_all <1),
-                "pred_lnf", "lnf_obs_final",type = "points")
-
-hist(NPP_grassland_final11$lnf_obs_final)
-
-analyse_modobs2(NPP_grassland_final11,"weightedgpp_all", "GPP",type = "points")
-ggplot(NPP_grassland_final11, aes(x=weightedgpp_all, y=GPP)) +
-  geom_point()+geom_abline(intercept=0,slope=1)+geom_smooth(method = "lm", se = TRUE)+
-  xlab("Prediction")+ylab("Observation")+theme_classic()
-
-
-analyse_modobs2(subset(NPP_grassland_final11,TNPP_1/weightedgpp_all > 0.2 & TNPP_1/weightedgpp_all <1),"pred_npp", "TNPP_1",type = "points")
-analyse_modobs2(NPP_grassland_final11,"pred_npp", "TNPP_1",type = "points")
-
-ggplot(NPP_grassland_final11, aes(x=pred_npp, y=TNPP_1)) +
-  geom_point(aes(size=c3_percentage_final,color=factor(file)))+geom_abline(intercept=0,slope=1)+geom_smooth(method = "lm", se = TRUE)+
-  xlab("Prediction")+ylab("Observation")+theme_classic()  + ggtitle("Observed NPP vs. Predicted NPP")
-
-
-
-analyse_modobs2(subset(NPP_grassland_final11,TNPP_1/weightedgpp_all > 0.2 & TNPP_1/weightedgpp_all <1),
-                "pred_anpp", "ANPP_2",type = "points")
-
-analyse_modobs2(NPP_grassland_final11,
-                "pred_anpp", "ANPP_2",type = "points")
-
-ggplot(NPP_grassland_final11, aes(x=pred_anpp, y=ANPP_2)) +
-  geom_point(aes(size=c3_percentage_final,color=factor(file)))+geom_abline(intercept=0,slope=1)+geom_smooth(method = "lm", se = TRUE)+
-  xlab("Prediction")+ylab("Observation")+theme_classic() + ggtitle("Observed ANPP vs. Predicted ANPP")
-
-
-analyse_modobs2(NPP_grassland_final11,
-                "pred_bnpp", "BNPP_1",type = "points")
-
-analyse_modobs2(NPP_grassland_final11,
-                "pred_bnf", "bnf_obs_final",type = "points")
-
-save.image(file = "/Users/yunpeng/yunkepeng/nimpl_sofun_inputs/grassland/grassland_site_simulation.Rdata")
+analyse_modobs2(check2012,"ANPP_2","pred_anpp_10yrs", type = "points")
+analyse_modobs2(check2012,"ANPP_2","pred_anpp_measured", type = "points")
