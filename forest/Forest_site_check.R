@@ -59,6 +59,7 @@ dim(NPP_final2)
 ####now, input forcing data from two times simulation
 forcing_df <- list.files("/Users/yunpeng/data/forest_npp/forcing/",full.names = T)
 length(forcing_df) # all data was included
+length(NPP_Forest$sitename) # all data was included
 
 fapar_df <- list.files("/Users/yunpeng/data/forest_npp/modis_subsets_all/",full.names = T)
 length(fapar_df)
@@ -84,7 +85,11 @@ for (i in 1:nrow(NPP_final2)){
 
 na_fapar <- (subset(NPP_final2,forcing_avil=="FALSE" ))
 summary(na_fapar)
+na_fapar$sitename2
+dim(na_fapar)
+dim(aggregate(NPP_final2,by=list(NPP_final2$sitename2), FUN=mean, na.rm=TRUE))
 
+#12 sitename2 (plots), but 13 samples were missing
 #I have checked the literatures, and data is all originally correct. It might be because the literatures have confused lon/lat in their data from (Malhi et al. 2011).
 #However, there is no way to just change their lon and lat. Therefore, we just disregard this points, and I confirmed that we have also already disregarded those points in statistical model of anpp.leaf/anpp and in output check.
 library(rworldmap)
@@ -844,46 +849,53 @@ forest_site2 <- subset(forest_site,rep_info!="rep" & rep_info!="rep1"& rep_info!
 #forest_site2 <- aggregate(forest_site,by=list(forest_site$lon,forest_site$lat,forest_site$z), FUN=mean, na.rm=TRUE) #site-mean
 
 #check
+
+My_Theme = theme(
+  axis.title.x = element_text(size = 14),
+  axis.text.x = element_text(size = 20),
+  axis.title.y = element_text(size = 14),
+  axis.text.y = element_text(size = 20))
+
 analyse_modobs2(forest_site2,"pred_gpp", "GPP",type = "points")
 ggplot(data=forest_site2, aes(x=pred_gpp, y=GPP)) +
   geom_point()+geom_abline(intercept=0,slope=1)+geom_smooth(method = "lm", se = TRUE)+
-  xlab("Prediction")+ylab("Observation")+theme_classic()
+  xlab("Prediction")+ylab("Observation")+theme_classic() + My_Theme
 summary(lm(GPP~pred_gpp,forest_site2))
 
 #analyse_modobs2(forest_site2,"pred_npp", "TNPP_1",type = "points")
 ggplot(data=forest_site2, aes(x=pred_npp, y=TNPP_1)) +
   geom_point()+geom_abline(intercept=0,slope=1)+geom_smooth(method = "lm", se = TRUE)+
-  xlab("Prediction")+ylab("Observation")+theme_classic()
+  xlab("Prediction")+ylab("Observation")+theme_classic()+ My_Theme
 summary(lm(TNPP_1~pred_npp,forest_site2))
 
 #analyse_modobs2(forest_site2,"pred_anpp", "ANPP_2",type = "points")
 ggplot(data=forest_site2, aes(x=pred_anpp, y=ANPP_2)) +
   geom_point()+geom_abline(intercept=0,slope=1)+geom_smooth(method = "lm", se = TRUE)+
-  xlab("Prediction")+ylab("Observation")+theme_classic()
+  xlab("Prediction")+ylab("Observation")+theme_classic()+ My_Theme
 summary(lm(ANPP_2~pred_anpp,forest_site2))
 #analyse_modobs2(forest_site2,"pred_lnpp", "NPP.foliage",type = "points")
 
 ggplot(data=forest_site2, aes(x=pred_lnpp, y=NPP.foliage)) +
   geom_point()+geom_abline(intercept=0,slope=1)+geom_smooth(method = "lm", se = TRUE)+
-  xlab("Prediction")+ylab("Observation")+theme_classic()
+  xlab("Prediction")+ylab("Observation")+theme_classic()+ My_Theme
 summary(lm(NPP.foliage~pred_lnpp,forest_site2))
 
 #analyse_modobs2(forest_site,"pred_wnpp", "NPP.wood",type = "points")
 ggplot(data=forest_site2, aes(x=pred_wnpp, y=NPP.wood)) +
   geom_point()+geom_abline(intercept=0,slope=1)+geom_smooth(method = "lm", se = TRUE)+
-  xlab("Prediction")+ylab("Observation")+theme_classic()
+  xlab("Prediction")+ylab("Observation")+theme_classic()+ My_Theme
 summary(lm(NPP.wood~pred_wnpp,forest_site2))
 
 #analyse_modobs2(forest_site2,"pred_bnpp", "BNPP_1",type = "points")
 ggplot(data=forest_site2, aes(x=pred_bnpp, y=BNPP_1)) +
   geom_point()+geom_abline(intercept=0,slope=1)+geom_smooth(method = "lm", se = TRUE)+
-  xlab("Prediction")+ylab("Observation")+theme_classic()
+  xlab("Prediction")+ylab("Observation")+theme_classic()+ My_Theme
 summary(lm(BNPP_1~pred_bnpp,forest_site2))
 
 #analyse_modobs2(forest_site,"pred_lnf", "lnf_obs",type = "points") 
 ggplot(data=forest_site2, aes(x=pred_lnf, y=lnf_obs)) +
   geom_point()+geom_abline(intercept=0,slope=1)+geom_smooth(method = "lm", se = TRUE)+
-  xlab("Prediction")+ylab("Observation")+theme_classic()
+  xlab("Prediction")+ylab("Observation")+theme_classic()+ My_Theme
 summary(lm(lnf_obs~pred_lnf,forest_site2))
 
 

@@ -40,6 +40,7 @@ library(maps)
 library(rworldmap)
 library(cowplot)
 library(spgwr)
+#load(file = "/Users/yunpeng/yunkepeng/nimpl_sofun_inputs/forest/Forest_Global_check.Rdata")
 
 # (1) pre-processing NPP
 # rbind data (more data details see https://github.com/yunkepeng/nimpl_sofun_inputs/blob/master/NPP/NPP_statistical_model.Rmd)
@@ -924,48 +925,110 @@ gg$gglegend
 
 save.image(file = "/Users/yunpeng/yunkepeng/nimpl_sofun_inputs/forest/Forest_Global_check.Rdata")
 
-#accounting for three main parts 
-summary(lnpp_df)
-summary(leafcn_df)
-summary(nre_df)
+##lnf,bnf,wnf, quantify --> with NRE!!!!
+calc_area <- function( lat, dx=1, dy=1 ){
+  r_earth <- 6370499.317638  # to be consistent with how Ferret calculates areas of spheres (https://www.pmel.noaa.gov/maillists/tmap/ferret_users/fu_2016/msg00155.html)
+  area <- 4 * r_earth^2 * 0.5 * dx * pi/180 * cos( abs(lat) * pi/180 ) * sin( 0.5 * dy * pi/180 )
+  return(area)
+}
 
-lnf_final <- cbind(lnpp_df,leafcn_df$leafcn,nre_df$nre)
-names(lnf_final) <- c("lon","lat","z","lnpp","leafnc","nre")
+firstyr_data <- 1982 # In data file, which is the first year
+endyr_data <- 2011 # In data file, which is the last year
+location <- "/Users/yunpeng/data/output/latest_forest/"
+alloutput_list <- list.files(location,full.names = T)
 
-lnf_final2 <- na.omit(lnf_final)
+#input elevation nc file, which will be cbind with global df directly
+elev_nc <- read_nc_onefile("~/data/watch_wfdei/WFDEI-elevation.nc")
+#elev_nc <- read_nc_onefile("D:/PhD/nimpl_sofun_inputs/Data/Elevation/WFDEI-elevation.nc")
+elev <- as.data.frame(nc_to_df(elev_nc, varnam = "elevation"))
+head(elev) # this is consistent with df coord below
 
-lnf_final3 <- subset(lnf_final2,lnpp>0)
-summary(lnf_final3)
+#select data over 30 years, each df includes lon, lat, z, var
+lnf_df2 <- inputnc("lnf",1982,2011) 
 
-#holding each factor as constant
-lnf_final3$lnf1_lnpp <- lnf_final3$lnpp*0.04440* (1-0.5464)
-lnf_final3$lnf2_leafnc <- 127.105*lnf_final3$leafnc* (1-0.5464)
-lnf_final3$lnf3_nre <- 127.105*0.04440* (1-lnf_final3$nre)
+wnf_df2 <- inputnc("wnf",1982,2011) 
 
-a1 <- lnf_final3$lnf1_lnpp
-a2 <- lnf_final3$lnf2_leafnc
-a3 <- lnf_final3$lnf3_nre
+bnf_df2 <- inputnc("bnf",1982,2011) 
 
-var(a1)/(var(a1)+var(a2)+var(a3))
-var(a2)/(var(a1)+var(a2)+var(a3))
-var(a3)/(var(a1)+var(a2)+var(a3))
+nuptake_df2 <- inputnc("nuptake",1982,2011) 
 
-results <- c(a1,a2,a3)
-group <- c(rep("Leaf NPP: 95% of variance",length(a1)),rep("Leaf N/C : 2% of variance",length(a1)),rep("Nitrogen resorption efficiency: 3% of variance",length(a1)))
+calc_area <- function( lat, dx=1, dy=1 ){
+  r_earth <- 6370499.317638  # to be consistent with how Ferret calculates areas of spheres (https://www.pmel.noaa.gov/maillists/tmap/ferret_users/fu_2016/msg00155.html)
+  area <- 4 * r_earth^2 * 0.5 * dx * pi/180 * cos( abs(lat) * pi/180 ) * sin( 0.5 * dy * pi/180 )
+  return(area)
+}
 
-results_final <- as.data.frame(cbind(results,group))
-results_final$results <- as.numeric(results_final$results)
-ggplot(results_final, aes(x=results, fill=group)) + geom_density(alpha=.3)+xlab("Leaf N flux (gN/m2/yr)")+ggtitle("Leaf N flux = NPP.leaf * leaf N/C * (1-NRE)")+ labs(fill = "Variance of factor (when holding other 2 factors as constant)")+theme_classic()
+nc <- read_nc_onefile("/Users/yunpeng/data/fland/global.fland.nc") #Input nc
+output_fland <- nc_to_df(nc, varnam = "fland")
+final <- cbind(lnf_df2,wnf_df2$wnf,bnf_df2$bnf,nuptake_df2$nuptake,output_fland$myvar)
 
-#quanfitying each part
-allocation <- cbind(gpp_df,npp_df[,4],anpp_df[,4],lnpp_df[,4],wnpp_df[,4],bnpp_df[,4])
-names(allocation) <- c("lon","lat","z","gpp","npp","anpp","lnpp","wnpp","bnpp")
-summary(allocation)
-allocation <- na.omit(allocation)
-allocation2 <- subset(allocation,npp>0 & lnpp>0) #excluding 0 value grids (set as 0 when in global simulations - prediction fields in land was empty)
-summary(allocation2$npp/allocation2$gpp)
-summary(allocation2$anpp/allocation2$npp)
-summary(allocation2$bnpp/allocation2$npp)
-summary(allocation2$lnpp/allocation2$anpp)
+names(final) <- c("lon","lat","z","lnf","wnf","bnf","nuptake","fland")
+
+summary(final)
+dim(final)
+final$area_m2 <- calc_area(final$lat,0.5,0.5)  #area convert to m2
+final$lnf_Pgyr <-  final$area_m2 * final$lnf * final$fland /1e+15 #  convert g to Pg
+final$wnf_Pgyr <-  final$area_m2 * final$wnf * final$fland /1e+15 #  convert g to Pg
+final$bnf_Pgyr <-  final$area_m2 * final$bnf * final$fland /1e+15 #  convert g to Pg
+final$nuptake_Pgyr <-  final$area_m2 * final$nuptake * final$fland /1e+15 #  convert g to Pg
+
+sum(final$nuptake_Pgyr,na.rm = TRUE)
+sum(final$lnf_Pgyr,na.rm = TRUE)/sum(final$nuptake_Pgyr,na.rm = TRUE)
+sum(final$wnf_Pgyr,na.rm = TRUE)/sum(final$nuptake_Pgyr,na.rm = TRUE)
+sum(final$bnf_Pgyr,na.rm = TRUE)/sum(final$nuptake_Pgyr,na.rm = TRUE)
+
+#calculate carbon part
+nc <- read_nc_onefile("/Users/yunpeng/data/fland/global.fland.nc") #Input nc
+output_fland <- nc_to_df(nc, varnam = "fland")
+
+final_gpp <- cbind(gpp_df,npp_df[,4],anpp_df[,4],lnpp_df[,4],wnpp_df[,4],bnpp_df[,4],output_fland$myvar)
+names(final_gpp) <- c("lon","lat","z","gpp","npp","anpp","lnpp","wnpp","bnpp","fland")
+
+#0.5 * 0.5 degree grided map
+summary(final_gpp$gpp) # in gC/m2/yr
+summary(final_gpp$fland)
+final_gpp$area_m2 <- calc_area(final_gpp$lat,0.5,0.5)  #area convert to m2
+final_gpp$gpp_Pgyr <-  final_gpp$area_m2 * final_gpp$gpp * final_gpp$fland /1e+15 # 1e+12 is to convert g to Pg
+final_gpp$npp_Pgyr <-  final_gpp$area_m2 * final_gpp$npp * final_gpp$fland /1e+15 # 1e+12 is to convert g to Pg
+final_gpp$anpp_Pgyr <-  final_gpp$area_m2 * final_gpp$anpp * final_gpp$fland /1e+15 # 1e+12 is to convert g to Pg
+final_gpp$lnpp_Pgyr <-  final_gpp$area_m2 * final_gpp$lnpp * final_gpp$fland /1e+15 # 1e+12 is to convert g to Pg
+final_gpp$wnpp_Pgyr <-  final_gpp$area_m2 * final_gpp$wnpp * final_gpp$fland /1e+15 # 1e+12 is to convert g to Pg
+final_gpp$bnpp_Pgyr <-  final_gpp$area_m2 * final_gpp$bnpp * final_gpp$fland /1e+15 # 1e+12 is to convert g to Pg
+sum(final_gpp$gpp_Pgyr,na.rm = TRUE)
+sum(final_gpp$npp_Pgyr,na.rm = TRUE)/sum(final_gpp$gpp_Pgyr,na.rm = TRUE)
+sum(final_gpp$anpp_Pgyr,na.rm = TRUE)/sum(final_gpp$npp_Pgyr,na.rm = TRUE)
+sum(final_gpp$lnpp_Pgyr,na.rm = TRUE)/sum(final_gpp$anpp_Pgyr,na.rm = TRUE)
+
+
+###map - with NRE###
+#(1) lnf2
+gg <- plot_map3(lnf_df2[,c(1,2,4)], 
+                varnam = "lnf",plot_title = " N uptake in leaf (gN/m2/yr)",
+                latmin = -65, latmax = 85, combine = FALSE)
+gg$ggmap + geom_point(data=subset(NPP2,lnf_obs_final>0 & pred_lnf>0),aes(lon,lat),col="red")
+gg$gglegend
+
+
+#(2) wnf2 
+gg <- plot_map3(wnf_df2[,c(1,2,4)], 
+                varnam = "wnf",plot_title = " N uptake in wood (gN/m2/yr)",
+                latmin = -65, latmax = 85, combine = FALSE)
+
+gg$ggmap + geom_point(data=subset(NPP2,wnf_obs_final>0 & pred_wnf>0 &file!="/Users/yunpeng/data/npp_stoichiometry_forests_tiandi/"),aes(lon,lat),col="red") 
+gg$gglegend
+
+#(3) bnf2
+gg <- plot_map3(bnf_df2[,c(1,2,4)], 
+                varnam = "bnf",plot_title = " N uptake in root (gN/m2/yr)",
+                latmin = -65, latmax = 85, combine = FALSE)
+gg$ggmap + geom_point(data=subset(cn_root_df,bnf_obs_final>0 & pred_bnf>0 & pft2 == "Forest"),aes(lon,lat),col="red")
+
+#(4) nuptake2
+gg <- plot_map3(nuptake_df2[,c(1,2,4)], 
+                varnam = "nuptake",plot_title = " Total N uptake in ecosystem (gN/m2/yr)",
+                latmin = -65, latmax = 85, combine = FALSE)
+gg$ggmap + geom_point(data=subset(cn_root_df,obs_nuptake>0 & pred_nuptake_gwr>0 & pft2 == "Forest"&file!="/Users/yunpeng/data/npp_stoichiometry_forests_tiandi/"),aes(lon,lat),col="red")
+gg$gglegend
+
 
 ```
