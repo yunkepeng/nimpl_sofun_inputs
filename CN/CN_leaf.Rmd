@@ -70,19 +70,19 @@ sitespecies_final <-Reduce(function(x,y) merge(x = x, y = y, by = c("sitename","
 
 #2. obtain Nrubisco and Nstructural from this large dataset
 #firstly, for site-species data
-#sitespecies_final$nmass <- sitespecies_final$narea/sitespecies_final$lma
-#sitespecies_final$vcmax25_lma <- sitespecies_final$Vcmax.25/sitespecies_final$lma
+sitespecies_final$nmass <- sitespecies_final$narea/sitespecies_final$lma
+sitespecies_final$vcmax25_lma <- sitespecies_final$Vcmax.25/sitespecies_final$lma
 
-#hist(sitespecies_final$narea) # g/m2
-#hist(sitespecies_final$lma) # g/m2
-#hist(sitespecies_final$Vcmax.25) # umol/m2/s
+hist(sitespecies_final$narea) # g/m2
+hist(sitespecies_final$lma) # g/m2
+hist(sitespecies_final$Vcmax.25) # umol/m2/s
 
-#library(lme4)
+library(lme4)
 
 #3. Fit (Nmass) ~ Ns + Nr * (Vcmax25/LMA) - for site-species data
-#summary(lmer(nmass~vcmax25_lma + (1|sitename)+(1|species),data=sitespecies_final))
+summary(lmer(nmass~vcmax25_lma + (1|sitename)+(1|species),data=sitespecies_final))
 
-#r.squaredGLMM(lmer(nmass~vcmax25_lma + (1|sitename) +(1|species),data=sitespecies_final))
+r.squaredGLMM(lmer(nmass~vcmax25_lma + (1|sitename) +(1|species),data=sitespecies_final))
 
 # r2 = 0.177
 #intercept = 0.0161 (Ns)
