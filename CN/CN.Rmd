@@ -85,17 +85,41 @@ for (i in 1:nrow(leafCN)){
 leafCN2 <- subset(leafCN,Vcmax.25>0&Vcmax.25<300&cn>1&cn<100&lma>0&lma<700)
 dim(leafCN2) # 2559 samples overall
 
+leafCN2$cn <- leafCN2$c./leafCN2$n.
+
 #generating site-species average data, and merge them
 Vcmax.25 <- aggregate(Vcmax.25~sites+final_species,leafCN2,mean)
 narea <- aggregate(narea~sites+final_species,leafCN2,mean)
 lma <- aggregate(lma~sites+final_species,leafCN2,mean)
+cn <- aggregate(cn~sites+final_species,leafCN2,mean)
 
 leafCN3<-Reduce(function(x,y) merge(x = x, y = y, by = c("sites","final_species"),all.x=TRUE), 
-                list(Vcmax.25,narea,lma))
+                list(Vcmax.25,narea,lma,cn))
 
 a1 <- lmer(narea~-1 +lma+Vcmax.25+(1|final_species)+(1|sites),data=leafCN3)
 summary(a1)
 r.squaredGLMM(a1)
+
+leafCN3$nc <- 1/leafCN3$cn
+leafCN3$vcmax25_lma <- leafCN3$Vcmax.25/leafCN3$lma
+a2 <- lmer(nc~vcmax25_lma+(1|final_species)+(1|sites),data=leafCN3)
+summary(a2)
+r.squaredGLMM(a2)
+
+summary(lmer(cn~Vcmax.25+lma+(1|final_species)+(1|sites),data=leafCN3))
+r.squaredGLMM(lmer(cn~Vcmax.25+lma+(1|final_species)+(1|sites),data=leafCN3))
+
+summary(lmer(cn~Vcmax.25+(1|final_species)+(1|sites),data=leafCN3))
+
+#aggregate to sitemean: nc ~ vcmax25/lma
+leafCN_sitemean <- aggregate(leafCN2,by=list(leafCN2$lon,leafCN2$lat), FUN=mean, na.rm=TRUE) #site-mean
+leafCN_sitemean$nc <- 1/leafCN_sitemean$cn
+leafCN_sitemean$vcmax25_lma <- leafCN_sitemean$Vcmax.25/leafCN_sitemean$lma
+dim(leafCN_sitemean)
+summary(lm(nc~vcmax25_lma,data=leafCN_sitemean))
+
+summary(lm(nc~Vcmax.25,data=leafCN_sitemean))
+summary(lm(cn~Vcmax.25+lma,data=leafCN_sitemean))
 
 #Site-species coefficients (R2 = 0.47)
 #Nstructural = 0.01201

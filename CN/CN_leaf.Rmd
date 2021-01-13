@@ -107,6 +107,11 @@ summary(lm(nmass~vcmax25_lma ,data=sitemean))
 #This value below was therefore used in nimpl simulation: Cmass (unitness) = 0.47
 mean(sitemean$nmass) * 27.18
 
+#construct a new alternative model for leaf c/n ~ vcmax25 + lma directly (here cmass = constant = 0.5)
+sitemean$nc <- sitemean$nmass/0.5
+summary(lm(nc~Vcmax.25 + lma ,data=sitemean))
+
+
 ##### After nimpl simulation, we output our data
 #3. output leafCN data (actually the output is leaf N/C!)
 
