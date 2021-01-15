@@ -412,7 +412,8 @@ for (i in 1:nrow(forest_site)) {
 
 #now, using several statistical models to predict npp, anpp, npp.leaf....
 forest_site$pred_gpp <- siteinfo_final$pred_gpp_c3
-
+forest_site$max_vcmax25 <- siteinfo_final$max_vcmax25
+  
 forest_site$pred_npp <- forest_site$pred_gpp * (1/(1 + exp(-(-0.3677 * log(forest_site$CNrt) +
                                                                -0.1552 * log(forest_site$age) + 
                                                                0.5791 * forest_site$fAPAR+
@@ -436,7 +437,7 @@ forest_site$pred_wnpp <- forest_site$pred_anpp - forest_site$pred_lnpp
 
 
 #use rsofun - site-species
-forest_site$pred_leafnc <- (0.0161/0.5) + (0.0041/0.5) * siteinfo_final$max_vcmax25/forest_site$LMA
+forest_site$pred_leafnc <- (0.0161/0.5) + (0.0041/0.5) * forest_site$max_vcmax25/forest_site$LMA
 
 
 forest_site$pred_lnf <- forest_site$pred_lnpp*forest_site$pred_leafnc
@@ -449,13 +450,15 @@ forest_site$ANPP_2 <- siteinfo_final$ANPP_2
 forest_site$BNPP_1 <- siteinfo_final$BNPP_1
 forest_site$NPP.foliage <- siteinfo_final$NPP.foliage
 forest_site$NPP.wood <- siteinfo_final$NPP.wood
-forest_site$CN_leaf <- siteinfo_final$CN_leaf
-forest_site$lnf_obs <- siteinfo_final$lnf_obs_final
-forest_site$wnf_obs <- siteinfo_final$wnf_obs_final
-forest_site$bnf_obs <- siteinfo_final$bnf_obs_final
+forest_site$CN_leaf_final <- siteinfo_final$CN_leaf_final
+forest_site$lnf_obs_final <- siteinfo_final$lnf_obs_final
+forest_site$wnf_obs_final <- siteinfo_final$wnf_obs_final
+forest_site$bnf_obs_final <- siteinfo_final$bnf_obs_final
 forest_site$GPP <- siteinfo_final$GPP
 
-siteinfo_final$rep_info[838]
+forest_site$site <- siteinfo_final$site
+forest_site$file <- siteinfo_final$file
+
 
 forest_site$rep_info <- siteinfo_final$rep_info
 #correct new dataset's rep_info
@@ -503,561 +506,171 @@ ggplot(data=forest_site2, aes(x=pred_bnpp, y=BNPP_1)) +
 summary(lm(BNPP_1~pred_bnpp,forest_site2))
 
 #analyse_modobs2(forest_site,"pred_lnf", "lnf_obs",type = "points") 
-ggplot(data=forest_site2, aes(x=pred_lnf, y=lnf_obs)) +
+ggplot(data=forest_site2, aes(x=pred_lnf, y=lnf_obs_final)) +
   geom_point()+geom_abline(intercept=0,slope=1)+geom_smooth(method = "lm", se = TRUE)+
   xlab("Prediction")+ylab("Observation")+theme_classic()
-summary(lm(lnf_obs~pred_lnf,forest_site2))
+summary(lm(lnf_obs_final~pred_lnf,forest_site2))
+
+# predict leaf cn separately
+forest_site2 <- subset(forest_site,rep_info!="rep" & rep_info!="rep1"& rep_info!="rep3")
+
+#fit a new model
+library(lme4)
+library(nlme)
+library(lmerTest)
+library("PerformanceAnalytics")
+library(MuMIn)
+r.squaredGLMM(lmer(CN_leaf_final ~ max_vcmax25+ LMA + (1|site),data=forest_site2))
+summary(lmer(CN_leaf_final ~ max_vcmax25+ LMA + (1|site),data=forest_site2))
+forest_site2$pred_fitted_leafcn <- 0.30275 * forest_site2$max_vcmax25 + 0.21866*forest_site2$LMA -4.92165
+
+forest_site2$CN_leaf_final[forest_site2$CN_leaf_final>100] <- NA
+ggplot(data=forest_site2, aes(x=pred_fitted_leafcn, y=CN_leaf_final)) +
+  geom_point()+geom_abline(intercept=0,slope=1)+geom_smooth(method = "lm", se = TRUE)+
+  xlab("Prediction")+ylab("Observation")+theme_classic()
+
+summary(lm(CN_leaf_final~pred_fitted_leafcn,forest_site2))
+
+forest_site2$pred_fit_lnf <- forest_site2$pred_lnpp/forest_site2$pred_fitted_leafcn
+
+ggplot(data=forest_site2, aes(x=pred_fit_lnf, y=lnf_obs_final)) +
+  geom_point()+geom_abline(intercept=0,slope=1)+geom_smooth(method = "lm", se = TRUE)+
+  xlab("Prediction")+ylab("Observation")+theme_classic()
+
+summary(lm(lnf_obs_final~pred_fit_lnf,forest_site2))
+
+####new design###
+#leafnc predicted by max vcmax25
+forest_site2$vc25_lma <-forest_site2$max_vcmax25/forest_site2$LMA
+forest_site2$vc25_lma <-forest_site2$Vcmax25/forest_site2$LMA
+forest_site2$ncleaf_final <- 1/forest_site2$CN_leaf_final
+
+summary(lmer(ncleaf_final ~ max_vcmax25 + (1|site),data=forest_site2))
+
+summary(lmer(ncleaf_final ~ vc25_lma + (1|site),data=forest_site2))
+
+#aggregate to sites
+forest_site2_sitemean <- aggregate(forest_site2,by=list(forest_site2$site), FUN=mean, na.rm=TRUE) #site-mean
+summary(lm(ncleaf_final ~ max_vcmax25 ,data=forest_site2_sitemean))
+
+summary(lm(ncleaf_final ~ vc25_lma ,data=forest_site2_sitemean))
+
+#forest_site2$pred_leafnc_new <- -2.421e-04 * forest_site2$max_vcmax25 + 4.706e-02 # all species
+forest_site2$pred_leafnc_new <- 0.028026 + 0.022874 * forest_site2$max_vcmax25/forest_site2$LMA # all species
+
+#forest_site2$pred_leafnc_new <- 1/(1.782e+01 -4.394e-02 * forest_site2$max_vcmax25 + 1.019e-01*forest_site2$LMA) # fitted by real data's model
+
+forest_site2$nc_leaf_obs <- 1/forest_site2$CN_leaf_final
+
+ggplot(data=forest_site2, aes(x=pred_leafnc_new, y=nc_leaf_obs)) +
+  geom_point()+geom_abline(intercept=0,slope=1)+geom_smooth(method = "lm", se = TRUE)+
+  xlab("Prediction")+ylab("Observation")+theme_classic()
+summary(lm(nc_leaf_obs~pred_leafnc_new,forest_site2))
+
+
+forest_site2$pred_fit_lnf_new <- forest_site2$pred_lnpp * forest_site2$pred_leafnc_new
+
+ggplot(data=forest_site2, aes(x=pred_fit_lnf_new, y=lnf_obs_final)) +
+  geom_point()+geom_abline(intercept=0,slope=1)+geom_smooth(method = "lm", se = TRUE)+
+  xlab("Prediction")+ylab("Observation")+theme_classic()
+
+summary(lm(lnf_obs_final~pred_fit_lnf_new,forest_site2))
+
+#nre
+#check mean of NRE
+NRE_Du <- read.csv(file="~/data/NRE_various/NRE_Du/NRE_Du.csv")
+NRE_Dong <- read.csv(file="~/data/NRE_various/NRE_Deng/NRE_Deng.csv")
+
+NRE_Du_df <- NRE_Du[,c("lon","lat","NRE","MAT","MAP")]
+NRE_Du_df <- aggregate(NRE_Du_df,by=list(NRE_Du_df$lon,NRE_Du_df$lat), FUN=mean, na.rm=TRUE) #site-mean
+NRE_Du_df <- NRE_Du_df[,c(3:7)]
+head(NRE_Du_df)
+dim(NRE_Du_df)
+
+NRE_Dong_df <- NRE_Dong[,c("Longitude","Latitude","NRE.nitrogen.resorption.efficiency.","MAT","MAP")]
+names(NRE_Dong_df) <- c("lon","lat","NRE","MAT","MAP")
+head(NRE_Dong_df)
+NRE_Dong_df <- aggregate(NRE_Dong_df,by=list(NRE_Dong_df$lon,NRE_Dong_df$lat), FUN=mean, na.rm=TRUE) #site-mean
+NRE_Dong_df <- NRE_Dong_df[,c(3:7)]
+dim(NRE_Dong_df)
+
+
+NRE_Dong_df$source <- "Dong"
+NRE_Du_df$source <- "Du"
+NRE_df <- rbind(NRE_Du_df,NRE_Dong_df)
+summary(NRE_df)
+
+#check repeated data, and remove 6 repeated points from Du et al. paper
+NRE_df$repeated <- duplicated(NRE_df[,c("lon","lat")])
+summary(NRE_df$repeated)
+NRE_df <- subset(NRE_df,repeated==FALSE)
+
+#project data
+newmap <- getMap(resolution = "low")
+plot(newmap, xlim = c(-180, 180), ylim = c(-75, 75), asp = 1)
+
+points(NRE_df$lon,NRE_df$lat, col="red", pch=16,cex=1)
+
+#3. add elevation in this df, based on ingtestr 
+siteinfo <- NRE_df[,c("lon","lat")] # present x and y separately
+siteinfo$date_start <- lubridate::ymd(paste0(1982, "-01-01"))
+siteinfo$date_end <- lubridate::ymd(paste0(2011, "-12-31"))
+siteinfo$sitename <- paste0("s", 1:nrow(siteinfo),sep="")
+siteinfo <- as_tibble(siteinfo)
+
+df_etopo <- ingest(
+  siteinfo,
+  source = "etopo1",
+  dir = "~/data/etopo/" 
+)
+
+NRE_df$elevation <- as.numeric(as.data.frame(df_etopo$data))
+subset(NRE_df,elevation<0)
+#Some grids > 0, lets' assume -3062 as NA, and others as 0 firstly?
+NRE_df$elevation[NRE_df$elevation< -50] <- NA
+NRE_df$elevation[NRE_df$elevation< 0] <- 0
+
+summary(NRE_df)
+
+#for nre
+names(NRE_df) <- c("lon","lat","NRE","MAT","MAP","source","repeated","z")
+NRE_df$Tg <- NA
+NRE_df$vpd <- NA
+a <- 1.5
+
+for (i in 1:nrow(NRE_df)) {
+  tryCatch({
+  #Tg
+    Tg_global <- na.omit(Tg_df)
+    NRE_part <- subset(Tg_global,lon>(NRE_df[i,1]-a)&lon<(NRE_df[i,1]+a)&
+                         lat>(NRE_df[i,2]-a)&lat<(NRE_df[i,2]+a))
+    coordinates(NRE_part) <- c("lon","lat")
+    gridded(NRE_part) <- TRUE
+    NRE_coord <- NRE_df[i,c("lon","lat","z")]
+    coordinates(NRE_coord) <- c("lon","lat")
+    NRE_df[i,c("Tg")] <- (gwr(Tg ~ z, NRE_part, bandwidth = 1.06, fit.points =NRE_coord,predictions=TRUE))$SDF$pred
+    #vpd
+    vpd_global <- na.omit(vpd_df)
+    NRE_part <- subset(vpd_global,lon>(NRE_df[i,1]-a)&lon<(NRE_df[i,1]+a)&
+                         lat>(NRE_df[i,2]-a)&lat<(NRE_df[i,2]+a))
+    coordinates(NRE_part) <- c("lon","lat")
+    gridded(NRE_part) <- TRUE
+    NRE_coord <- NRE_df[i,c("lon","lat","z")]
+    coordinates(NRE_coord) <- c("lon","lat")
+    NRE_df[i,c("vpd")] <- (gwr(vpd ~ z, NRE_part, bandwidth = 1.06, fit.points =NRE_coord,predictions=TRUE))$SDF$pred
+  }, error=function(e){})} 
+
+NRE_df$pred_nre <- NA
+NRE_df$vpd[NRE_df$vpd<0] <- NA
+NRE_df$pred_nre <- (1/(1+exp(-(-0.0679 *NRE_df$Tg + 0.4217 * log(NRE_df$vpd) + 1.4541))))
+
+NRE_df$NRE <- NRE_df$NRE/100
+
+ggplot(data=NRE_df, aes(x=pred_nre, y=NRE)) +
+  geom_point()+geom_abline(intercept=0,slope=1)+geom_smooth(method = "lm", se = TRUE)+
+  xlab("Prediction")+ylab("Observation")+theme_classic()
+
+summary(lm(NRE~pred_nre,NRE_df))
 
 save.image(file = "/Users/yunpeng/yunkepeng/nimpl_sofun_inputs/forest/Forest_site_check.Rdata")
 
-#since lnf is not predicted well (comparing with site simulation), it is expected that max vcmax25 was somewhere not so large, so that underestimation of lnf occurred.
-#use max vcmax25 of 30 years and run it year by year --> not work as extracted from site simulation
-#site-mean
-siteinfo_final2 <- aggregate(forest_site2,by=list(siteinfo_final$lon,siteinfo_final$lat,siteinfo_final$z), FUN=mean, na.rm=TRUE) #site-mean
-
-for (i in 1:nrow(siteinfo_final2)){
-  siteinfo_final2$sitename3[i] <- paste("forest_long",i,sep = "")
-}
-
-siteinfo_final3 <- siteinfo_final2[,c("lon","lat","z","sitename3")]
-
-siteinfo_final4 <-Reduce(function(x,y) merge(x = x, y = y, by = c("lon","lat","z"),all.x=TRUE), 
-              list(siteinfo_final,siteinfo_final3))
-
-siteinfo_final4 <- siteinfo_final4[order(siteinfo_final4$no), ]
-
-
-####now, input forcing data from 30 years simulation
-fapar_df <- list.files("/Users/yunpeng/data/forest_npp/modis_subsets_all/",full.names = T)
-length(fapar_df)
-#1. fapar - input - 12 samples were missing
-for (i in 1:length(fapar_df)){
-  df1 <- read.csv(fapar_df[i])
-  df1$date <- as.Date(df1$date)
-  df1 <- df1[!(format(df1$date,"%m") == "02" & format(df1$date, "%d") == "29"), , drop = FALSE]
-  df2 <- df1 %>% mutate(ymonth = month(date),
-                        yday = day(date)) %>% 
-    group_by(ymonth, yday) %>% 
-    summarise(fpar = mean(modisvar_filled, na.rm = TRUE))
-  assign(substr(sub('.*daily_', '', fapar_df[i]),1,nchar(sub('.*daily_', '', fapar_df[i]))-4), df2) 
-}
-
-#2. forcing - input - all 842 points were available
-forcing_df <- list.files("/Users/yunpeng/data/forest_npp/forest_30yrs/",full.names = T)
-length(forcing_df)
-
-for (i in 1:length(forcing_df)){
-  tryCatch({
-    df1 <- read.csv(forcing_df[i])
-    df1$date <- as.Date(df1$date)
-    conveted_fpar_text <- siteinfo_final4$sitename2[siteinfo_final4$sitename3==df1$sitename[1]] #convert forcing file name to fapar file name
-    fpar <- as.data.frame(eval(parse(text=conveted_fpar_text)))[,3]
-    fapar <- rep(fpar,nrow(df1)/365)
-    df2 <- cbind(df1,fapar)
-    df3 <- df2[,c("date","temp","prec","vpd","ppfd","patm","ccov_int","ccov","fapar","co2")]
-    assign(paste("final",df1$sitename[1],sep="_"), as_tibble(df3))
-  }, error=function(e){})} 
-
-#predict gpp
-
-df_soiltexture <- bind_rows(
-  top    = tibble(layer = "top",    fsand = 0.4, fclay = 0.3, forg = 0.1, fgravel = 0.1),
-  bottom = tibble(layer = "bottom", fsand = 0.4, fclay = 0.3, forg = 0.1, fgravel = 0.1))
-params_modl <- list(
-  kphio           = 0.09423773,
-  soilm_par_a     = 0.33349283,
-  soilm_par_b     = 1.45602286)
-
-
-siteinfo_final4$max_vcmax25_30yrs <- NA
-
-siteinfo_final4$year_start <- 1982
-siteinfo_final4$year_end <- 2011
-
-empty_vcmax25 <- data.frame(matrix(NA))
-
-#get max of 30 yrs
-for (i in 1:nrow(siteinfo_final4)) {
-  tryCatch({
-    #c3
-    forcing <- (eval(parse(text=(paste("final",siteinfo_final4$sitename3[i],sep="_")))))
-    modlist <- run_pmodel_f_bysite( 
-      siteinfo_final4$sitename3[i], 
-      params_siml <- list(
-        spinup             = TRUE,
-        spinupyears        = 10,
-        recycle            = 1,
-        soilmstress        = TRUE,
-        tempstress         = TRUE,
-        calc_aet_fapar_vpd = FALSE,
-        in_ppfd            = TRUE,
-        in_netrad          = FALSE,
-        outdt              = 1,
-        ltre               = FALSE,
-        ltne               = FALSE,
-        ltrd               = FALSE,
-        ltnd               = FALSE,
-        lgr3               = TRUE,
-        lgn3               = FALSE,
-        lgr4               = FALSE,
-        firstyeartrend = 1982,
-        nyeartrend = 30), 
-      siteinfo = siteinfo_final4[i,], 
-      forcing, 
-      df_soiltexture, 
-      params_modl = params_modl, 
-      makecheck = TRUE)
-    
-    max_vcmax25 <- max(modlist$vcmax25)*1000000
-    
-    siteinfo_final4[i,c("max_vcmax25_30yrs")] <- max_vcmax25
-  }, error=function(e){})} 
-
-#get max of each year, in 30 yrs
-for (i in 1:nrow(siteinfo_final4)) {
-  tryCatch({
-    #c3
-    forcing <- (eval(parse(text=(paste("final",siteinfo_final4$sitename3[i],sep="_")))))
-    modlist <- run_pmodel_f_bysite( 
-      siteinfo_final4$sitename3[i], 
-      params_siml <- list(
-        spinup             = TRUE,
-        spinupyears        = 10,
-        recycle            = 1,
-        soilmstress        = TRUE,
-        tempstress         = TRUE,
-        calc_aet_fapar_vpd = FALSE,
-        in_ppfd            = TRUE,
-        in_netrad          = FALSE,
-        outdt              = 1,
-        ltre               = FALSE,
-        ltne               = FALSE,
-        ltrd               = FALSE,
-        ltnd               = FALSE,
-        lgr3               = TRUE,
-        lgn3               = FALSE,
-        lgr4               = FALSE,
-        firstyeartrend = 1982,
-        nyeartrend = 30), 
-      siteinfo = siteinfo_final4[i,], 
-      forcing, 
-      df_soiltexture, 
-      params_modl = params_modl, 
-      makecheck = TRUE)
-
-    modlist$year <- year(modlist$date)
-    
-    vcmax25_max_yr <- modlist %>%
-      group_by(year) %>%
-      slice(which.max(vcmax25))
-    empty_vcmax25[i,1:30] <- (vcmax25_max_yr$vcmax25)*1000000
-    }, error=function(e){})} 
-
-
-dim(empty_vcmax25)
-
-#extract lma
-LMA_global <- na.omit(LMA_df)
-coordinates(LMA_global) <- ~lon+lat 
-gridded(LMA_global) <- TRUE
-LMA_global <- raster(LMA_global, "LMA") 
-
-siteinfo_final2 <- aggregate(siteinfo_final,by=list(siteinfo_final$lon,siteinfo_final$lat,siteinfo_final$z), FUN=mean, na.rm=TRUE) 
-sp_sites <- SpatialPoints(siteinfo_final2[,c("lon","lat","z")]) # only select lon and lat
-
-extract_LMA <- raster::extract(LMA_global, sp_sites, sp = TRUE) %>% as_tibble() %>% 
-  right_join(siteinfo_final, by = c("lon", "lat","z")) %>% 
-  dplyr::rename( extract_LMA = LMA)
-summary(extract_LMA$extract_LMA)
-extract_LMA <- extract_LMA[order(extract_LMA$no), ]
-
-#extract vcmax25
-Vcmax25_global <- na.omit(Vcmax25_df)
-coordinates(Vcmax25_global) <- ~lon+lat 
-gridded(Vcmax25_global) <- TRUE
-Vcmax25_global <- raster(Vcmax25_global, "Vcmax25") 
-
-siteinfo_final2 <- aggregate(siteinfo_final,by=list(siteinfo_final$lon,siteinfo_final$lat,siteinfo_final$z), FUN=mean, na.rm=TRUE) 
-sp_sites <- SpatialPoints(siteinfo_final2[,c("lon","lat","z")]) # only select lon and lat
-
-extract_Vcmax25 <- raster::extract(Vcmax25_global, sp_sites, sp = TRUE) %>% as_tibble() %>% 
-  right_join(siteinfo_final, by = c("lon", "lat","z")) %>% 
-  dplyr::rename( extract_Vcmax25 = Vcmax25)
-summary(extract_Vcmax25$extract_Vcmax25)
-extract_Vcmax25 <- extract_Vcmax25[order(extract_Vcmax25$no), ]
-
-#extract leafcn
-leafcn_global <- na.omit(leafcn_df)
-coordinates(leafcn_global) <- ~lon+lat 
-gridded(leafcn_global) <- TRUE
-leafcn_global <- raster(leafcn_global, "leafcn") 
-
-siteinfo_final2 <- aggregate(siteinfo_final,by=list(siteinfo_final$lon,siteinfo_final$lat,siteinfo_final$z), FUN=mean, na.rm=TRUE) 
-sp_sites <- SpatialPoints(siteinfo_final2[,c("lon","lat","z")]) # only select lon and lat
-
-extract_leafcn <- raster::extract(leafcn_global, sp_sites, sp = TRUE) %>% as_tibble() %>% 
-  right_join(siteinfo_final, by = c("lon", "lat","z")) %>% 
-  dplyr::rename( extract_leafcn = leafcn)
-summary(extract_leafcn$extract_leafcn)
-extract_leafcn <- extract_leafcn[order(extract_leafcn$no), ]
-
-#comparing map and site vcmax25
-plot(siteinfo_final$max_vcmax25~forest_site$Vcmax25)
-
-forest_site$pred_lnf2 <- NPP$pred_lnf
-forest_site$pred_lnpp2 <- NPP$pred_lnpp
-forest_site$pred_leafnc2 <-NPP$pred_leafcn
-
-plot(pred_lnf~pred_lnf2,data=subset(forest_site,lnf_obs>0))
-plot(pred_lnpp~pred_lnpp2,data=subset(forest_site,lnf_obs>0))
-plot(pred_leafnc~pred_leafnc2,data=subset(forest_site,lnf_obs>0))
-
-#previous results (max vcmax25 in measurement year)
-forest_site$pred_leafnc <- (0.0161/0.5) + (0.0041/0.5) * siteinfo_final$max_vcmax25/forest_site$LMA
-forest_site$pred_lnf <- forest_site$pred_lnpp*forest_site$pred_leafnc
-forest_site$lnf_obs <- siteinfo_final$lnf_obs
-forest_site2 <- subset(forest_site,rep_info!="rep" & rep_info!="rep1"& rep_info!="rep3")
-analyse_modobs2(forest_site2,"pred_lnf", "lnf_obs",type = "points") 
-
-plot(NPP$pred_lnf/forest_site$pred_lnf)
-
-#current results (max vcmax25 in 30 years)
-forest_site$pred_leafnc <- (0.0161/0.5) + (0.0041/0.5) * siteinfo_final4$max_vcmax25_30yrs/forest_site$LMA
-forest_site$pred_lnf <- forest_site$pred_lnpp2*forest_site$pred_leafnc
-forest_site$lnf_obs <- siteinfo_final$lnf_obs
-forest_site2 <- subset(forest_site,rep_info!="rep" & rep_info!="rep1"& rep_info!="rep3")
-analyse_modobs2(forest_site2,"pred_lnf", "lnf_obs",type = "points") 
-
-#latest results (max vcmax25 of each year, in 30 years)
-forest_site$pred_leafnc <- (0.0161/0.5) + (0.0041/0.5) * empty_vcmax25/forest_site$LMA
-forest_site$pred_lnf <- forest_site$pred_lnpp*forest_site$pred_leafnc
-forest_site$pred_lnf <- rowMeans(forest_site$pred_lnf)
-forest_site$lnf_obs <- siteinfo_final$lnf_obs
-forest_site2 <- subset(forest_site,rep_info!="rep" & rep_info!="rep1"& rep_info!="rep3")
-analyse_modobs2(forest_site2,"pred_lnf", "lnf_obs",type = "points") 
-
-#latest latest results (LMA extract from map; max vcmax25 of each year, in 30 years)
-forest_site$pred_lnf <- (0.0161/0.5) + (0.0041/0.5) *forest_site$Vcmax25/forest_site$LMA
-forest_site$pred_lnf <- rowMeans(forest_site$pred_lnf)
-forest_site$lnf_obs <- siteinfo_final$lnf_obs
-forest_site2 <- subset(forest_site,rep_info!="rep" & rep_info!="rep1"& rep_info!="rep3")
-analyse_modobs2(forest_site2,"pred_lnf", "lnf_obs",type = "points") 
-
-
-#latest*3 results (directly using leafcn map value)
-forest_site$pred_lnf <- forest_site$pred_lnpp*extract_leafcn$extract_leafcn
-forest_site$lnf_obs <- siteinfo_final$lnf_obs
-forest_site2 <- subset(forest_site,rep_info!="rep" & rep_info!="rep1"& rep_info!="rep3")
-analyse_modobs2(forest_site2,"pred_lnf", "lnf_obs",type = "points") 
-
-
-
-
-
-####
-#start from gpp, for 30 years
-####
-siteinfo_final4$pred_gpp_c3_30yrs <- NA
-for (i in 1:nrow(siteinfo_final4)) {
-  tryCatch({
-    #c3
-    forcing <- (eval(parse(text=(paste("final",siteinfo_final4$sitename3[i],sep="_")))))
-    modlist <- run_pmodel_f_bysite( 
-      siteinfo_final4$sitename3[i], 
-      params_siml <- list(
-        spinup             = TRUE,
-        spinupyears        = 10,
-        recycle            = 1,
-        soilmstress        = TRUE,
-        tempstress         = TRUE,
-        calc_aet_fapar_vpd = FALSE,
-        in_ppfd            = TRUE,
-        in_netrad          = FALSE,
-        outdt              = 1,
-        ltre               = FALSE,
-        ltne               = FALSE,
-        ltrd               = FALSE,
-        ltnd               = FALSE,
-        lgr3               = TRUE,
-        lgn3               = FALSE,
-        lgr4               = FALSE,
-        firstyeartrend = 1982,
-        nyeartrend = 30), 
-      siteinfo = siteinfo_final4[i,], 
-      forcing, 
-      df_soiltexture, 
-      params_modl = params_modl, 
-      makecheck = TRUE)
-    
-    pred_gpp_list <- modlist %>% mutate(ymonth = month(date),yday = day(date)) %>% group_by(ymonth, yday) %>% summarise(gpp = mean(gpp, na.rm = TRUE))
-    
-    siteinfo_final4[i,c("pred_gpp_c3_30yrs")] <- sum(pred_gpp_list$gpp)
-  }, error=function(e){})} 
-
-
-forest_site$vpd[forest_site$vpd<0] <- NA
-forest_site$alpha[forest_site$alpha>=1] <- NA
-forest_site$age[forest_site$age<0] <- NA
-
-forest_site$pred_gpp <- siteinfo_final4$pred_gpp_c3_30yrs
-
-forest_site$pred_npp <- forest_site$pred_gpp * (1/(1 + exp(-(-0.3677 * log(forest_site$CNrt) +
-                                                               -0.1552 * log(forest_site$age) + 
-                                                               0.5791 * forest_site$fAPAR+
-                                                               1.9144 *forest_site$alpha + -1.1052))))
-
-forest_site$pred_anpp <- forest_site$pred_gpp * (1/(1 + exp(-(-0.6075 * log(forest_site$CNrt) +
-                                                                -0.1798 * log(forest_site$age) + 
-                                                                0.8617 * forest_site$fAPAR+
-                                                                2.1287 *forest_site$alpha + -1.3528))))
-
-forest_site$pred_bnpp <- forest_site$pred_npp - forest_site$pred_anpp
-
-forest_site$pred_lnpp <- forest_site$pred_anpp * (1/(1 + exp(-(1.2350* log(forest_site$PPFD) +
-                                                                 0.0731 * (forest_site$Tg) + 
-                                                                 -1.0192 * log(forest_site$vpd) + -9.2375))))
-
-forest_site$pred_wnpp <- forest_site$pred_anpp - forest_site$pred_lnpp
-
-
-#use rsofun - site-species --> use max of 30 years
-forest_site$pred_leafnc <- (0.0161/0.5) + (0.0041/0.5) * siteinfo_final4$max_vcmax25_30yrs/forest_site$LMA
-
-#finally, still using default design
-forest_site$pred_leafnc <- (0.0161/0.5) + (0.0041/0.5) * siteinfo_final$max_vcmax25/forest_site$LMA
-
-
-forest_site$pred_lnf <- forest_site$pred_lnpp*forest_site$pred_leafnc
-
-forest_site$pred_wnf <- forest_site$pred_wnpp/97
-forest_site$pred_bnf <- forest_site$pred_bnpp/42
-
-forest_site$TNPP_1 <- siteinfo_final$TNPP_1
-forest_site$ANPP_2 <- siteinfo_final$ANPP_2
-forest_site$BNPP_1 <- siteinfo_final$BNPP_1
-forest_site$NPP.foliage <- siteinfo_final$NPP.foliage
-forest_site$NPP.wood <- siteinfo_final$NPP.wood
-forest_site$CN_leaf <- siteinfo_final$CN_leaf
-forest_site$lnf_obs <- siteinfo_final$lnf_obs
-forest_site$wnf_obs <- siteinfo_final$wnf_obs
-forest_site$bnf_obs <- siteinfo_final$bnf_obs
-forest_site$GPP <- siteinfo_final$GPP
-forest_site$rep_info <- siteinfo_final$rep_info
-
-forest_site2 <- subset(forest_site,rep_info!="rep" & rep_info!="rep1"& rep_info!="rep3")
-
-#forest_site2 <- aggregate(forest_site,by=list(forest_site$lon,forest_site$lat,forest_site$z), FUN=mean, na.rm=TRUE) #site-mean
-
-#check
-
-My_Theme = theme(
-  axis.title.x = element_text(size = 14),
-  axis.text.x = element_text(size = 20),
-  axis.title.y = element_text(size = 14),
-  axis.text.y = element_text(size = 20))
-
-analyse_modobs2(forest_site2,"pred_gpp", "GPP",type = "points")
-ggplot(data=forest_site2, aes(x=pred_gpp, y=GPP)) +
-  geom_point()+geom_abline(intercept=0,slope=1)+geom_smooth(method = "lm", se = TRUE)+
-  xlab("Prediction")+ylab("Observation")+theme_classic() + My_Theme
-summary(lm(GPP~pred_gpp,forest_site2))
-
-#analyse_modobs2(forest_site2,"pred_npp", "TNPP_1",type = "points")
-ggplot(data=forest_site2, aes(x=pred_npp, y=TNPP_1)) +
-  geom_point()+geom_abline(intercept=0,slope=1)+geom_smooth(method = "lm", se = TRUE)+
-  xlab("Prediction")+ylab("Observation")+theme_classic()+ My_Theme
-summary(lm(TNPP_1~pred_npp,forest_site2))
-
-#analyse_modobs2(forest_site2,"pred_anpp", "ANPP_2",type = "points")
-ggplot(data=forest_site2, aes(x=pred_anpp, y=ANPP_2)) +
-  geom_point()+geom_abline(intercept=0,slope=1)+geom_smooth(method = "lm", se = TRUE)+
-  xlab("Prediction")+ylab("Observation")+theme_classic()+ My_Theme
-summary(lm(ANPP_2~pred_anpp,forest_site2))
-#analyse_modobs2(forest_site2,"pred_lnpp", "NPP.foliage",type = "points")
-
-ggplot(data=forest_site2, aes(x=pred_lnpp, y=NPP.foliage)) +
-  geom_point()+geom_abline(intercept=0,slope=1)+geom_smooth(method = "lm", se = TRUE)+
-  xlab("Prediction")+ylab("Observation")+theme_classic()+ My_Theme
-summary(lm(NPP.foliage~pred_lnpp,forest_site2))
-
-#analyse_modobs2(forest_site,"pred_wnpp", "NPP.wood",type = "points")
-ggplot(data=forest_site2, aes(x=pred_wnpp, y=NPP.wood)) +
-  geom_point()+geom_abline(intercept=0,slope=1)+geom_smooth(method = "lm", se = TRUE)+
-  xlab("Prediction")+ylab("Observation")+theme_classic()+ My_Theme
-summary(lm(NPP.wood~pred_wnpp,forest_site2))
-
-#analyse_modobs2(forest_site2,"pred_bnpp", "BNPP_1",type = "points")
-ggplot(data=forest_site2, aes(x=pred_bnpp, y=BNPP_1)) +
-  geom_point()+geom_abline(intercept=0,slope=1)+geom_smooth(method = "lm", se = TRUE)+
-  xlab("Prediction")+ylab("Observation")+theme_classic()+ My_Theme
-summary(lm(BNPP_1~pred_bnpp,forest_site2))
-
-#analyse_modobs2(forest_site,"pred_lnf", "lnf_obs",type = "points") 
-ggplot(data=forest_site2, aes(x=pred_lnf, y=lnf_obs)) +
-  geom_point()+geom_abline(intercept=0,slope=1)+geom_smooth(method = "lm", se = TRUE)+
-  xlab("Prediction")+ylab("Observation")+theme_classic()+ My_Theme
-summary(lm(lnf_obs~pred_lnf,forest_site2))
-
-
-
-#check leaf c/n
-SP_input <- read.csv(file="~/data/CN_leaf/final_individuals.csv") #all individuals
-SP_input2 <- SP_input[,c("lat","lon","Elevation","Vcmax.25","narea","lma")]
-sitemean <- aggregate(SP_input2,by=list(SP_input2$lon,SP_input2$lat), FUN=mean, na.rm=TRUE) 
-dim(sitemean)
-
-sitemean$pred_leafnc <- (0.0161/0.5) + (0.0041/0.5)* sitemean$Vcmax.25/sitemean$lma
-sitemean$pred_leafnmass <- sitemean$pred_leafnc*0.5 #unitness
-sitemean$obs_leafnmass <- sitemean$narea/sitemean$lma #unitness
-
-ggplot(data=sitemean, aes(x=pred_leafnmass, y=obs_leafnmass)) +
-  geom_point()+geom_abline(intercept=0,slope=1)+geom_smooth(method = "lm", se = TRUE)+
-  xlab("Prediction")+ylab("Observation")+theme_classic()
-summary(lm(obs_leafnmass~pred_leafnmass,sitemean))
-
-leafcn_df <- inputnc("leafcn",1982,2011)
-leafcn <-leafcn_df
-leafcn$leafcn <- 1/leafcn$leafcn
-leafcn$leafcn[leafcn$leafcn == Inf] <- NA
-
-gg <- plot_map3(leafcn[,c(1,2,4)], 
-                varnam = "leafcn",plot_title = "Leaf carbon to nitrogen ratio",
-                latmin = -65, latmax = 85, combine = FALSE)
-
-gg$ggmap + geom_point(data=subset(sitemean,obs_leafnmass>0 & pred_leafnmass>0),aes(lon,lat),col="red") 
-gg$gglegend
-
-
-#include forest new sites from Tian Di
-tiandi_forest <- read.csv("/Users/yunpeng/data/npp_stoichiometry_forests_tiandi/Site_level_forest_CN_NPP_China_TD_20210104_for_Beni_Yunke.csv")
-tiandi_forest2 <- tiandi_forest[,c(1:4)]
-names(tiandi_forest2) <- c("sitename","lon","lat","elv")
-head(tiandi_forest2)
-
-library(rworldmap)
-newmap <- getMap(resolution = "low")
-plot(newmap, xlim = c(-180, 180), ylim = c(-75, 75), asp = 1)
-points(tiandi_forest2$lon,tiandi_forest2$lat, col="red", pch=16,cex=1)
-#reasonable
-
-siteinfo <- data.frame(
-  sitename = tiandi_forest2$sitename,
-  lon = tiandi_forest2$lon,
-  lat = tiandi_forest2$lat,
-  elv = tiandi_forest2$elv,
-  year_start = rep(2006,nrow(tiandi_forest2)),
-  year_end = rep(2015,nrow(tiandi_forest2))
-)
-
-#create time frame
-siteinfo <-  siteinfo %>% dplyr::mutate(date_start = lubridate::ymd(paste0(year_start, "-01-01"))) %>%
-  dplyr::mutate(date_end = lubridate::ymd(paste0(year_end, "-12-31"))) 
-
-calc_vpd_inst <- function( qair=NA, tc=NA, patm=NA, elv=NA  ){
-  ##-----------------------------------------------------------------------
-  ## Ref:      Eq. 5.1, Abtew and Meleese (2013), Ch. 5 Vapor Pressure 
-  ##           Calculation Methods, in Evaporation and Evapotranspiration: 
-  ##           Measurements and Estimations, Springer, London.
-  ##             vpd = 0.611*exp[ (17.27 tc)/(tc + 237.3) ] - ea
-  ##             where:
-  ##                 tc = average daily air temperature, deg C
-  ##                 eact  = actual vapor pressure, Pa
-  ##-----------------------------------------------------------------------
-  kTo = 288.15   # base temperature, K (Prentice, unpublished)
-  kR  = 8.3143   # universal gas constant, J/mol/K (Allen, 1973)
-  kMv = 18.02    # molecular weight of water vapor, g/mol (Tsilingiris, 2008)
-  kMa = 28.963   # molecular weight of dry air, g/mol (Tsilingiris, 2008)
-  
-  ## calculate the mass mixing ratio of water vapor to dry air (dimensionless)
-  wair <- qair / (1 - qair)
-  
-  ## calculate water vapor pressure 
-  rv <- kR / kMv
-  rd <- kR / kMa
-  eact = patm * wair * rv / (rd + wair * rv)  
-  
-  ## calculate saturation water vapour pressure in Pa
-  esat <- 611.0 * exp( (17.27 * tc)/(tc + 237.3) )
-  
-  ## calculate VPD in units of Pa
-  vpd <- ( esat - eact )    
-  
-  ## this empirical equation may lead to negative values for VPD (happens very rarely). assume positive...
-  vpd <- max( 0.0, vpd )
-  
-  return( vpd )
-  
-}
-library(ingestr)
-
-for (i in 1:nrow(siteinfo)) {
-  tryCatch({
-    df_watch <- ingestr::ingest(
-      siteinfo  = siteinfo[i,],
-      source    = "watch_wfdei",
-      getvars   = list(temp = "Tair",prec = "Rainf", vpd = "Qair", ppfd = "SWin"), 
-      dir       = "/Volumes/Seagate Backup Plus Drive/data/watch_wfdei/"
-    )
-    
-    df_cru <- ingestr::ingest(
-      siteinfo  = siteinfo[i,],
-      source    = "cru",
-      getvars   = list(ccov = "cld"),
-      dir       = "/Volumes/Seagate Backup Plus Drive/data/cru/ts_4.01/"
-    )
-    
-    df_co2 <- ingestr::ingest(
-      siteinfo[i,],
-      source  = "co2_mlo",
-      verbose = FALSE
-    )
-    
-    df_co2_final <- as.data.frame(df_co2$data)
-    
-    df_co2_final2 <- df_co2_final[!(format(df_co2_final$date,"%m") == "02" & format(df_co2_final$date, "%d") == "29"), , drop = FALSE]
-    
-    co2 <- df_co2_final2$co2
-    
-    ddf_meteo <- as_tibble(cbind(as.data.frame(df_watch$data)[,c("date","temp","prec","qair","ppfd")],as.data.frame(df_cru$data)[,c("ccov_int","ccov")],co2))
-    
-    elv <- siteinfo$elv[i]
-    
-    ddf_meteo$patm <- calc_patm(elv=elv, patm0 = 101325 )
-    
-    for (b in 1:length(ddf_meteo$qair)){
-      ddf_meteo$vpd[b] <- calc_vpd_inst( qair=ddf_meteo$qair[b], tc=ddf_meteo$temp[b], ddf_meteo$patm[b], elv=elv)
-    }
-    
-    ddf_meteo_final <- ddf_meteo[,c("date","temp","prec","qair","vpd","ppfd","patm","ccov_int","ccov","co2")]
-    ddf_meteo_final$prec <- ddf_meteo_final$prec/86400
-    ddf_meteo_final$ppfd <- ddf_meteo_final$ppfd/86400
-    ddf_meteo_final$sitename <- siteinfo$sitename[i]
-    csvfile <- paste("/Users/yunpeng/data/forest_npp/forcing2/",siteinfo$sitename[i],".csv",sep = "")
-    write.csv(ddf_meteo_final, csvfile, row.names = TRUE)
-    print(i)    
-  }, error=function(e){})} 
-
-#change site year to 2010-2019, for extracting fapar
-siteinfo <- data.frame(
-  sitename = tiandi_forest2$sitename,
-  lon = tiandi_forest2$lon,
-  lat = tiandi_forest2$lat,
-  #elv = tiandi_forest2$elv,
-  year_start = rep(2010,nrow(tiandi_forest2)),
-  year_end = rep(2019,nrow(tiandi_forest2))
-)
-
-#create time frame
-siteinfo <-  siteinfo %>% dplyr::mutate(date_start = lubridate::ymd(paste0(year_start, "-01-01"))) %>%
-  dplyr::mutate(date_end = lubridate::ymd(paste0(year_end, "-12-31"))) 
-
-settings_modis <- get_settings_modis(
-  bundle            = "modis_fpar",
-  data_path         = "~/data/forest_npp/modis_tiandi/",
-  method_interpol   = "loess",
-  keep              = TRUE,
-  overwrite_raw     = FALSE,
-  overwrite_interpol= TRUE
-)
-
-df_modis_fpar <- ingest(siteinfo = siteinfo,source= "modis",settings  = settings_modis,verbose   = FALSE,parallel = TRUE,ncore = 8)

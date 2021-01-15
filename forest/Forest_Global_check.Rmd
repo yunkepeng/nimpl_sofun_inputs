@@ -40,7 +40,7 @@ library(maps)
 library(rworldmap)
 library(cowplot)
 library(spgwr)
-#load(file = "/Users/yunpeng/yunkepeng/nimpl_sofun_inputs/forest/Forest_Global_check.Rdata")
+load(file = "/Users/yunpeng/yunkepeng/nimpl_sofun_inputs/forest/Forest_Global_check.Rdata")
 
 # (1) pre-processing NPP
 # rbind data (more data details see https://github.com/yunkepeng/nimpl_sofun_inputs/blob/master/NPP/NPP_statistical_model.Rmd)
@@ -53,7 +53,7 @@ NPP_Schulze <- read.csv(file="~/data/NPP_Yunke/NPP_Schulze/NPP_Schulze.csv")
 NPP_all <- rbind(NPP_SaraVicca,NPP_Malhi,NPP_Keith,NPP_Forc,NPP_Schulze)
 
 #add pft data derived from orginal data provided from Sara Vicca, and Schulze's book.
-Evergreen <- read.csv(file="~/data/NPP_Yunke/NPP_SaraVicca/orig/pft.csv")
+Evergreen<- read.csv(file="~/data/NPP_Yunke/NPP_SaraVicca/orig/pft.csv")
 NPP_all2 <- merge(NPP_all,Evergreen,by=c("site"),all.x=TRUE)
 NPP_all3 <- NPP_all2[,c("site","lon","lat","z","file","Begin_year","End_year",
                         "Source","GPP","TNPP_1","ANPP_2","BNPP_1","NPP.foliage","NPP.wood","pft")]
@@ -81,7 +81,6 @@ Tiandi_npp$Begin_year <- as.numeric(Tiandi_npp$Begin_year)
 Tiandi_npp$End_year <- as.numeric(Tiandi_npp$End_year)
 summary(Tiandi_npp$Begin_year)
 summary(Tiandi_npp$End_year)
-
 summary(Tiandi_npp)
 
 # (3) add data from Campioli (pft = grassland for all data)
@@ -140,6 +139,7 @@ Sara2_NPP$file <- "/Users/yunpeng/data/NPP_Yunke/NPP_SaraVicca/orig/validation_d
 Sara2_NPP$pft<-"Forest"
 Sara2_NPP$pft2<-"Forest"
 summary(Sara2_NPP)
+
 #create site name
 Sara2_NPP_sitename <- aggregate(Sara2_NPP,by=list(Sara2_NPP$lon,Sara2_NPP$lat,Sara2_NPP$z), mean,na.rm=TRUE)
 for (i in 1:nrow(Sara2_NPP_sitename)){
@@ -834,6 +834,17 @@ ggplot(subset(NPP2,NPP.foliage>0 & pred_lnpp>0), aes(x=pred_lnpp, y=NPP.foliage)
   geom_point()+geom_abline(intercept=0,slope=1)+geom_smooth(method = "lm", se = TRUE)+
   xlab("Prediction")+ylab("Observation")+theme_classic()+My_Theme
 
+#npp.leaf -> filtered with leaf c/n
+ggplot(subset(NPP2,NPP.foliage>0 & pred_lnpp>0 & CN_leaf_final>0), aes(x=pred_lnpp, y=NPP.foliage)) +
+  geom_point()+geom_abline(intercept=0,slope=1)+geom_smooth(method = "lm", se = TRUE)+
+  xlab("Prediction")+ylab("Observation")+theme_classic()+My_Theme
+
+# leaf c/n
+NPP2$CN_leaf_final[NPP2$CN_leaf_final>100] <- NA
+ggplot(subset(NPP2,CN_leaf_final>0 & predicted_leafcn>0), aes(x=predicted_leafcn, y=CN_leaf_final)) +
+  geom_point()+geom_abline(intercept=0,slope=1)+geom_smooth(method = "lm", se = TRUE)+
+  xlab("Prediction")+ylab("Observation")+theme_classic()+My_Theme
+
 #(5) npp wood
 gg <- plot_map3(wnpp_df[,c(1,2,4)], 
                 varnam = "wnpp",plot_title = " NPP in wood (gC/m2/yr)",
@@ -892,26 +903,26 @@ sitemean <- aggregate(SP_input2,by=list(SP_input2$lon,SP_input2$lat), FUN=mean, 
 dim(sitemean)
 
 sitemean$pred_leafnc <- (0.0161/0.5) + (0.0041/0.5)* sitemean$Vcmax.25/sitemean$lma
-sitemean$pred_leafnmass <- sitemean$pred_leafnc*0.5 #unitness
-sitemean$obs_leafnmass <- sitemean$narea/sitemean$lma #unitness
+sitemean$obs_leafnc <- sitemean$narea/sitemean$lma/0.5
 
-ggplot(data=sitemean, aes(x=pred_leafnmass, y=obs_leafnmass)) +
+ggplot(data=sitemean, aes(x=pred_leafnc, y=obs_leafnc)) +
   geom_point()+geom_abline(intercept=0,slope=1)+geom_smooth(method = "lm", se = TRUE)+
   xlab("Prediction")+ylab("Observation")+theme_classic()+My_Theme
-summary(lm(obs_leafnmass~pred_leafnmass,sitemean))
+summary(lm(obs_leafnc~pred_leafnc,sitemean))
 
 leafcn_df <- inputnc("leafcn",1982,2011)
 leafcn <-leafcn_df
-leafcn$leafcn <- 1/leafcn$leafcn
-leafcn$leafcn[leafcn$leafcn == Inf] <- NA
+#leafcn$leafcn <- 1/leafcn$leafcn
+#leafcn$leafcn[leafcn$leafcn == Inf] <- NA
 
 gg <- plot_map3(leafcn[,c(1,2,4)], 
-                varnam = "leafcn",plot_title = "Leaf carbon to nitrogen ratio",
+                varnam = "leafcn",plot_title = "Leaf nitrogen to carbon ratio",
                 latmin = -65, latmax = 85, combine = FALSE)
 
-gg$ggmap + geom_point(data=subset(sitemean,obs_leafnmass>0 & pred_leafnmass>0),aes(lon,lat),col="red") 
+gg$ggmap + geom_point(data=subset(sitemean,obs_leafnc>0 & pred_leafnc>0),aes(lon,lat),col="red")
 gg$gglegend
 #analyse_modobs2(subset(NPP2,CN_leaf_final>0 & predicted_leafcn>0 ),"predicted_leafcn","CN_leaf_final", type = "points")
+
 
 #cue
 cue <- npp_df[,4]/gpp_df[,4]

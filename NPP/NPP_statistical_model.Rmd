@@ -184,13 +184,18 @@ summary(final_sites5$pft)
 final_sites6 <- subset(final_sites5,CN>0 & age>0 & observedfAPAR>0  & alpha>0 & GPP>TNPP_1) # prevent one site when measured npp > gpp.
 summary(lmer(log((TNPP_1/GPP)/(1-(TNPP_1/GPP)))~log(CN)+log(age)+alpha+observedfAPAR+(1|site),data=final_sites6))
 
+r.squaredGLMM(lmer(log((TNPP_1/GPP)/(1-(TNPP_1/GPP)))~log(CN)+log(age)+alpha+observedfAPAR+(1|site),data=final_sites6))
+
 ######(2) ANPP/GPP function
 ######Predictors: Measured soil C/N, Measured stand-age(yrs), alpha (from SPLASH) and observed fAPAR (calculated from measured LAI based on Beer's law).
 summary(lmer(log((ANPP_2/GPP)/(1-(ANPP_2/GPP)))~log(CN)+log(age)+alpha+observedfAPAR+(1|site),data=final_sites5))
 
+r.squaredGLMM(lmer(log((ANPP_2/GPP)/(1-(ANPP_2/GPP)))~log(CN)+log(age)+alpha+observedfAPAR+(1|site),data=final_sites5))
+
 ######(3) NPP.foliage/ANPP function
 summary(lmer(log((NPP.foliage/ANPP_2)/(1-(NPP.foliage/ANPP_2)))~log(PPFD)+Tg+log(vpd)+(1|site),data=final_sites5))
 
+r.squaredGLMM(lmer(log((NPP.foliage/ANPP_2)/(1-(NPP.foliage/ANPP_2)))~log(PPFD)+Tg+log(vpd)+(1|site),data=final_sites5))
 
 ```
 

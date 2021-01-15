@@ -50,7 +50,7 @@ My_Theme = theme(
   axis.title.y = element_text(size = 14),
   axis.text.y = element_text(size = 20))
 
-forest_site2 <- subset(forest_site,rep_info!="rep" & rep_info!="rep1"& rep_info!="rep3")
+#forest_site2 <- subset(forest_site,rep_info!="rep" & rep_info!="rep1"& rep_info!="rep3")
 
 #forest_site2 <- aggregate(forest_site,by=list(forest_site$lon,forest_site$lat,forest_site$z), FUN=mean, na.rm=TRUE) #site-mean
 
@@ -92,11 +92,23 @@ ggplot(data=forest_site2, aes(x=pred_bnpp, y=BNPP_1)) +
   xlab("Prediction")+ylab("Observation")+theme_classic()+My_Theme
 summary(lm(BNPP_1~pred_bnpp,forest_site2))
 
-#analyse_modobs2(forest_site,"pred_lnf", "lnf_obs",type = "points") 
-ggplot(data=forest_site2, aes(x=pred_lnf, y=lnf_obs)) +
+ggplot(data=forest_site2, aes(x=pred_fitted_leafcn, y=CN_leaf_final)) +
   geom_point()+geom_abline(intercept=0,slope=1)+geom_smooth(method = "lm", se = TRUE)+
   xlab("Prediction")+ylab("Observation")+theme_classic()+My_Theme
-summary(lm(lnf_obs~pred_lnf,forest_site2))
+summary(lm(CN_leaf_final~pred_fitted_leafcn,forest_site2))
+
+ggplot(data=NRE_df, aes(x=pred_nre, y=NRE)) +
+  geom_point()+geom_abline(intercept=0,slope=1)+geom_smooth(method = "lm", se = TRUE)+
+  xlab("Prediction")+ylab("Observation")+theme_classic()+My_Theme
+summary(lm(NRE~pred_nre,NRE_df))
+
+#analyse_modobs2(forest_site,"pred_lnf", "lnf_obs",type = "points") 
+ggplot(data=forest_site2, aes(x=pred_fit_lnf, y=lnf_obs_final)) +
+  geom_point()+geom_abline(intercept=0,slope=1)+geom_smooth(method = "lm", se = TRUE)+
+  xlab("Prediction")+ylab("Observation")+theme_classic()+My_Theme
+summary(lm(lnf_obs_final~pred_fit_lnf,forest_site2))
+
+
 
 
 ```

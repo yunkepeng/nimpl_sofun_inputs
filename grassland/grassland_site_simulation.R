@@ -21,7 +21,7 @@ library(rworldmap)
 library(cowplot)
 library(spgwr)
 
-#load(file = "/Users/yunpeng/yunkepeng/nimpl_sofun_inputs/grassland/grassland_site_simulation.Rdata")
+load(file = "/Users/yunpeng/yunkepeng/nimpl_sofun_inputs/grassland/grassland_site_simulation.Rdata")
 
 #read complete dataset for measurement, after L1-L300 in /Users/yunpeng/yunkepeng/nimpl_sofun_inputs/forest/Forest_Global_check.Rmd
 NPP <- read.csv("/Users/yunpeng/data/forest_npp/NPP_final_all.csv")
@@ -289,7 +289,7 @@ NPP_grassland$max_vcmax25_c4 <- NPP_grassland_all2$max_vcmax25_c4
 
 dim(subset(NPP_grassland,pred_gpp_c3>TNPP_1)) #157
 dim(subset(NPP_grassland,pred_gpp_c3<TNPP_1)) #34
-
+aaa$weightedgpp_all
 outlier<- (subset(NPP_grassland,pred_gpp_c3<TNPP_1))
 
 newmap <- getMap(resolution = "low")
@@ -902,21 +902,48 @@ ggplot(NPP_grassland_final11, aes(x=weightedgpp_all, y=GPP)) +
 analyse_modobs2(subset(NPP_grassland_final11,TNPP_1/weightedgpp_all > 0.2 & TNPP_1/weightedgpp_all <1),"pred_npp", "TNPP_1",type = "points")
 analyse_modobs2(NPP_grassland_final11,"pred_npp", "TNPP_1",type = "points")
 
+NPP_grassland_final11$file[NPP_grassland_final11$file=="Tiandi"] <- "China Grassland"
+NPP_grassland_final11$file[NPP_grassland_final11$file=="MCampioli"] <- "M.Campioli et al. 2015 Nature Geoscience"
+
 ggplot(NPP_grassland_final11, aes(x=pred_npp, y=TNPP_1)) +
-  geom_point(aes(size=c3_percentage_final,color=factor(file)))+geom_abline(intercept=0,slope=1)+geom_smooth(method = "lm", se = TRUE)+
+  geom_point(aes(color=factor(file)))+geom_abline(intercept=0,slope=1)+geom_smooth(method = "lm", se = TRUE)+
   xlab("Prediction")+ylab("Observation")+theme_classic()  + ggtitle("Observed NPP vs. Predicted NPP")
 
+My_Theme = theme(
+  axis.title.x = element_text(size = 14),
+  axis.text.x = element_text(size = 20),
+  axis.title.y = element_text(size = 14),
+  axis.text.y = element_text(size = 20))
 
+test <- subset(NPP_grassland_final11,file !="Keith")
 
-analyse_modobs2(subset(NPP_grassland_final11,TNPP_1/weightedgpp_all > 0.2 & TNPP_1/weightedgpp_all <1),
-                "pred_anpp", "ANPP_2",type = "points")
+ggplot(test, aes(x=weightedgpp_all, y=TNPP_1)) +
+  geom_point(aes(color=factor(file)))+geom_abline(intercept=0,slope=0.8)+
+  geom_abline(intercept=0,slope=0.2)+
+  xlab(" Predicted GPP (gC/m2/yr)")+ylab("Measured NPP (gC/m2/yr)")+theme_classic() +My_Theme +
+  ggtitle("Measured NPP vs. Predicted GPP
+          
+      Two lines are NPP/GPP = 0.8 and 0.2 separately")
 
-analyse_modobs2(NPP_grassland_final11,
-                "pred_anpp", "ANPP_2",type = "points")
+sara <- subset(NPP_grassland_final11,file != "China Grassland")
+outlier_sara <- subset(sara,TNPP_1/weightedgpp_all >= 0.8 |
+                         TNPP_1/weightedgpp_all < 0.2)
+outlier_sara2 <- outlier_sara[,c("site","lon","lat","z","file","TNPP_1","ANPP_2","BNPP_1","pft","weightedgpp_all","GPP")]
+names(outlier_sara2) <- c("site","lon","lat","z","file","TNPP_1","ANPP_2","BNPP_1","pft","predicted_gpp","measured_gpp")
+#csvfile <- paste("/Users/yunpeng/data/outlier_sara.csv")
+#write.csv(outlier_sara2, csvfile, row.names = TRUE)
 
-ggplot(NPP_grassland_final11, aes(x=pred_anpp, y=ANPP_2)) +
-  geom_point(aes(size=c3_percentage_final,color=factor(file)))+geom_abline(intercept=0,slope=1)+geom_smooth(method = "lm", se = TRUE)+
-  xlab("Prediction")+ylab("Observation")+theme_classic() + ggtitle("Observed ANPP vs. Predicted ANPP")
+#analyse_modobs2(subset(NPP_grassland_final11,TNPP_1/weightedgpp_all > 0.2 & TNPP_1/weightedgpp_all <1),"pred_anpp", "ANPP_2",type = "points")
+
+#analyse_modobs2(NPP_grassland_final11,"pred_anpp", "ANPP_2",type = "points")
+
+#remove keith's palanation and cropland
+NPP_grassland_final12 <- subset(NPP_grassland_final11,pft !="Plantation" & pft !="Cropland")
+
+ggplot(NPP_grassland_final12, aes(x=pred_anpp, y=ANPP_2)) +
+  geom_point(aes(color=factor(file)))+geom_abline(intercept=0,slope=1)+geom_smooth(method = "lm", se = TRUE)+
+  xlab("Predicted ANPP")+ylab("Measured ANPP")+theme_classic() + My_Theme +ggtitle("Observed ANPP vs. Predicted ANPP")
+
 
 
 analyse_modobs2(NPP_grassland_final11,
