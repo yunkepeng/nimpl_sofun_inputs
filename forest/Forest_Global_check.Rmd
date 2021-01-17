@@ -40,27 +40,28 @@ library(maps)
 library(rworldmap)
 library(cowplot)
 library(spgwr)
+
 load(file = "/Users/yunpeng/yunkepeng/nimpl_sofun_inputs/forest/Forest_Global_check.Rdata")
 
 # (1) pre-processing NPP
 # rbind data (more data details see https://github.com/yunkepeng/nimpl_sofun_inputs/blob/master/NPP/NPP_statistical_model.Rmd)
-NPP_SaraVicca <- read.csv(file="~/data/NPP_Yunke/NPP_SaraVicca/NPP_SaraVicca.csv")
-NPP_Malhi <- read.csv(file="~/data/NPP_Yunke/NPP_Malhi/NPP_Malhi.csv")
-NPP_Keith <- read.csv(file="~/data/NPP_Yunke/NPP_Keith/NPP_Keith.csv")
-NPP_Forc <- read.csv(file="~/data/NPP_Yunke/NPP_Forc/NPP_Forc.csv")
-NPP_Schulze <- read.csv(file="~/data/NPP_Yunke/NPP_Schulze/NPP_Schulze.csv")
+NPP_SaraVicca <- read_csv(file="~/data/NPP_Yunke/NPP_SaraVicca/NPP_SaraVicca.csv")
+NPP_Malhi <- read_csv(file="~/data/NPP_Yunke/NPP_Malhi/NPP_Malhi.csv")
+NPP_Keith <- read_csv(file="~/data/NPP_Yunke/NPP_Keith/NPP_Keith.csv")
+NPP_Forc <- read_csv(file="~/data/NPP_Yunke/NPP_Forc/NPP_Forc.csv")
+NPP_Schulze <- read_csv(file="~/data/NPP_Yunke/NPP_Schulze/NPP_Schulze.csv")
 
-NPP_all <- rbind(NPP_SaraVicca,NPP_Malhi,NPP_Keith,NPP_Forc,NPP_Schulze)
+NPP_all <- rbind(NPP_SaraVicca, NPP_Malhi, NPP_Keith, NPP_Forc, NPP_Schulze)
 
 #add pft data derived from orginal data provided from Sara Vicca, and Schulze's book.
-Evergreen<- read.csv(file="~/data/NPP_Yunke/NPP_SaraVicca/orig/pft.csv")
+Evergreen<- read_csv(file="~/data/NPP_Yunke/NPP_SaraVicca/orig/pft.csv")
 NPP_all2 <- merge(NPP_all,Evergreen,by=c("site"),all.x=TRUE)
 NPP_all3 <- NPP_all2[,c("site","lon","lat","z","file","Begin_year","End_year",
                         "Source","GPP","TNPP_1","ANPP_2","BNPP_1","NPP.foliage","NPP.wood","pft")]
 
 # (2) add data from Tian Di (pft = grassland for all data)
 #firstly, clean our current data
-Tiandi_df <- read.csv(file="~/data/npp_stoichiometry_grasslands_tiandi/npp_stoichiometry_china_grassland_CN_stoichiometry_with_matched_NPP_data_from_Prof_Fang_group_20201026.csv")
+Tiandi_df <- read_csv(file="~/data/npp_stoichiometry_grasslands_tiandi/npp_stoichiometry_china_grassland_CN_stoichiometry_with_matched_NPP_data_from_Prof_Fang_group_20201026.csv")
 #as proved in Beni's ref, there is no big diff about lon_stoichmenistry and lon_npp, so we used the lon_npp because it is npp analyses now!
 Tiandi_npp <- Tiandi_df[,c("Original_Site_Label_stoichiometry","Longitude_stoichiometry","Latitude_stoichiometry","Altitude_stoichiometry","Sample_time_NPP","Sample_time_NPP","TNPP","ANPP","ANPP","BNPP","CNratio_leaf","CNratio_root","CNratio_soil")]
 #we will go back to c/n ratio later! It is NPP now only...
@@ -84,7 +85,7 @@ summary(Tiandi_npp$End_year)
 summary(Tiandi_npp)
 
 # (3) add data from Campioli (pft = grassland for all data)
-Cam_df <- read.csv(file="~/data/campioli/grasslands_MCampioli_20160111.csv")
+Cam_df <- read_csv(file="~/data/campioli/grasslands_MCampioli_20160111.csv")
 #correct coordinates firstly
 for (i in 1:nrow(Cam_df)){
   if (Cam_df$latitude_sign[i] == "S"){
@@ -127,7 +128,7 @@ summary(NPP_final)
 dim(NPP_final)
 
 #finally, add more forest sites from corrected Sara Vicca's dataset, including anpp, npp.leaf and npp.wood.
-Sara2_df <- read.csv(file="~/data/NPP_Yunke/NPP_SaraVicca/orig/validation_data/CORRECTIONS_CascadeHead_Andrews.csv")
+Sara2_df <- read_csv(file="~/data/NPP_Yunke/NPP_SaraVicca/orig/validation_data/CORRECTIONS_CascadeHead_Andrews.csv")
 Sara2_df2 <- subset(Sara2_df,Repeat=="no") #remove repeated data as inputted in NPP_SaraVicca
 Sara2_NPP <- Sara2_df2[,c("LONGITUDE","LATITUDE","ELEVATION","YEAR","YEAR","AG_PROD_TREE_TOTAL_AS_CARBON","AG_PROD_TREE_FOLIAGE_AS_CARBON","AG_PROD_TREE_WOOD_AS_CARBON")]
 names(Sara2_NPP) <- c("lon","lat","z","Begin_year","End_year","ANPP_2","NPP.foliage","NPP.wood")
@@ -162,7 +163,7 @@ summary(NPP_final2)
 ###Now, merge leaf c/n from various sources
 
 # (1) Add Schulz - unit: all in g/m2
-CN_Schulz <- read.csv(file="~/data/NPP_Yunke/npp_cn/CN_Schulze.csv")
+CN_Schulz <- read_csv(file="~/data/NPP_Yunke/npp_cn/CN_Schulze.csv")
 CN_Schulz2 <- CN_Schulz[,c(5,48:58)]
 
 CN_Schulz2$CN_leaf_Schulz <- CN_Schulz2$c_leaf/CN_Schulz2$n_leaf
@@ -174,7 +175,7 @@ CN_Schulz2 <- CN_Schulz2[,c("site","CN_leaf_Schulz","CN_root_Schulz","CN_stem_Sc
 CN_Schulz2
 
 # (2) Add Malhi data - assume cmass as constant 0.48 g/g; narea in gm-2, lma in gm-2
-CN_Malhi <- read.csv(file="~/data/NPP_Yunke/npp_cn/CN_Malhi.csv")
+CN_Malhi <- read_csv(file="~/data/NPP_Yunke/npp_cn/CN_Malhi.csv")
 
 #No original data of cmass but we can assume cmass = 48%, because (1) it is consistent with what we find in mean values of /Users/yunpeng/data/CN_leaf/final_leafCN.csv, equals to 47% and (2) see Enquist et al. 2017 https://onlinelibrary.wiley.com/doi/full/10.1111/geb.12645 - fig.2, overall the cmass was within a very small variance through this elevation transect, and we can just assume this value as 0.48!
 
@@ -191,7 +192,7 @@ CN_Malhi2
 
 #(3) Add Species-based traits data, as provided from Sara Vicca, including around 40 forest sites that have species-based leaf c/n
 #The data is c% and n%
-CN_SaraVicca <- read.csv(file="~/data/NPP_Yunke/NPP_SaraVicca/orig/validation_data/NACP_TERRA_PNW_leaf_trait.csv")
+CN_SaraVicca <- read_csv(file="~/data/NPP_Yunke/NPP_SaraVicca/orig/validation_data/NACP_TERRA_PNW_leaf_trait.csv")
 CN_SaraVicca <- CN_SaraVicca[,c("LONGITUDE","LATITUDE","LEAF_CN")]
 CN_SaraVicca$LEAF_CN[CN_SaraVicca$LEAF_CN<0] <- NA
 CN_SaraVicca$LONGITUDE <- as.numeric(CN_SaraVicca$LONGITUDE)
@@ -239,9 +240,9 @@ names(test2) <- c("site","CN_SaraVicca_old")
 
 #(5) Lastly, add Forc leaf, stem and root data (on site basis) - this should be after (3) and (4).
 #But no data matched to current site.
-#Forc <- read.csv(file="~/data/NPP_Yunke/NPP_ForC/orig/ForC_measurements_final.csv")
+#Forc <- read_csv(file="~/data/NPP_Yunke/NPP_ForC/orig/ForC_measurements_final.csv")
 #Forc2 <- aggregate(mean~sites.sitename+Begin_year1+End_year1+variable.name,data=Forc,mean)
-#variablelist <- read.csv(file="~/data/NPP_Yunke/NPP_ForC/orig/site_need.csv")
+#variablelist <- read_csv(file="~/data/NPP_Yunke/NPP_ForC/orig/site_need.csv")
 #variable <- as.character(variablelist$variable.name)
 #mylist <- vector(mode = "list", length = 41)
 #for (i in 1:41){mylist[[i]] <- subset(Forc2,variable.name==variable[i])}
@@ -304,12 +305,12 @@ NPP_final3$wnf_obs_final  <- NPP_final3$NPP.wood/NPP_final3$CN_wood_final
 
 summary(NPP_final3) 
 #Important!!!Input repeated data info
-rep_info <- read.csv("/Users/yunpeng/data/NPP_Yunke/NPP_final_rep.csv")
+rep_info <- read_csv("/Users/yunpeng/data/NPP_Yunke/NPP_final_rep.csv")
 summary(rep_info$lat-NPP_final3$lat)
 NPP_final3$rep_info <- rep_info$rep_info
 
 ####Finally, add Tiandi's latest forest data (the last data we need!)
-tiandi_forest <- read.csv(file="~/data/npp_stoichiometry_forests_tiandi/Site_level_forest_CN_NPP_China_TD_20210104_for_Beni_Yunke.csv")
+tiandi_forest <- read_csv(file="~/data/npp_stoichiometry_forests_tiandi/Site_level_forest_CN_NPP_China_TD_20210104_for_Beni_Yunke.csv")
 tiandi_forest <- tiandi_forest[,c(1,2,3,4,11,14,17,18,19,20,21,22)]
 head(tiandi_forest)
 names(tiandi_forest) <- c("site","lon","lat","z","CN_leaf_final","CN_stem_final","CN_root_final","TNPP_1","ANPP_2",
@@ -375,8 +376,8 @@ NPP <- NPP_Forest
 
 
 #check mean of NRE
-NRE_Du <- read.csv(file="~/data/NRE_various/NRE_Du/NRE_Du.csv")
-NRE_Dong <- read.csv(file="~/data/NRE_various/NRE_Deng/NRE_Deng.csv")
+NRE_Du <- read_csv(file="~/data/NRE_various/NRE_Du/NRE_Du.csv")
+NRE_Dong <- read_csv(file="~/data/NRE_various/NRE_Deng/NRE_Deng.csv")
 
 NRE_Du_df <- NRE_Du[,c("lon","lat","NRE","MAT","MAP")]
 NRE_Du_df <- aggregate(NRE_Du_df,by=list(NRE_Du_df$lon,NRE_Du_df$lat), FUN=mean, na.rm=TRUE) #site-mean
@@ -701,7 +702,7 @@ gg <- plot_map3(bnf_df[,c(1,2,4)],
 gg$gglegend
 
 #corrected obs. cn_root data
-CN_Schulz <- read.csv(file="~/data/NPP_Yunke/npp_cn/CN_Schulze.csv")
+CN_Schulz <- read_csv(file="~/data/NPP_Yunke/npp_cn/CN_Schulze.csv")
 CN_Schulz2 <- CN_Schulz[,c(5,48:58)]
 
 cn_root_df <- subset(NPP2,bnf_obs_final>0)
@@ -897,7 +898,7 @@ ggplot(data=subset(df,obs>0&pred<1), aes(x=pred, y=obs)) +
 
 #(9) leafcn
 #check leaf c/n
-SP_input <- read.csv(file="~/data/CN_leaf/final_individuals.csv") #all individuals
+SP_input <- read_csv(file="~/data/CN_leaf/final_individuals.csv") #all individuals
 SP_input2 <- SP_input[,c("lat","lon","Elevation","Vcmax.25","narea","lma")]
 sitemean <- aggregate(SP_input2,by=list(SP_input2$lon,SP_input2$lat), FUN=mean, na.rm=TRUE) 
 dim(sitemean)

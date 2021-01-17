@@ -1,32 +1,30 @@
 ---
+title: "Statistical models for C-N cycles"
+author: "Yunke Peng, Beni Stocker"
+date: "Sep 16, 2020; revision Jan 17 2021"
 output:
   html_document: default
   pdf_document: default
   word_document: default
 ---
 
----
-title: "Statistical models for C-N cycles"
-author: "Yunke Peng"
-date: "Sep 16, 2020"
-output: html_document
----
 
-###The analysis below shows four statistical models separately
 
-#### 1. TNPP_model - The logit function of (TNPP_1/GPP) predicted by measured soil C:N, measured age, alpha and observed fAPAR
+The analysis below shows four statistical models separately
 
-#### 2. ANPP_model - The logit function of (ANPP_2/GPP) predicted by measured soil C:N,measured age, alpha and observed fAPAR
+1. TNPP_model - The logit function of (TNPP_1/GPP) predicted by measured soil C:N, measured age, alpha and observed fAPAR
 
-#### 3. NPPleaf_model - The logit function of (NPP.foliage/ANPP_2) predidicted by PPFD, Tg and vpd
+2. ANPP_model - The logit function of (ANPP_2/GPP) predicted by measured soil C:N,measured age, alpha and observed fAPAR
 
-### They were all using mixed-effects model. it considered (1|site) as the only random factor. 
+3. NPPleaf_model - The logit function of (NPP.foliage/ANPP_2) predidicted by PPFD, Tg and vpd
 
-### The coefficient generated in summary below will be used in next-step: global mapping of C and N cycle.
+They were all using mixed-effects model. it considered (1|site) as the only random factor. 
 
-### For data sources, units, and basic information of input please refer to README in relevant location in Euler.
+The coefficient generated in summary below will be used in next-step: global mapping of C and N cycle.
 
-### The climate data of all 672 samples were saved in ~/data/NPP_Yunke/climate
+For data sources, units, and basic information of input please refer to README in relevant location in Euler.
+
+The climate data of all 672 samples were saved in ~/data/NPP_Yunke/climate
 
 ```{r}
 library(lme4)
@@ -34,54 +32,117 @@ library(nlme)
 library(lmerTest)
 library("PerformanceAnalytics")
 library(MuMIn)
+library(tidyverse)
+```
 
+## Preapare dataset
+
+### Read NPP data files
+
+Read files.
+```{r}
 ###1. Input original data file from NPP_SaraVicca, NPP_Malhi, NPP_Keith, and NPP_Forc
-NPP_SaraVicca <- read.csv(file="~/data/NPP_Yunke/NPP_SaraVicca/NPP_SaraVicca.csv")
-NPP_Malhi <- read.csv(file="~/data/NPP_Yunke/NPP_Malhi/NPP_Malhi.csv")
-NPP_Keith <- read.csv(file="~/data/NPP_Yunke/NPP_Keith/NPP_Keith.csv")
-NPP_Forc <- read.csv(file="~/data/NPP_Yunke/NPP_ForC/NPP_ForC.csv")
+NPP_SaraVicca <- read_csv(file="~/data/NPP_Yunke/NPP_SaraVicca/NPP_SaraVicca.csv") %>% 
+  mutate(file = "vicca")
+NPP_Malhi <- read_csv(file="~/data/NPP_Yunke/NPP_Malhi/NPP_Malhi.csv") %>% 
+  mutate(file = "malhi")
+NPP_Keith <- read_csv(file="~/data/NPP_Yunke/NPP_Keith/NPP_Keith.csv") %>% 
+  mutate(file = "keith")
+NPP_Forc <- read_csv(file="~/data/NPP_Yunke/NPP_ForC/NPP_ForC.csv") %>% 
+  mutate(file = "forc")
 
-
-#NPP_SaraVicca <- read.csv(file="D:/PhD/nimpl_sofun_inputs/Data/NPP/NPP_SaraVicca/NPP_SaraVicca.csv")
-#NPP_Malhi <- read.csv(file="D:/PhD/nimpl_sofun_inputs/Data/NPP/NPP_Malhi/NPP_Malhi.csv")
-#NPP_Keith <- read.csv(file="D:/PhD/nimpl_sofun_inputs/Data/NPP/NPP_Keith/NPP_Keith.csv")
+#NPP_SaraVicca <- read_csv(file="D:/PhD/nimpl_sofun_inputs/Data/NPP/NPP_SaraVicca/NPP_SaraVicca.csv")
+#NPP_Malhi <- read_csv(file="D:/PhD/nimpl_sofun_inputs/Data/NPP/NPP_Malhi/NPP_Malhi.csv")
+#NPP_Keith <- read_csv(file="D:/PhD/nimpl_sofun_inputs/Data/NPP/NPP_Keith/NPP_Keith.csv")
 #The original data of Forc was avaialable at "~/data/NPP_Yunke/NPP_ForC/orig/", then after a pre-processing code (for merging and removing repeated sites; because there had some repeated sites to Sara Vicca and Keith's dataset), and after manually structuring variable order and name, the output file that directly used in this project is at below (NPP_Forc).
 #The pre-processing code of Forc was available at "D:/PhD/nimpl_sofun_inputs/nimpl_sofun_inputs/NPP/NPP_Forc_preprocessing.Rmd" and also available in yunkepeng github: nimpl_sofun_input/NPP/NPP_Forc_preprocessing.Rmd.
-#NPP_Forc <- read.csv(file="D:/PhD/nimpl_sofun_inputs/Data/NPP/NPP_Forc/NPP_Forc.csv")
+#NPP_Forc <- read_csv(file="D:/PhD/nimpl_sofun_inputs/Data/NPP/NPP_Forc/NPP_Forc.csv")
 
-NPP_all <- rbind(NPP_SaraVicca,NPP_Malhi,NPP_Keith,NPP_Forc)
+NPP_all <- rbind(NPP_SaraVicca, NPP_Malhi, NPP_Keith, NPP_Forc)
+```
 
+**To check:**
 
-###2. Input climate and environmental data
-#### tmn(minimum temperature, celcius degree), tmx(maximum temperature, celcuis degree), radi (shortwave solar radiation, w/m2),vap (vapor pressure, hPa), alphalist3 (alpha derived from SPLASH), CaGlobal (Pa).
-#### Those site-based climate data were derived from geographically weighted regressions (gwr) methods in R. An example code was given in "https://github.com/yunkepeng/gwr".
-#### Data sources: tmn, tmx, vap, pre (from CRU ts 4.01, see: https://crudata.uea.ac.uk/cru/data/hrg/cru_ts_4.01/), radi (from WFDEI, see http://www.eu-watch.org/gfx_content/documents/README-WFDEI%20(v2016).pdf), alpha from SPLASH-based products (see Euler:~/data/alpha/data_orig).
-#### All climate data were obtained from measurement year only, the measurement year is available at NPP_all$Begin_year and NPP_all$End_year
+- Potential for duplicates? There seem to be 63 entries that seem to have at least one duplicate in terms of `(lon, lat, z, site, Begin_year, End_year)`. Check them carefully. Some may be ok since they do come from the same file (see added column `file`). For others, there seems to be data from the same site available and used from multiple NPP files. Note that I rounded digits for `lon` and `lat` to two after the comma. Were they provided at higher resolution in the original files and therefore appear as duplicates after rounding when in fact they are not? (This doesn't seem to be the issue here since rounding to three digits leaves the same apparent duplicates).
 
-tmn <- read.csv(file="~/data/NPP_Yunke/climate/climate.csv")[,1:12] #monthly degree celcius
-tmx <- read.csv(file="~/data/NPP_Yunke/climate/climate.csv")[,13:24] #monthly degree celcius
-vap <- read.csv(file="~/data/NPP_Yunke/climate/climate.csv")[,25:36] #monthly hPa
-pre <- read.csv(file="~/data/NPP_Yunke/climate/climate.csv")[,37:48] #monthly mm/month
-radi<- read.csv(file="~/data/NPP_Yunke/climate/climate.csv")[,49:60] #monthly w/m2
-alphalist3 <- read.csv(file="~/data/NPP_Yunke/climate/climate.csv")$alpha
-CaGlobal <- read.csv(file="~/data/NPP_Yunke/climate/climate.csv")$Ca #ppm
+```{r}
+## considering lon and lat with two digits after the comma indicates that many sites are located within about <1 km
+## how can we avoid duplicates?
+NPP_all %>% 
+  nrow()
+NPP_all %>% 
+  mutate(lon = round(lon, digits = 3), lat = round(lat, digits = 3)) %>% 
+  distinct(lon, lat, z, site, Begin_year, End_year) %>% 
+  nrow()
+NPP_all %>% 
+  group_by(lon, lat, z, site, Begin_year, End_year) %>% 
+  filter(n() > 1) %>% 
+  arrange(lon) %>% 
+  arrange(lat) %>% 
+  dplyr::select(1:9, file)
+```
+
+**To check:**
+
+- Describe here how columns `FAPAR, LAI, GPP` where created? Extraction from global files? What files? What resolution of original files? etc.
+- (Ideally) we want information on original sources (column `Source`) in a format that can be linked with a reference manager. For example create a column with bibtex codes and save all bibtex entries separately with respective codes. This is very labour intensive work but is required (strictly) for tractability of publications.
+
+### Climate covariates
+
+Read monthly climate data for each site.
+
+Added variables are:
+
+- tmn (minimum temperature, celcius degree)
+- tmx (maximum temperature, celcuis degree)
+- radi (shortwave solar radiation, w/m2)
+- vap (vapor pressure, hPa)
+- alphalist3 (alpha derived from SPLASH), 
+- CaGlobal (CO2 partial pressure, Pa).
+
+Those site-based climate data were derived from geographically weighted regressions (gwr) methods in R. An example code was given in "https://github.com/yunkepeng/gwr".
+Data sources: tmn, tmx, vap, pre (from CRU ts 4.01, see: https://crudata.uea.ac.uk/cru/data/hrg/cru_ts_4.01/), radi (from WFDEI, see http://www.eu-watch.org/gfx_content/documents/README-WFDEI%20(v2016).pdf), alpha from SPLASH-based products (see Euler:~/data/alpha/data_orig).
+All climate data were obtained from measurement year only, the measurement year is available at `NPP_all$Begin_year` and `NPP_all$End_year`.
+
+**To check**
+
+- You write "All climate data were obtained from measurement year only", but describe that data was extracted from CRU TS 4.01. Both can't be true at the same time.
+- Which year's data did you extract for sites where `NPP_all$Begin_year` and `NPP_all$End_year` span more than one year?
+
+```{r}
+tmn <- read_csv(file="~/data/NPP_Yunke/climate/climate.csv")[,1:12]  #monthly degree celcius
+tmx <- read_csv(file="~/data/NPP_Yunke/climate/climate.csv")[,13:24] #monthly degree celcius
+vap <- read_csv(file="~/data/NPP_Yunke/climate/climate.csv")[,25:36] #monthly hPa
+pre <- read_csv(file="~/data/NPP_Yunke/climate/climate.csv")[,37:48] #monthly mm/month
+radi<- read_csv(file="~/data/NPP_Yunke/climate/climate.csv")[,49:60] #monthly w/m2
+alphalist3 <- read_csv(file="~/data/NPP_Yunke/climate/climate.csv")$alpha
+CaGlobal <- read_csv(file="~/data/NPP_Yunke/climate/climate.csv")$Ca #ppm
 
 # for workflow of climate data please have a look at yunkepeng github: nimpl_sofun_inputs/climate/, or in Euler's README: "~/data/NPP_Yunke/climate/"
-#tmn <- read.csv(file="D:/PhD/nimpl_sofun_inputs/Data/climate/climate.csv")[,1:12] #monthly degree celcius
-#tmx <- read.csv(file="D:/PhD/nimpl_sofun_inputs/Data/climate/climate.csv")[,13:24] #monthly degree celcius
-#vap <- read.csv(file="D:/PhD/nimpl_sofun_inputs/Data/climate/climate.csv")[,25:36] #monthly hPa
-#pre <- read.csv(file="D:/PhD/nimpl_sofun_inputs/Data/climate/climate.csv")[,37:48] #monthly mm/month
-#radi<- read.csv(file="D:/PhD/nimpl_sofun_inputs/Data/climate/climate.csv")[,49:60] #monthly w/m2
-#alphalist3 <- read.csv(file="D:/PhD/nimpl_sofun_inputs/Data/climate/climate.csv")$alpha
-#CaGlobal <- read.csv(file="D:/PhD/nimpl_sofun_inputs/Data/climate/climate.csv")$Ca #ppm
+#tmn <- read_csv(file="D:/PhD/nimpl_sofun_inputs/Data/climate/climate.csv")[,1:12] #monthly degree celcius
+#tmx <- read_csv(file="D:/PhD/nimpl_sofun_inputs/Data/climate/climate.csv")[,13:24] #monthly degree celcius
+#vap <- read_csv(file="D:/PhD/nimpl_sofun_inputs/Data/climate/climate.csv")[,25:36] #monthly hPa
+#pre <- read_csv(file="D:/PhD/nimpl_sofun_inputs/Data/climate/climate.csv")[,37:48] #monthly mm/month
+#radi<- read_csv(file="D:/PhD/nimpl_sofun_inputs/Data/climate/climate.csv")[,49:60] #monthly w/m2
+#alphalist3 <- read_csv(file="D:/PhD/nimpl_sofun_inputs/Data/climate/climate.csv")$alpha
+#CaGlobal <- read_csv(file="D:/PhD/nimpl_sofun_inputs/Data/climate/climate.csv")$Ca #ppm
 
 elev <- NPP_all$z
 lat <- NPP_all$lat
 lon <- NPP_all$lon
+```
 
+#### Growth temperature
+
+**To check**
+
+- Citation for the function `Tg_cal`? What does it do? Determining the mean temperature above a certain threshold?
+
+
+```{r}
 ###3. climate data calculation (on monthly basis, which means, 12 cols in total)
 ####(1) Tg (growth temperature)
-Tg_cal <- function(tmn,tmx){
+Tg_cal <- function(tmn, tmx){
   #-----------------------------------------------------------------------
   # Input:   ?? (s;solar delclination), 12 month constant values
   # Input:   tmn, in monthly or daily degrees
@@ -103,8 +164,8 @@ Tg_cal <- function(tmn,tmx){
   s11 <- -17.85
   s12 <- -22.355
   s <- c(s1,s2,s3,s4,s5,s6,s7,s8,s9,s10,s11,s12)
-  x <-data.frame(matrix(nrow = nrow(NPP_all),ncol=ncol(tmn))) ##create x dataframe: nrow=No. of sites, ncol=timestep
-  Tg <-data.frame(matrix(nrow = nrow(NPP_all),ncol=ncol(tmn)))##see above
+  x <- data.frame(matrix(nrow = nrow(NPP_all),ncol=ncol(tmn))) ##create x dataframe: nrow=No. of sites, ncol=timestep
+  Tg <- data.frame(matrix(nrow = nrow(NPP_all),ncol=ncol(tmn)))##see above
   
   for (i in 1:ncol(tmn)){
     
@@ -116,86 +177,190 @@ Tg_cal <- function(tmn,tmx){
   Tg[Tg =="NaN"] <- NA
   return(Tg)
 }
-Tg <- Tg_cal(tmn,tmx) # monthly Tg in ??
-Tg_K <- Tg+273.15     # monthly Tg in K
 
+Tg <- Tg_cal(tmn, tmx) # monthly Tg in ??
+Tg_K <- Tg + 273.15     # monthly Tg in K
+```
+
+#### Atmospheric pressure
+
+**To check**
+
+- Citation for elevation to atmospheric pressure conversion? Is it the same as `rpmodel::calc_patm` (see reference given by `?rpmodel::calc_patm`)?
+
+
+```{r}
 ####(2) Pressure, Ca, vpd
 pressure <- 101325*(1-0.0065*elev/288.15)^(9.80665*0.028963/8.31447/0.0065) #pressure in Pa
+```
+
+#### CO2 partial pressure
+
+```{r}
 Ca <- as.list.data.frame(pressure*CaGlobal/1000000) ##Ca in Pa
+```
+
+#### VPD
+
+**To check**
+
+- Calculation of VPD: is it the same as in ingestr (see `?ingestr::calc_vpd`)?
+
+```{r}
 vpd <- 0.611*exp(17.27*(Tg_K-273.15)/((Tg_K-273.15)+237.3))-vap*0.1      #monthly vpd in KPa
+```
 
-####(3) PPFD
+#### PPFD
+
+**To check**
+
+- There must be something wrong in this equation. `Tg` simply cancels out. Did you forget brackets? What reference is this based on?
+
+```{r}
 PPFD <- radi*0.5*4.6 + Tg - Tg # here " + Tg - Tg " means we only need PPFD at growing season, and this will remove the month when Tg is NA.
+```
 
-####(4) observed fAPAR derived from measured LAI, based on Beer's law
+#### fAPAR
+
+observed fAPAR derived from measured LAI, based on Beer's law
+```{r}
 #NPP_all$observedfAPAR <- 1-(1/exp(NPP_all$LAI*0.5))
 NPP_all$observedfAPAR <- 1-exp(-0.5 * NPP_all$LAI)
+```
 
-###4. calculate average of climate data, and attach into NPP_all dataframe.
+#### Mean across months
 
+Calculate average of climate data, and attach into NPP_all dataframe.
+
+```{r}
 NPP_all$vpd <- rowMeans(vpd,na.rm = TRUE) 
 NPP_all$Tg <- rowMeans(Tg,na.rm = TRUE)
 NPP_all$PPFD <- rowMeans(PPFD,na.rm = TRUE)
 NPP_all$alpha <- alphalist3
-###5. merge MEASURED soil (orginally provided from Sara Vicca)
-####(1) For our purpose, we only need CN, pH, age
+```
 
-soil2 <-read.csv(file="~/data/NPP_Yunke/NPP_SaraVicca/orig/soil.csv")
-#soil <-read.csv(file="D:/PhD/nimpl_sofun_inputs/Data/NPP/NPP_SaraVicca/orig/soil.csv")
-#soil <-read.csv(file="/Users/yunpeng/Desktop/phd/code/tempory_nimpl/soil.csv")
+### Soil covariates
+
+Merge MEASURED soil (orginally provided from Sara Vicca). For our purpose, we only need CN, pH, age
+
+**To check**
+
+- Why are soil, age, management, and PFT information provided in separate files? Is this information provided for the same sites a the sites contained in one of the NPP files? Maybe the file `NPP_SaraVicca.csv`? Why not add the info there directly? Is the soil, age, management, and PFT information also used in a published paper? Can we add a reference to this information?
+
+
+```{r}
+soil2 <- read_csv(file = "~/data/NPP_Yunke/NPP_SaraVicca/orig/soil.csv")
+#soil <-read_csv(file="D:/PhD/nimpl_sofun_inputs/Data/NPP/NPP_SaraVicca/orig/soil.csv")
+#soil <-read_csv(file="/Users/yunpeng/Desktop/phd/code/tempory_nimpl/soil.csv")
 #orig: /Volumes/Seagate Backup Plus Drive/HP/E/C-N cycling/Carbon allocation/next-step/soil_colin.csv + literatures data from Malhi
 names(soil2)<-c("site","lon","lat","soilC","soilN","CN","pH")
 
 ####(2) we na.omit() each variable, and merge them separately.
 CN <- na.omit(soil2[,c("site","CN")])
-final_sites1 <- merge(NPP_all,CN,by=c("site"),all.x=TRUE)
+final_sites1 <- merge(NPP_all, CN, by=c("site"), all.x=TRUE)
+
 pH <- na.omit(soil2[,c("site","pH")])
-final_sites2 <- merge(final_sites1,pH,by=c("site"),all.x=TRUE)
+final_sites2 <- merge(final_sites1, pH, by=c("site"), all.x=TRUE)
+```
 
-###6. merge MEASURED management-type and stand-age data (the csv was derived from original data of Sara Vicca).
-####(1) merge management type into dataframe. Management types (M: Managed, UM: unmanaged, RD: Recently disturbed, FI: Fertilized, NA: unknown).
+### Vegetation structure covariates
 
-manage_age <-read.csv(file="~/data/NPP_Yunke/NPP_SaraVicca/orig/age_and_management.csv") # first two cols were sitename and management data, last two cols were sitename and stand-age data.
-#manage_age <-read.csv(file="D:/PhD/nimpl_sofun_inputs/Data/NPP/NPP_SaraVicca/orig/age_and_management.csv") # first two cols were sitename and management data, last two cols were sitename and stand-age data.
-manage <-manage_age[1:159,1:2]
+#### Management
+
+Merge MEASURED management-type and stand-age data (the csv was derived from original data of Sara Vicca). Merge management type into dataframe. Management types (M: Managed, UM: unmanaged, RD: Recently disturbed, FI: Fertilized, NA: unknown).
+```{r}
+# first two cols were sitename and management data, last two cols were sitename and stand-age data.
+manage_age <- read_csv(file="~/data/NPP_Yunke/NPP_SaraVicca/orig/age_and_management.csv") 
+
+#manage_age <-read_csv(file="D:/PhD/nimpl_sofun_inputs/Data/NPP/NPP_SaraVicca/orig/age_and_management.csv") # first two cols were sitename and management data, last two cols were sitename and stand-age data.
+
+manage <- manage_age[1:159, 1:2]
 names(manage) <- c("site","management")
-final_sites3 <- merge(final_sites2,manage,by=c("site"),all.x=TRUE)
+final_sites3 <- merge(final_sites2, manage, by=c("site"), all.x=TRUE)
+```
 
-####(2) merge stand-age data into dataframe. There might be more than 1 sample measured in a site (as collected from different sources). So we need to aggregate them firstly.
-agee <- na.omit(manage_age[1:230,3:4]) #we only need original stand-age data from Sara Vicca's original dataset (see ~/data/NPP_Yunke/NPP_SaraVicca/orig/Forests_Colin.xlsx  --> stand description/age) to finish npp/gpp and anpp/gpp analyses. 
+#### Stand age
+
+Merge stand-age data into dataframe. There might be more than 1 sample measured in a site (as collected from different sources). So we need to aggregate them firstly.
+```{r}
+#we only need original stand-age data from Sara Vicca's original dataset (see ~/data/NPP_Yunke/NPP_SaraVicca/orig/Forests_Colin.xlsx  --> stand description/age) to finish npp/gpp and anpp/gpp analyses.
+agee <- na.omit(manage_age[1:230,3:4])
 #agee <- na.omit(manage_age[,3:4])# I have added more stand age sites when extracted from Forc's original data but that did not help to expand our sites for npp/gpp and anpp/gpp analysis (considering that they did not have gpp, or some others.). So they did not included here.
 
 names(agee) <- c("site","age")
-agee2 <- aggregate(age~site,data=agee,mean,na.rm=TRUE)
-final_sites4 <- merge(final_sites3,agee2,by=c("site"),all.x=TRUE)
-
-###6.add pft data derived from orginal data provided from Sara Vicca
-
-Evergreen <- read.csv(file="~/data/NPP_Yunke/NPP_SaraVicca/orig/pft.csv")
-#Evergreen <- read.csv(file="D:/PhD/nimpl_sofun_inputs/Data/NPP/NPP_SaraVicca/orig/pft.csv")
-
-final_sites5 <- merge(final_sites4,Evergreen,by=c("site"),all.x=TRUE)
-summary(final_sites5$pft)
-
-
-####7. Output of analyses --> by all means we should use original sitename!!!Because it is the original data recorded by fields. Using coordinates to create sitenname is not reasonable - see evidence for Andrews 2 and Andrews 4 - they have the same coordinates (in 0.01 dec) but different site collection!!!!
-######(1) NPP/GPP function
-######Predictors: Measured soil C/N, Measured stand-age(yrs), alpha (from SPLASH) and observed fAPAR (calculated from measured LAI based on Beer's law).
-final_sites6 <- subset(final_sites5,CN>0 & age>0 & observedfAPAR>0  & alpha>0 & GPP>TNPP_1) # prevent one site when measured npp > gpp.
-summary(lmer(log((TNPP_1/GPP)/(1-(TNPP_1/GPP)))~log(CN)+log(age)+alpha+observedfAPAR+(1|site),data=final_sites6))
-
-r.squaredGLMM(lmer(log((TNPP_1/GPP)/(1-(TNPP_1/GPP)))~log(CN)+log(age)+alpha+observedfAPAR+(1|site),data=final_sites6))
-
-######(2) ANPP/GPP function
-######Predictors: Measured soil C/N, Measured stand-age(yrs), alpha (from SPLASH) and observed fAPAR (calculated from measured LAI based on Beer's law).
-summary(lmer(log((ANPP_2/GPP)/(1-(ANPP_2/GPP)))~log(CN)+log(age)+alpha+observedfAPAR+(1|site),data=final_sites5))
-
-r.squaredGLMM(lmer(log((ANPP_2/GPP)/(1-(ANPP_2/GPP)))~log(CN)+log(age)+alpha+observedfAPAR+(1|site),data=final_sites5))
-
-######(3) NPP.foliage/ANPP function
-summary(lmer(log((NPP.foliage/ANPP_2)/(1-(NPP.foliage/ANPP_2)))~log(PPFD)+Tg+log(vpd)+(1|site),data=final_sites5))
-
-r.squaredGLMM(lmer(log((NPP.foliage/ANPP_2)/(1-(NPP.foliage/ANPP_2)))~log(PPFD)+Tg+log(vpd)+(1|site),data=final_sites5))
-
+agee2 <- aggregate(age ~ site, data=agee, mean, na.rm=TRUE)
+final_sites4 <- merge(final_sites3, agee2, by=c("site"), all.x=TRUE)
 ```
 
+#### PFT information
+
+Add pft data derived from orginal data provided from Sara Vicca.
+
+```{r}
+Evergreen <- read_csv(file="~/data/NPP_Yunke/NPP_SaraVicca/orig/pft.csv")
+#Evergreen <- read_csv(file="D:/PhD/nimpl_sofun_inputs/Data/NPP/NPP_SaraVicca/orig/pft.csv")
+
+final_sites5 <- merge(final_sites4, Evergreen, by=c("site"), all.x=TRUE)
+summary(final_sites5$pft)
+```
+
+Save intermediate file.
+```{r}
+write_csv(final_sites5, path = "~/nimpl_sofun_inputs/data/final_sites5.csv")
+```
+
+
+## Fit models
+
+By all means we should use original sitename!!! Because it is the original data recorded by fields. Using coordinates to create sitenname is not reasonable - see evidence for Andrews 2 and Andrews 4 - they have the same coordinates (in 0.01 dec) but different site collection!!!!
+
+### NPP:GPP
+
+Predictors: Measured soil C/N, Measured stand-age(yrs), alpha (from SPLASH) and observed fAPAR (calculated from measured LAI based on Beer's law).
+
+**To check**
+
+- How were predictors selected? Describe criteria. Ideally, the predictor selection should be automated and included here as executable code (to reproduce it easily).
+- In the paper, also describe preprocessing steps, including the subsetting criteria (e.g., `GPP>TNPP_1`), log transformation (why?)
+- coding: always save model object and write to file. The coefficients of the fitted model can thus be accessed easily by other steps of the workflow without having to copy paste from the `summary` output.
+
+```{r}
+final_sites6 <- subset(final_sites5, CN>0 & age>0 & observedfAPAR>0  & alpha>0 & GPP>TNPP_1) # prevent one site when measured npp > gpp.
+
+## save model object and write to file
+mod_npp <- lmer(log((TNPP_1/GPP)/(1-(TNPP_1/GPP))) ~ log(CN) + log(age) + alpha + observedfAPAR + (1|site), data = final_sites6)
+save(mod_npp, file = "~/nimpl_sofun_inputs/data/mod_npp.RData")
+
+summary(mod_npp)
+r.squaredGLMM(mod_npp)
+```
+
+### ANPP:GPP
+
+Predictors: Measured soil C/N, Measured stand-age(yrs), alpha (from SPLASH) and observed fAPAR (calculated from measured LAI based on Beer's law).
+
+**To check**
+
+(same comments as above)
+
+```{r}
+mod_anpp <- lmer(log((ANPP_2/GPP)/(1-(ANPP_2/GPP))) ~ log(CN) + log(age) + alpha + observedfAPAR + (1|site), data = final_sites5)
+save(mod_anpp, file = "~/nimpl_sofun_inputs/data/mod_anpp.RData")
+
+summary(mod_anpp)
+r.squaredGLMM(mod_anpp)
+```
+
+### leafNPP:ANPP
+
+```{r}
+mod_lnpp <- lmer(log((NPP.foliage/ANPP_2)/(1-(NPP.foliage/ANPP_2))) ~ log(PPFD) + Tg + log(vpd) + (1|site), data = final_sites5)
+save(mod_lnpp, file = "~/nimpl_sofun_inputs/data/mod_lnpp.RData")
+
+summary(mod_lnpp)
+r.squaredGLMM(mod_lnpp)
+```
+
+**To Check:**
+
+- Add visualisations of models. For exapmle effect sites (estimates of coefficients and their confidence intervals, see e.g., [here](https://lmudge13.github.io/sample_code/mixed_effects.html), partial dependence plots using the [visreg package](https://pbreheny.github.io/visreg/), or also predicted vs. observed values as you have done before).
