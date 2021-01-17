@@ -39,6 +39,8 @@ library(tidyverse)
 
 ### Read NPP data files
 
+XXX Please list citations for these datasets (representing relevant paper describing the dataset collection, not original sources of site measurements)
+
 Read files.
 ```{r}
 ###1. Input original data file from NPP_SaraVicca, NPP_Malhi, NPP_Keith, and NPP_Forc
@@ -306,6 +308,7 @@ summary(final_sites5$pft)
 
 Save intermediate file.
 ```{r}
+final_sites5 <- as_tibble(final_sites5)
 write_csv(final_sites5, path = "~/nimpl_sofun_inputs/data/final_sites5.csv")
 ```
 
