@@ -1,24 +1,16 @@
 ---
+title: "Check Global Nitrogen uptake"
+author: "Yunke Peng"
+date: "Dec 13 2020"
 output:
   html_document: default
   pdf_document: default
   word_document: default
 ---
 
----
-title: "Check Global Nitrogen uptake"
-author: "Yunke Peng"
-date: "Dec 13 2020"
-output: html_document
----
-
-## GPP data description
-
 Here it firstly extracts FOREST leaf, stem, wood, root c/n from very different sources - and then after calculating with NPP.leaf, stem, root...it will get N flux in different compartments, and finally N uptake. And therefore could be used to compare with simulated N flux.
 
-
 ```{r}
-
 library(ingestr)
 library(dplyr)
 library(tidyverse)  # depends
@@ -40,36 +32,63 @@ library(maps)
 library(rworldmap)
 library(cowplot)
 library(spgwr)
-load(file = "/Users/yunpeng/yunkepeng/nimpl_sofun_inputs/forest/Forest_Global_check.Rdata")
 
-# (1) pre-processing NPP
-# rbind data (more data details see https://github.com/yunkepeng/nimpl_sofun_inputs/blob/master/NPP/NPP_statistical_model.Rmd)
-NPP_SaraVicca <- read.csv(file="~/data/NPP_Yunke/NPP_SaraVicca/NPP_SaraVicca.csv")
-NPP_Malhi <- read.csv(file="~/data/NPP_Yunke/NPP_Malhi/NPP_Malhi.csv")
-NPP_Keith <- read.csv(file="~/data/NPP_Yunke/NPP_Keith/NPP_Keith.csv")
-NPP_Forc <- read.csv(file="~/data/NPP_Yunke/NPP_Forc/NPP_Forc.csv")
-NPP_Schulze <- read.csv(file="~/data/NPP_Yunke/NPP_Schulze/NPP_Schulze.csv")
+## XXX can't access this file
+#load(file = "/Users/yunpeng/yunkepeng/nimpl_sofun_inputs/forest/Forest_Global_check.Rdata")
+```
 
-NPP_all <- rbind(NPP_SaraVicca,NPP_Malhi,NPP_Keith,NPP_Forc,NPP_Schulze)
+
+## Read and combine NPP data
+
+Files used for model fitting plus Schulze data ...
+```{r}
+NPP_SaraVicca <- read_csv(file="~/data/NPP_Yunke/NPP_SaraVicca/NPP_SaraVicca.csv") %>% 
+  mutate(file = "vicca")
+NPP_Malhi <- read_csv(file="~/data/NPP_Yunke/NPP_Malhi/NPP_Malhi.csv") %>% 
+  mutate(file = "malhi")
+NPP_Keith <- read_csv(file="~/data/NPP_Yunke/NPP_Keith/NPP_Keith.csv") %>% 
+  mutate(file = "keith")
+NPP_Forc <- read_csv(file="~/data/NPP_Yunke/NPP_ForC/NPP_ForC.csv") %>% 
+  mutate(file = "forc")
+NPP_Schulze <- read_csv(file="~/data/NPP_Yunke/NPP_Schulze/NPP_Schulze.csv") %>% 
+  mutate(file = "schulze")
+
+NPP_all <- rbind(NPP_SaraVicca, NPP_Malhi, NPP_Keith, NPP_Forc, NPP_Schulze)
 
 #add pft data derived from orginal data provided from Sara Vicca, and Schulze's book.
-Evergreen<- read.csv(file="~/data/NPP_Yunke/NPP_SaraVicca/orig/pft.csv")
-NPP_all2 <- merge(NPP_all,Evergreen,by=c("site"),all.x=TRUE)
+Evergreen<- read_csv(file="~/data/NPP_Yunke/NPP_SaraVicca/orig/pft.csv")
+NPP_all2 <- merge(NPP_all, Evergreen, by=c("site"), all.x=TRUE)
 NPP_all3 <- NPP_all2[,c("site","lon","lat","z","file","Begin_year","End_year",
                         "Source","GPP","TNPP_1","ANPP_2","BNPP_1","NPP.foliage","NPP.wood","pft")]
 
-# (2) add data from Tian Di (pft = grassland for all data)
-#firstly, clean our current data
-Tiandi_df <- read.csv(file="~/data/npp_stoichiometry_grasslands_tiandi/npp_stoichiometry_china_grassland_CN_stoichiometry_with_matched_NPP_data_from_Prof_Fang_group_20201026.csv")
-#as proved in Beni's ref, there is no big diff about lon_stoichmenistry and lon_npp, so we used the lon_npp because it is npp analyses now!
+## to be able to nicely work with it
+NPP_all3 <- as_tibble(NPP_all3)
+```
+
+### Add Tian Di data
+
+add data from Tian Di (pft = grassland for all data)
+```{r}
+# firstly, clean our current data
+Tiandi_df <- read_csv(
+  file = "~/data/npp_stoichiometry_grasslands_tiandi/npp_stoichiometry_china_grassland_CN_stoichiometry_with_matched_NPP_data_from_Prof_Fang_group_20201026.csv"
+  ) %>% 
+  
+  ## XXX added this here instead of doing it below by row index (which is more error-prone)
+  mutate(file = "Tiandi") %>% 
+  mutate(pft = "Grassland")
+
+# as proved in Beni's ref, there is no big diff about lon_stoichmenistry and lon_npp, so we used the lon_npp because it is npp analyses now!
+## XXX add columns 'file' and 'pft' to make it work
 Tiandi_npp <- Tiandi_df[,c("Original_Site_Label_stoichiometry","Longitude_stoichiometry","Latitude_stoichiometry","Altitude_stoichiometry","Sample_time_NPP","Sample_time_NPP","TNPP","ANPP","ANPP","BNPP","CNratio_leaf","CNratio_root","CNratio_soil")]
-#we will go back to c/n ratio later! It is NPP now only...
+
+# we will go back to c/n ratio later! It is NPP now only...
 names(Tiandi_npp) <- c("site","lon","lat","z","Begin_year","End_year","TNPP_1","ANPP_2","NPP.foliage","BNPP_1","CN_leaf","CN_root","CN_soil")
 
-#correct measurement year!
+# correct measurement year!
 for (i in 1:nrow(Tiandi_npp)){
   if (is.na(Tiandi_npp$Begin_year[i]) == TRUE){ #if measruement year not available
-    Tiandi_npp$Begin_year[i] <- 1991#convert to long-term
+    Tiandi_npp$Begin_year[i] <- 1991 #convert to long-term
     Tiandi_npp$End_year[i] <- 2010 #convert to long-term 
   } else {
     Tiandi_npp$Begin_year[i] <- as.numeric(substr(Tiandi_npp$Begin_year[i], start = 1, stop = 4))
@@ -79,13 +98,25 @@ for (i in 1:nrow(Tiandi_npp)){
 
 Tiandi_npp$Begin_year <- as.numeric(Tiandi_npp$Begin_year)
 Tiandi_npp$End_year <- as.numeric(Tiandi_npp$End_year)
-summary(Tiandi_npp$Begin_year)
-summary(Tiandi_npp$End_year)
-summary(Tiandi_npp)
+```
 
-# (3) add data from Campioli (pft = grassland for all data)
-Cam_df <- read.csv(file="~/data/campioli/grasslands_MCampioli_20160111.csv")
-#correct coordinates firstly
+Look at distribution of leaf C:N ratios.
+```{r}
+Tiandi_npp %>% 
+  ggplot(aes(x = CN_leaf, y = ..count..)) +
+  geom_histogram()
+```
+
+XXX These values are much lower than the ones in the Terra-P dataset. We discussed that this may be a real difference. To be sure, could you please check with Di Tian whether the data here is also in units of gC / gN?
+
+Add data from Campioli et al. 2015 (pft = grassland for all data)
+```{r}
+Cam_df <- read_csv(file="~/data/campioli/grasslands_MCampioli_20160111.csv") %>% 
+  ## XXX added this here instead of doing it below by row index (which is more error-prone)
+  mutate(file = "MCampioli") %>% 
+  mutate(pft = "Grassland")
+
+# correct coordinates firstly
 for (i in 1:nrow(Cam_df)){
   if (Cam_df$latitude_sign[i] == "S"){
     Cam_df$lat[i] <- -(Cam_df$latitude_value[i])
@@ -99,36 +130,52 @@ for (i in 1:nrow(Cam_df)){
   }
 }
 
+## XXX add columns 'file' and 'pft' to make it work
 Cam_npp <- Cam_df[,c("site","lon","lat","elevation","period_start","period_end","tnpp","anpp","anpp","bnpp","managment","biome")]
 names(Cam_npp) <- c("site","lon","lat","z","Begin_year","End_year","TNPP_1","ANPP_2","NPP.foliage","BNPP_1","management_MCampioli","biome_MCampioli")
+```
 
-#rbind them and manually add some input
-NPP_final <- dplyr::bind_rows(NPP_all3, Tiandi_npp,Cam_npp) 
+Combine datasets and complement column `pft2`.
+```{r}
+NPP_final <- dplyr::bind_rows(NPP_all3, Tiandi_npp, Cam_npp) 
 
-NPP_final$file[685:1598] <- "Tiandi"
-NPP_final$file[1599:1739] <- "MCampioli"
-
-NPP_final$Source[685:1598] <- "Tiandi in Euler (Tibet dataset)"
-NPP_final$Source[1599:1739] <- "MCampioli in Euler"
-
-NPP_final$pft[685:1739] <- "Grassland"
+# ## XXX this is done now (more safely) directly with reading datasets
+# NPP_final$file[685:1598] <- "Tiandi"
+# NPP_final$file[1599:1739] <- "MCampioli"
+# NPP_final$Source[685:1598] <- "Tiandi in Euler (Tibet dataset)"
+# NPP_final$Source[1599:1739] <- "MCampioli in Euler"
+# NPP_final$pft[685:1739] <- "Grassland"
 
 NPP_final$lnf_obs <- NPP_final$NPP.foliage/NPP_final$CN_leaf
 NPP_final$bnf_obs <- NPP_final$BNPP_1/NPP_final$CN_root
 
-for (i in 1:nrow(NPP_final)){
-  if (NPP_final$pft[i] == "Deciduous"|NPP_final$pft[i] == "Evergreen"|NPP_final$pft[i] == "Forest"|NPP_final$pft[i] == "Mixed"){
-    NPP_final$pft2[i] <- "Forest"
-  } else {
-    NPP_final$pft2[i] <- "Grassland"
-  }
-}
-summary(NPP_final)
-dim(NPP_final)
+## XXX column pft2 is not created at this point -> causes error.
+# for (i in 1:nrow(NPP_final)){
+#   if (NPP_final$pft[i] == "Deciduous"|NPP_final$pft[i] == "Evergreen"|NPP_final$pft[i] == "Forest"|NPP_final$pft[i] == "Mixed"){
+#     NPP_final$pft2[i] <- "Forest"
+#   } else {
+#     NPP_final$pft2[i] <- "Grassland"
+#   }
+# }
 
-#finally, add more forest sites from corrected Sara Vicca's dataset, including anpp, npp.leaf and npp.wood.
-Sara2_df <- read.csv(file="~/data/NPP_Yunke/NPP_SaraVicca/orig/validation_data/CORRECTIONS_CascadeHead_Andrews.csv")
-Sara2_df2 <- subset(Sara2_df,Repeat=="no") #remove repeated data as inputted in NPP_SaraVicca
+## xxx do above code more elegantly and safely:
+NPP_final <- NPP_final %>% 
+  mutate(pft2 = ifelse(pft %in% c("Deciduous", "Evergreen", "Forest", "Mixed"), "Forest", "Grassland"))
+
+## size of dataset
+dim(NPP_final)
+```
+
+XXX Source information is missing for sites from Tian Di's and Matteo's datasets (1055 rows).
+
+Finally, add more forest sites from corrected Sara Vicca's dataset, including anpp, npp.leaf and npp.wood (but no measured environmental covariates available).
+
+XXX Please provide citation for this added dataset. How were duplicates with previously included data avoided?
+XXX File name seems odd.
+
+```{r message = FALSE, warning=FALSE}
+Sara2_df <- read_csv(file="~/data/NPP_Yunke/NPP_SaraVicca/orig/validation_data/CORRECTIONS_CascadeHead_Andrews.csv")
+Sara2_df2 <- subset(Sara2_df, Repeat=="no") #remove repeated data as inputted in NPP_SaraVicca
 Sara2_NPP <- Sara2_df2[,c("LONGITUDE","LATITUDE","ELEVATION","YEAR","YEAR","AG_PROD_TREE_TOTAL_AS_CARBON","AG_PROD_TREE_FOLIAGE_AS_CARBON","AG_PROD_TREE_WOOD_AS_CARBON")]
 names(Sara2_NPP) <- c("lon","lat","z","Begin_year","End_year","ANPP_2","NPP.foliage","NPP.wood")
 Sara2_NPP$ANPP_2[Sara2_NPP$ANPP_2<=0] <- NA
@@ -155,28 +202,58 @@ Sara2_NPP2 <- merge(Sara2_NPP,Sara2_NPP_sitename,by=c("lon","lat","z"),all.x=TRU
 Sara2_NPP2 <- Sara2_NPP2[order(Sara2_NPP2$no), ]
 
 Sara2_NPP2 <- Sara2_NPP2[,c(1:12,14)] #remove no
+```
 
+Combine datsets
+
+XXX Recommendation: overwrite objects instead of creating a new object each time (e.g., NPP_final and NPP_final2).
+
+```{r}
 NPP_final2 <- dplyr::bind_rows(NPP_final, Sara2_NPP2) 
 summary(NPP_final2)
+```
 
-###Now, merge leaf c/n from various sources
 
-# (1) Add Schulz - unit: all in g/m2
-CN_Schulz <- read.csv(file="~/data/NPP_Yunke/npp_cn/CN_Schulze.csv")
+## Read C:N data and combine
+
+Now, merge leaf c/n from various sources
+
+### Schulz et al
+
+Add Schulz - unit: all in g/m2
+
+XXX is this m2 ground area? Please specify units in the README.
+
+XXX Distinction between stem and branches appears quite important (very different C:N ratios!). Is this disinction made in other datasets? What does 'wood' represent in the other datasets?
+
+```{r}
+CN_Schulz <- read_csv(file="~/data/NPP_Yunke/npp_cn/CN_Schulze.csv")
 CN_Schulz2 <- CN_Schulz[,c(5,48:58)]
 
 CN_Schulz2$CN_leaf_Schulz <- CN_Schulz2$c_leaf/CN_Schulz2$n_leaf
 CN_Schulz2$CN_root_Schulz <- CN_Schulz2$c_fineroot/CN_Schulz2$n_root
 CN_Schulz2$CN_stem_Schulz <- CN_Schulz2$c_stem/CN_Schulz2$n_stem
-CN_Schulz2$CN_wood_Schulz <- (CN_Schulz2$c_stem+CN_Schulz2$c_branch)/(CN_Schulz2$n_stem+CN_Schulz2$n_branch)
+CN_Schulz2$CN_branch_Schulz <- CN_Schulz2$c_branch/CN_Schulz2$n_branch
+
+## XXX This is only correct if all values are given per unit ground area
+CN_Schulz2$CN_wood_Schulz <- (CN_Schulz2$c_stem + CN_Schulz2$c_branch)/(CN_Schulz2$n_stem + CN_Schulz2$n_branch)
 
 CN_Schulz2 <- CN_Schulz2[,c("site","CN_leaf_Schulz","CN_root_Schulz","CN_stem_Schulz","CN_wood_Schulz")]
 CN_Schulz2
+```
 
-# (2) Add Malhi data - assume cmass as constant 0.48 g/g; narea in gm-2, lma in gm-2
-CN_Malhi <- read.csv(file="~/data/NPP_Yunke/npp_cn/CN_Malhi.csv")
+### Malhi et al.
 
-#No original data of cmass but we can assume cmass = 48%, because (1) it is consistent with what we find in mean values of /Users/yunpeng/data/CN_leaf/final_leafCN.csv, equals to 47% and (2) see Enquist et al. 2017 https://onlinelibrary.wiley.com/doi/full/10.1111/geb.12645 - fig.2, overall the cmass was within a very small variance through this elevation transect, and we can just assume this value as 0.48!
+Add Malhi data - assume cmass as constant 0.48 g/g; narea in gm-2, lma in gm-2.
+
+No original data of cmass but we can assume cmass = 48%, because (1) it is consistent with what we find in mean values of /Users/yunpeng/data/CN_leaf/final_leafCN.csv, equals to 47% and (2) see Enquist et al. 2017 https://onlinelibrary.wiley.com/doi/full/10.1111/geb.12645 - fig.2, overall the cmass was within a very small variance through this elevation transect, and we can just assume this value as 0.48.
+
+XXX information on this dataset lacking in README (`~/data/NPP_Yunke/npp_cn/README.md`). Original citation?
+
+XXX Why not use the value of cmass provided in that same dataset (0.4638)?
+
+```{r}
+CN_Malhi <- read_csv(file="~/data/NPP_Yunke/npp_cn/CN_Malhi.csv")
 
 CN_Malhi$CN_leaf_alt_malhi <- 0.48/(CN_Malhi$narea/CN_Malhi$lma) # use CN_leaf_alt as a new and alternative variable, by storing data when Cmass or (c%) is lacking.
 
@@ -184,20 +261,62 @@ CN_Malhi <- na.omit(CN_Malhi)
 
 newmap <- getMap(resolution = "low")
 plot(newmap, xlim = c(-180, 180), ylim = c(-75, 75), asp = 1)
-points(CN_Malhi$lon,CN_Malhi$lat, col="red", pch=16,cex=1)
+points(CN_Malhi$lon ,CN_Malhi$lat, col="red", pch=16,cex=1)
 
 CN_Malhi2 <- CN_Malhi[,c("site","CN_leaf_alt_malhi")]
 CN_Malhi2
+```
 
-#(3) Add Species-based traits data, as provided from Sara Vicca, including around 40 forest sites that have species-based leaf c/n
-#The data is c% and n%
-CN_SaraVicca <- read.csv(file="~/data/NPP_Yunke/NPP_SaraVicca/orig/validation_data/NACP_TERRA_PNW_leaf_trait.csv")
-CN_SaraVicca <- CN_SaraVicca[,c("LONGITUDE","LATITUDE","LEAF_CN")]
-CN_SaraVicca$LEAF_CN[CN_SaraVicca$LEAF_CN<0] <- NA
-CN_SaraVicca$LONGITUDE <- as.numeric(CN_SaraVicca$LONGITUDE)
-CN_SaraVicca$LATITUDE <- as.numeric(CN_SaraVicca$LATITUDE)
+Plot distribution of values
+```{r}
+CN_Malhi2 %>% 
+  ggplot(aes(x = CN_leaf_alt_malhi, y = ..count..)) +
+  geom_histogram()
+```
 
-CN_SaraVicca2 <- aggregate(CN_SaraVicca, by=list(CN_SaraVicca$LONGITUDE,CN_SaraVicca$LATITUDE), mean,na.rm=TRUE)
+### Terra-P leaf traits
+
+Add Species-based traits data, as provided from Sara Vicca, including around 40 forest sites that have species-based leaf c/n
+
+XXX add variable descriptions for file `NACP_TERRA_PNW_leaf_trait.csv` in the README, sitting in the same directory.
+
+The data is c% and n%.
+```{r}
+CN_SaraVicca <- read_csv(file="~/data/NPP_Yunke/NPP_SaraVicca/orig/validation_data/NACP_TERRA_PNW_leaf_trait.csv") %>% 
+  
+  ## xxx more elegant way to treat NA 
+  na_if(-9999)
+
+## xxx
+# CN_SaraVicca <- CN_SaraVicca[,c("LONGITUDE","LATITUDE","LEAF_CN")]
+## more elegantly ;-)
+CN_SaraVicca <- CN_SaraVicca %>% 
+  dplyr::select(LONGITUDE, LATITUDE, LEAF_CN)
+
+# NA is treated above
+# CN_SaraVicca$LEAF_CN[CN_SaraVicca$LEAF_CN<0] <- NA
+
+# ## xxx not necessary when using read_csv instead of read.csv
+# CN_SaraVicca$LONGITUDE <- as.numeric(CN_SaraVicca$LONGITUDE)
+# CN_SaraVicca$LATITUDE <- as.numeric(CN_SaraVicca$LATITUDE)
+```
+
+
+Plot distribution of values
+```{r}
+CN_SaraVicca %>% 
+  ggplot(aes(x = LEAF_CN, y = ..count..)) +
+  geom_histogram()
+```
+
+### More steps? XXX
+
+XXX You aggregate here. Is this across data points for a given location (longitude-latitude)? A question: are C:N values available from the different datasets ecosystem-level numbers? Or tree-level? If they are tree-level, wouldn't we have to take a mean, weighted be the respective tree's NPP (that is: leaf NPP, wood NPP, root NPP)?
+
+XXX Could you describe in words what is done by the chunk below and why?
+
+```{r message=FALSE, warning=FALSE}
+CN_SaraVicca2 <- aggregate(CN_SaraVicca, by=list(CN_SaraVicca$LONGITUDE, CN_SaraVicca$LATITUDE), mean, na.rm=TRUE)
 CN_SaraVicca2 <- CN_SaraVicca2[,c("LONGITUDE","LATITUDE","LEAF_CN")]
 names(CN_SaraVicca2) <- c("lon","lat","CN_leaf_sara")
 dim(CN_SaraVicca2)
@@ -211,9 +330,8 @@ test1 <- aggregate(test1, by=list(test1$lon,test1$lat,test1$z), mean,na.rm=TRUE)
 dim(test1)
 test1<- test1[,c("lon","lat","z","CN_leaf_sara")]
 
-
 #(4) need to merge with more sites? As far as its coordinates are within 0.01 deg?
-NPP_old <- NPP_final[1:1739,]
+NPP_old <- NPP_final[1:1739,]  # try to avoid reference by index. If anything changes rows, this will mess up the analysis
 NPP_old$lon <- round(NPP_old$lon,2)
 NPP_old$lat <- round(NPP_old$lat,2)
 
@@ -223,6 +341,7 @@ names(CN_SaraVicca3) <- c("lon","lat","CN_SaraVicca_old")
 CN_SaraVicca3$lon <- round(CN_SaraVicca3$lon,2)
 CN_SaraVicca3$lat <- round(CN_SaraVicca3$lat,2)
 
+## xxx it becomes hard to track down what is happening here, mostly because you're not overwriting objects, but create new ones with numbers. Try to avoid that.
 CN_SaraVicca4 <- aggregate(CN_SaraVicca3, by=list(CN_SaraVicca3$lon,CN_SaraVicca3$lat), mean,na.rm=TRUE)
 CN_SaraVicca4 <- CN_SaraVicca4[,c(3,4,5)]
 
@@ -239,9 +358,9 @@ names(test2) <- c("site","CN_SaraVicca_old")
 
 #(5) Lastly, add Forc leaf, stem and root data (on site basis) - this should be after (3) and (4).
 #But no data matched to current site.
-#Forc <- read.csv(file="~/data/NPP_Yunke/NPP_ForC/orig/ForC_measurements_final.csv")
+#Forc <- read_csv(file="~/data/NPP_Yunke/NPP_ForC/orig/ForC_measurements_final.csv")
 #Forc2 <- aggregate(mean~sites.sitename+Begin_year1+End_year1+variable.name,data=Forc,mean)
-#variablelist <- read.csv(file="~/data/NPP_Yunke/NPP_ForC/orig/site_need.csv")
+#variablelist <- read_csv(file="~/data/NPP_Yunke/NPP_ForC/orig/site_need.csv")
 #variable <- as.character(variablelist$variable.name)
 #mylist <- vector(mode = "list", length = 41)
 #for (i in 1:41){mylist[[i]] <- subset(Forc2,variable.name==variable[i])}
@@ -264,11 +383,11 @@ NPP_final2_site <- NPP_final2[,c("lon","lat","z","site","CN_leaf","CN_root","pft
 
 NPP_final2_site$no <- 1:nrow(NPP_final2_site)
 
-npp_cn1 <-Reduce(function(x,y) merge(x = x, y = y, by = c("site"),all.x=TRUE),
+npp_cn1 <- Reduce(function(x,y) merge(x = x, y = y, by = c("site"),all.x=TRUE),
                  list(NPP_final2_site,CN_Schulz2,CN_Malhi2,test2))
 nrow(npp_cn1) - nrow(NPP_final2_site)
 
-npp_cn2 <-Reduce(function(x,y) merge(x = x, y = y, by = c("lon","lat","z"),all.x=TRUE),
+npp_cn2 <- Reduce(function(x,y) merge(x = x, y = y, by = c("lon","lat","z"),all.x=TRUE),
                  list(npp_cn1,test1))
 
 npp_cn2 <- npp_cn2[order(npp_cn2$no), ]
@@ -276,40 +395,73 @@ npp_cn2 <- npp_cn2[order(npp_cn2$no), ]
 subset(npp_cn2,CN_leaf_sara>0 & CN_SaraVicca_old>0)$no
 npp_cn2$CN_SaraVicca_old[npp_cn2$no==subset(npp_cn2,CN_leaf_sara>0 & CN_SaraVicca_old>0)$no] <- NA
 
-summary(npp_cn2$lon - NPP_final2$lon)
-summary(npp_cn2)
 npp_cn2$CN_stem_final <- npp_cn2$CN_stem_Schulz
 npp_cn2$CN_wood_final <- npp_cn2$CN_wood_Schulz
 
-#now, it is the time to combine
-npp_cn3 <- npp_cn2 %>% mutate(CN_leaf_final = coalesce(CN_leaf,CN_leaf_Schulz,CN_leaf_alt_malhi,CN_SaraVicca_old,CN_leaf_sara)) %>% 
-  mutate(CN_leaf_near_final = coalesce(CN_leaf,CN_leaf_Schulz,CN_SaraVicca_old,CN_leaf_sara)) %>%
-  mutate(CN_leaf_org = coalesce(CN_leaf,CN_leaf_Schulz,CN_leaf_sara)) %>%
-  mutate(CN_root_final = coalesce(CN_root,CN_root_Schulz))
+npp_cn2 <- npp_cn2 %>% 
+  as_tibble()
+```
 
+XXX General remark: Try to avoid naming columns e.g., CN_leaf_Schulz and CN_leaf_alt_malhi and CN_leaf_sara. Instead, create one column CN_leaf, and another separate column that identifies the original dataset,  e.g. file = "vicca" or file = "malhi", etc.
 
+### Combine C:N data 
+
+Now, it is the time to combine.
+```{r}
+npp_cn3 <- npp_cn2 %>% 
+  mutate(CN_leaf_final = coalesce(CN_leaf, CN_leaf_Schulz, CN_leaf_alt_malhi, CN_SaraVicca_old, CN_leaf_sara)) %>% 
+  mutate(CN_leaf_near_final = coalesce(CN_leaf, CN_leaf_Schulz, CN_SaraVicca_old, CN_leaf_sara)) %>%
+  mutate(CN_leaf_org = coalesce(CN_leaf, CN_leaf_Schulz, CN_leaf_sara)) %>%
+  mutate(CN_root_final = coalesce(CN_root, CN_root_Schulz)) %>% 
+  as_tibble()
+```
+
+Subset and show distribution of values.
+```{r}
 npp_cn4 <- npp_cn3[,c("CN_stem_final","CN_wood_final","CN_leaf_final","CN_leaf_near_final","CN_leaf_org","CN_root_final")]
 hist(npp_cn4$CN_leaf_final)
 hist(npp_cn4$CN_stem_final)
 hist(npp_cn4$CN_wood_final)
 hist(npp_cn4$CN_root_final)
+```
+### Calculate N fluxes
 
-NPP_final3 <- cbind(NPP_final2,npp_cn4)
+Calculate N fluxes to different compartments based on their NPP and C:N ratios.
 
-NPP_final3$lnf_obs_final <-NPP_final3$NPP.foliage/NPP_final3$CN_leaf_final
-NPP_final3$lnf_obs_nearfinal <-NPP_final3$NPP.foliage/NPP_final3$CN_leaf_near_final
-NPP_final3$lnf_obs_org <-NPP_final3$NPP.foliage/NPP_final3$CN_leaf_org
+```{r}
+## xxx try to avoid cbind, but instead use merge or left_join/right_join by lon, lat, and z, or sitename, or anything that uniquely defines an observational unit.
+NPP_final3 <- cbind(NPP_final2, npp_cn4) 
+
+## xxx what's the diffrence between 'org' and 'final'
+NPP_final3$lnf_obs_final <- NPP_final3$NPP.foliage/NPP_final3$CN_leaf_final
+NPP_final3$lnf_obs_nearfinal <- NPP_final3$NPP.foliage/NPP_final3$CN_leaf_near_final
+NPP_final3$lnf_obs_org <- NPP_final3$NPP.foliage/NPP_final3$CN_leaf_org
 NPP_final3$bnf_obs_final  <- NPP_final3$BNPP_1/NPP_final3$CN_root_final
 NPP_final3$wnf_obs_final  <- NPP_final3$NPP.wood/NPP_final3$CN_wood_final
 
-summary(NPP_final3) 
-#Important!!!Input repeated data info
-rep_info <- read.csv("/Users/yunpeng/data/NPP_Yunke/NPP_final_rep.csv")
-summary(rep_info$lat-NPP_final3$lat)
-NPP_final3$rep_info <- rep_info$rep_info
+## xxx skim provides much more useful information than 'summary'
+skimr::skim(NPP_final3) 
+```
 
-####Finally, add Tiandi's latest forest data (the last data we need!)
-tiandi_forest <- read.csv(file="~/data/npp_stoichiometry_forests_tiandi/Site_level_forest_CN_NPP_China_TD_20210104_for_Beni_Yunke.csv")
+
+Important!!! Input repeated data info.
+
+XXX Unclear what is done here and why. XXX cannot be reproduced because file is not on Euler.
+
+```{r eval=FALSE}
+rep_info <- read_csv("/Users/yunpeng/data/NPP_Yunke/NPP_final_rep.csv")
+summary(rep_info$lat - NPP_final3$lat)
+NPP_final3$rep_info <- rep_info$rep_info
+```
+
+### Add Tian Di's data
+
+XXX Appears confusing: How is this data different from `npp_stoichiometry_china_grassland_CN_stoichiometry_with_matched_NPP_data_from_Prof_Fang_group_20201026.csv`? I guess this here is for forests, and above one for grasslands. But then, why is the data grassland included here, in `Forest_Global_check.Rmd` at all?
+
+Finally, add Tiandi's latest forest data (the last data we need!)
+
+```{r}
+tiandi_forest <- read_csv(file="~/data/npp_stoichiometry_forests_tiandi/Site_level_forest_CN_NPP_China_TD_20210104_for_Beni_Yunke.csv")
 tiandi_forest <- tiandi_forest[,c(1,2,3,4,11,14,17,18,19,20,21,22)]
 head(tiandi_forest)
 names(tiandi_forest) <- c("site","lon","lat","z","CN_leaf_final","CN_stem_final","CN_root_final","TNPP_1","ANPP_2",
@@ -320,7 +472,6 @@ tiandi_forest$CN_leaf <- tiandi_forest$CN_leaf_final
 tiandi_forest$CN_leaf_near_final <- tiandi_forest$CN_leaf_final
 tiandi_forest$CN_leaf_org <- tiandi_forest$CN_leaf_final
 tiandi_forest$CN_root <- tiandi_forest$CN_root_final
-
 
 #convert unit from tC/ha/yr to gC/m2/yr --> *100
 tiandi_forest$TNPP_1 <- 100*tiandi_forest$TNPP_1
@@ -335,28 +486,48 @@ tiandi_forest$Source <- "Fang, Wang, Tian Di prepared forest data in China"
 tiandi_forest$pft <- "Forest"
 tiandi_forest$pft2 <- "Forest"
 
-tiandi_forest$lnf_obs_final <-tiandi_forest$NPP.foliage/tiandi_forest$CN_leaf_final
-tiandi_forest$lnf_obs_nearfinal <-tiandi_forest$NPP.foliage/tiandi_forest$CN_leaf_final
-tiandi_forest$lnf_obs_org <-tiandi_forest$NPP.foliage/tiandi_forest$CN_leaf_final
+tiandi_forest$lnf_obs_final <- tiandi_forest$NPP.foliage/tiandi_forest$CN_leaf_final
+tiandi_forest$lnf_obs_nearfinal <- tiandi_forest$NPP.foliage/tiandi_forest$CN_leaf_final
+tiandi_forest$lnf_obs_org <- tiandi_forest$NPP.foliage/tiandi_forest$CN_leaf_final
 tiandi_forest$bnf_obs_final  <- tiandi_forest$BNPP_1/tiandi_forest$CN_root_final
 tiandi_forest$wnf_obs_final  <- tiandi_forest$NPP.wood/tiandi_forest$CN_stem_final #assume stem ratio as wood ratio here?
 
-NPP_final4 <- dplyr::bind_rows(NPP_final3, tiandi_forest) 
+NPP_final4 <- dplyr::bind_rows(NPP_final3, tiandi_forest) %>% 
+  as_tibble()
 
-summary(NPP_final4)
+skimr::skim(NPP_final4)
+```
 
-##############here##############
-# this is final data we used for all samples' forest+grassland
-#############here##############
-#output to csv, which will be further used in site simulation of gpp
+Check distribution of C:N leaf.
+```{r}
+NPP_final4 %>% 
+  ggplot(aes(x = CN_leaf_org, y = ..count..)) +
+  geom_histogram()
+
+NPP_final4 %>% 
+  ggplot(aes(x = CN_leaf_final, y = ..count..)) +
+  geom_histogram()
+```
+
+### Write to file
+
+This is final data we used for all samples' forest + grassland. 
+
+Output to csv, which will be further used in site simulation of gpp
+```{r}
 #csvfile <- paste("/Users/yunpeng/data/forest_npp/NPP_final_all.csv")
-#write.csv(NPP_final4, csvfile, row.names = TRUE)
+csvfile <- paste("~/nimpl_sofun_inputs/data/NPP_final_all.csv")
+write_csv(NPP_final4, path = csvfile)
+```
 
+## Forest analysis
 
+Extract forest data only.
 
-#extract forest only
-NPP_Forest <- subset(NPP_final4,pft2=="Forest")
+```{r}
+NPP_Forest <- subset(NPP_final4, pft2=="Forest")
 NPP <- NPP_Forest
+
 #NPP_Forest_site <- aggregate(NPP_Forest, by=list(NPP_Forest$lon,NPP_Forest$lat,NPP_Forest$z), mean,na.rm=TRUE)
 #NPP_Forest_site <- NPP_Forest_site[,-c(1,2,3,4)]
 #summary(NPP_Forest_site)
@@ -372,43 +543,59 @@ NPP <- NPP_Forest
 #summary(NPP)
 #dim(subset(NPP,pft2=="Grassland"))
 #dim(subset(NPP,pft2=="Forest"))
+```
 
 
-#check mean of NRE
-NRE_Du <- read.csv(file="~/data/NRE_various/NRE_Du/NRE_Du.csv")
+## Read N resporption data
+
+Check mean of NRE.
+
+XXX You aggregate data by lon/lat. This is an important step that you should describe and explain why and how you did it.
+
+XXX Seems out of place. Do you want to put this to a separate Rmd file?
+
+```{r}
+NRE_Du <- read_csv(file="~/data/NRE_various/NRE_Du/NRE_Du.csv")
 NRE_Dong <- read.csv(file="~/data/NRE_various/NRE_Deng/NRE_Deng.csv")
 
 NRE_Du_df <- NRE_Du[,c("lon","lat","NRE","MAT","MAP")]
-NRE_Du_df <- aggregate(NRE_Du_df,by=list(NRE_Du_df$lon,NRE_Du_df$lat), FUN=mean, na.rm=TRUE) #site-mean
+NRE_Du_df <- aggregate(NRE_Du_df,by=list(NRE_Du_df$lon,NRE_Du_df$lat), FUN=mean, na.rm=TRUE) %>% as_tibble() #site-mean
 NRE_Du_df <- NRE_Du_df[,c(3:7)]
 head(NRE_Du_df)
 dim(NRE_Du_df)
 
-NRE_Dong_df <- NRE_Dong[,c("Longitude","Latitude","NRE.nitrogen.resorption.efficiency.","MAT","MAP")]
+NRE_Dong_df <- NRE_Dong[,c("Longitude","Latitude","NRE.nitrogen.resorption.efficiency.","MAT","MAP")] %>% 
+  as_tibble()
 names(NRE_Dong_df) <- c("lon","lat","NRE","MAT","MAP")
 head(NRE_Dong_df)
-NRE_Dong_df <- aggregate(NRE_Dong_df,by=list(NRE_Dong_df$lon,NRE_Dong_df$lat), FUN=mean, na.rm=TRUE) #site-mean
+
+NRE_Dong_df <- aggregate(NRE_Dong_df, by=list(NRE_Dong_df$lon,NRE_Dong_df$lat), FUN=mean, na.rm=TRUE) #site-mean
 NRE_Dong_df <- NRE_Dong_df[,c(3:7)]
 dim(NRE_Dong_df)
 
-
 NRE_Dong_df$source <- "Dong"
 NRE_Du_df$source <- "Du"
-NRE_df <- rbind(NRE_Du_df,NRE_Dong_df)
-summary(NRE_df)
 
-#check repeated data, and remove 6 repeated points from Du et al. paper
+NRE_df <- rbind(NRE_Du_df, NRE_Dong_df)
+skimr::skim(NRE_df)
+```
+
+Check repeated data, and remove 6 repeated points from Du et al. paper
+```{r}
 NRE_df$repeated <- duplicated(NRE_df[,c("lon","lat")])
 summary(NRE_df$repeated)
-NRE_df <- subset(NRE_df,repeated==FALSE)
+NRE_df <- subset(NRE_df, repeated==FALSE)
+```
 
-#project data
+Plot data
+```{r}
 newmap <- getMap(resolution = "low")
 plot(newmap, xlim = c(-180, 180), ylim = c(-75, 75), asp = 1)
 
 points(NRE_df$lon,NRE_df$lat, col="red", pch=16,cex=1)
-
-#3. add elevation in this df, based on ingtestr 
+```
+Add elevation in this df, using ingestr. 
+```{r}
 siteinfo <- NRE_df[,c("lon","lat")] # present x and y separately
 siteinfo$date_start <- lubridate::ymd(paste0(1982, "-01-01"))
 siteinfo$date_end <- lubridate::ymd(paste0(2011, "-12-31"))
@@ -421,15 +608,53 @@ df_etopo <- ingest(
   dir = "~/data/etopo/" 
 )
 
-NRE_df$elevation <- as.numeric(as.data.frame(df_etopo$data))
-subset(NRE_df,elevation<0)
-#Some grids > 0, lets' assume -3062 as NA, and others as 0 firstly?
+## xxx do it safely
+NRE_df <- df_etopo %>% 
+  
+  ## unnest to get a flat table with column elv
+  unnest(data) %>% 
+  
+  ## add to siteinfo df to combine with lon and lat info
+  right_join(siteinfo, by = "sitename") %>% 
+  dplyr::select(-date_start, -date_end) %>% 
+  
+  ## add to NRE_df using lon and lat to join
+  right_join(NRE_df, by = c("lon", "lat")) %>% 
+  
+  ## rename because you had it so
+  rename(elevation = elv)
+
+#NRE_df$elevation <- as.numeric(as.data.frame(df_etopo$data))
+```
+
+XXX negative elevation issue? I'd just set them to zero by `NRE_df <- NRE_df %>% mutate(elevation = max(0, elevation))`
+
+```{r}
+# Some grids > 0, lets' assume -3062 as NA, and others as 0 firstly?
+NRE_df %>% 
+  ggplot(aes(x = elevation, y = ..count..)) +
+  geom_histogram()
+
 NRE_df$elevation[NRE_df$elevation< -50] <- NA
 NRE_df$elevation[NRE_df$elevation< 0] <- 0
 
-summary(NRE_df)
+#summary(NRE_df)
+```
 
+## Read global SOFUN outpus
 
+XXX I think this could be done simpler. To combine annual outputs, written to separate files for each year, do the following in the SOFUN main directory in the terminal:
+
+```{r eval=FALSE}
+source proc_output_sofun.sh
+proc_global(simulation_name)
+```
+
+XXX Then, you can read it directly by `df <- nc_to_df("filename_all_years.nc")`
+
+XXX Below code is not executable. Please put all SOFUN outputs on Euler (in a new directory `pengXX_sofun_outputs`). 
+
+```{r eval=FALSE}
 #1. In our path (with multiple years data), identify which is the first year and end year of those files
 firstyr_data <- 1982 # In data file, which is the first year
 endyr_data <- 2011 # In data file, which is the last year
@@ -498,9 +723,15 @@ bnf_df <- inputnc("bnf",1982,2011)
 
 nuptake_df <- inputnc("nuptake",1982,2011) 
 
-nre_df <- inputnc("nre",1982,2011) 
+nre_df <- inputnc("nre",1982,2011)
+```
 
-a <- 1.5 #distance
+Extract from global files.
+
+XXX To extract values for a set of sites, given their longitude and latitude values, you can use simpler (and safer) code, as described [here](https://www.notion.so/computationales/NetCDF-with-R-4330a7d764a747bcb4d8fc63de46071e#05b7d7834e1f415394b4358b670481b1) 
+
+```{r eval=FALSE}
+a <- 1.5 # distance
 NPP$pred_gpp <- NA
 NPP$pred_npp <- NA
 NPP$pred_anpp <- NA
@@ -510,7 +741,6 @@ NPP$pred_wnpp <- NA
 NPP$pred_lnf <- NA
 NPP$pred_bnf <- NA
 NPP$pred_wnf <- NA
-
 
 #for gpp, npp, anpp, bnpp, lnpp, wnpp, lnf, bnf.
 for (i in 1:nrow(NPP)) {
@@ -638,13 +868,24 @@ for (i in 1:nrow(NRE_df)) {
     NRE_df$pred_nre[i] <- (gwr(nre ~ z, grid_part, bandwidth = 1.06, fit.points =site_coord,predictions=TRUE))$SDF$pred
   }, error=function(e){})} 
 
+```
 
+
+```{r eval=FALSE}
 #this points are missing, but not important. They were collected in island, or land edges?
 na_pred <- subset(NPP,is.na(pred_gpp)==TRUE)
 newmap <- getMap(resolution = "low")
 plot(newmap, xlim = c(-180, 180), ylim = c(-75, 75), asp = 1)
-points(na_pred$lon,na_pred$lat, col="red", pch=16,cex=1)
+points(na_pred$lon,na_pred$lat, col="red", pch=16, cex=1)
+```
 
+
+## Create maps
+
+XXX You may organise the code below into separate chunks and add section titles for an overview.
+XXX Better to split this RMarkdown file up into two. One that creates the combined dataset, and one that creates all the plots, maps, and calculates the global numbers.
+
+```{r eval=FALSE}
 My_Theme = theme(
   axis.title.x = element_text(size = 14),
   axis.text.x = element_text(size = 20),
@@ -677,7 +918,7 @@ ggplot(data=subset(NPP2,lnf_obs_final>0 & pred_lnf>0), aes(x=pred_lnf, y=lnf_obs
 #(2) wnf - still remove tiandi data at the end, since it is for stem.cn
 gg <- plot_map3(wnf_df[,c(1,2,4)], 
                 varnam = "wnf",plot_title = " N uptake in wood (gN/m2/yr)",
-                latmin = -65, latmax = 85, combine = FALSE)
+                latmin = -65, latmax = 85, combine = FALSE) # xxx you can set combine = TRUE to get a plot where the map and the color legend are combined.
 
 gg$ggmap + geom_point(data=subset(NPP2,wnf_obs_final>0 & pred_wnf>0 &file!="/Users/yunpeng/data/npp_stoichiometry_forests_tiandi/"),aes(lon,lat),col="red") 
 gg$gglegend
@@ -701,7 +942,7 @@ gg <- plot_map3(bnf_df[,c(1,2,4)],
 gg$gglegend
 
 #corrected obs. cn_root data
-CN_Schulz <- read.csv(file="~/data/NPP_Yunke/npp_cn/CN_Schulze.csv")
+CN_Schulz <- read_csv(file="~/data/NPP_Yunke/npp_cn/CN_Schulze.csv")
 CN_Schulz2 <- CN_Schulz[,c(5,48:58)]
 
 cn_root_df <- subset(NPP2,bnf_obs_final>0)
@@ -897,7 +1138,7 @@ ggplot(data=subset(df,obs>0&pred<1), aes(x=pred, y=obs)) +
 
 #(9) leafcn
 #check leaf c/n
-SP_input <- read.csv(file="~/data/CN_leaf/final_individuals.csv") #all individuals
+SP_input <- read_csv(file="~/data/CN_leaf/final_individuals.csv") #all individuals
 SP_input2 <- SP_input[,c("lat","lon","Elevation","Vcmax.25","narea","lma")]
 sitemean <- aggregate(SP_input2,by=list(SP_input2$lon,SP_input2$lat), FUN=mean, na.rm=TRUE) 
 dim(sitemean)
