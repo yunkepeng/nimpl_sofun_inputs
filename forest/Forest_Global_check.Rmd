@@ -352,7 +352,7 @@ summary(NPP_final4)
 #csvfile <- paste("/Users/yunpeng/data/forest_npp/NPP_final_all.csv")
 #write.csv(NPP_final4, csvfile, row.names = TRUE)
 
-
+  
 
 #extract forest only
 NPP_Forest <- subset(NPP_final4,pft2=="Forest")

@@ -106,9 +106,13 @@ summary(lm(NRE~pred_nre,NRE_df))
 ggplot(data=forest_site2, aes(x=pred_fit_lnf, y=lnf_obs_final)) +
   geom_point()+geom_abline(intercept=0,slope=1)+geom_smooth(method = "lm", se = TRUE)+
   xlab("Prediction")+ylab("Observation")+theme_classic()+My_Theme
-summary(lm(lnf_obs_final~pred_fit_lnf,forest_site2))
+summary(lm(lnf_obs_final~pred_lnf,forest_site2))
 
-
+#without secondary merging
+ggplot(data=forest_site2, aes(x=pred_fit_lnf, y=lnf_obs_org)) +
+  geom_point()+geom_abline(intercept=0,slope=1)+geom_smooth(method = "lm", se = TRUE)+
+  xlab("Prediction")+ylab("Observation")+theme_classic()+My_Theme
+summary(lm(lnf_obs_org~pred_lnf,forest_site2))
 
 
 ```
