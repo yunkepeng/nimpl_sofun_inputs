@@ -177,7 +177,9 @@ CN_Schulz <- read.csv(file="~/data/NPP_Yunke/npp_cn/CN_Schulze.csv")
 CN_Schulz2 <- CN_Schulz[,c(5,48:58)]
 
 CN_Schulz2$CN_leaf_Schulz <- CN_Schulz2$c_leaf/CN_Schulz2$n_leaf
-CN_Schulz2$CN_root_Schulz <- CN_Schulz2$c_fineroot/CN_Schulz2$n_root
+CN_Schulz2$CN_root_Schulz <- (CN_Schulz2$c_coarseroot+CN_Schulz2$c_fineroot)/CN_Schulz2$n_root
+#???(CN_Schulz2$c_fineroot + CN_Schulz2$c_coarseroot) / CN_Schulz2$n_root
+
 CN_Schulz2$CN_stem_Schulz <- CN_Schulz2$c_stem/CN_Schulz2$n_stem
 CN_Schulz2$CN_wood_Schulz <- (CN_Schulz2$c_stem+CN_Schulz2$c_branch)/(CN_Schulz2$n_stem+CN_Schulz2$n_branch)
 
@@ -335,6 +337,10 @@ summary(NPP_final3)
 #Important!!!Input repeated data info
 rep_info <- read.csv("/Users/yunpeng/data/NPP_Yunke/NPP_final_rep.csv")
 summary(rep_info$lat-NPP_final3$lat)
+summary(rep_info$lon-NPP_final3$lon)
+summary(rep_info$z-NPP_final3$z)
+summary(rep_info$GPP-NPP_final3$GPP)
+
 NPP_final3$rep_info <- rep_info$rep_info
 
 ####Finally, add Tiandi's latest forest data (the last data we need!)
@@ -791,8 +797,13 @@ forest_site$pred_leafnc <- (0.0161/0.5) + (0.0041/0.5) * forest_site$max_vcmax25
 
 forest_site$pred_lnf <- forest_site$pred_lnpp*forest_site$pred_leafnc
 
+#summary(NPP_Forest$CN_wood_final)
 forest_site$pred_wnf <- forest_site$pred_wnpp/97
-forest_site$pred_bnf <- forest_site$pred_bnpp/42
+
+hist(NPP_Forest$CN_root_final)
+summary(NPP_Forest$CN_root_final)#using median of root.
+
+forest_site$pred_bnf <- forest_site$pred_bnpp/122
 
 forest_site$TNPP_1 <- siteinfo_final$TNPP_1
 forest_site$ANPP_2 <- siteinfo_final$ANPP_2
@@ -812,7 +823,6 @@ forest_site$GPP <- siteinfo_final$GPP
 
 forest_site$site <- siteinfo_final$site
 forest_site$file <- siteinfo_final$file
-
 
 forest_site$rep_info <- siteinfo_final$rep_info
 #correct new dataset's rep_info
@@ -872,39 +882,70 @@ ggplot(data=forest_site2, aes(x=pred_lnf, y=lnf_obs_org)) +
   xlab("Prediction")+ylab("Observation")+theme_classic()
 summary(lm(lnf_obs_org~pred_lnf,forest_site2))
 
-# predict leaf cn separately
-forest_site2 <- subset(forest_site,rep_info!="rep" & rep_info!="rep1"& rep_info!="rep3")
 
-aa <- subset(forest_site,file!="/Users/yunpeng/data/npp_stoichiometry_forests_tiandi/")
-bb <- subset(forest_site,file=="/Users/yunpeng/data/npp_stoichiometry_forests_tiandi/")
+#wnf - assuming constant wood/cn = 97
+ggplot(data=forest_site2, aes(x=pred_wnf, y=wnf_obs_final)) +
+  geom_point()+geom_abline(intercept=0,slope=1)+geom_smooth(method = "lm", se = TRUE)+
+  xlab("Prediction")+ylab("Observation")+theme_classic()
+summary(lm(wnf_obs_final~pred_wnf,forest_site2))
 
-summary(aa$CN_leaf_final)
-summary(bb$CN_leaf_final)
+#bnf - assuming constant root/cn = 122
+ggplot(data=forest_site2, aes(x=pred_bnf, y=bnf_obs_final)) +
+  geom_point()+geom_abline(intercept=0,slope=1)+geom_smooth(method = "lm", se = TRUE)+
+  xlab("Prediction")+ylab("Observation")+theme_classic()
+summary(lm(bnf_obs_final~pred_bnf,forest_site2))
+
+#leaf cn
+#(9) leafcn
+#check leaf c/n
+SP_input <- read_csv(file="~/data/CN_leaf/final_individuals.csv") #all individuals
+SP_input2 <- SP_input[,c("lat","lon","Elevation","Vcmax.25","narea","lma")]
+sitemean <- aggregate(SP_input2,by=list(SP_input2$lon,SP_input2$lat), FUN=mean, na.rm=TRUE) 
+dim(sitemean)
+
+sitemean$pred_leafnc <- (0.0161/0.5) + (0.0041/0.5)* sitemean$Vcmax.25/sitemean$lma
+sitemean$obs_leafnc <- sitemean$narea/sitemean$lma/0.5
+
+ggplot(data=sitemean, aes(x=pred_leafnc, y=obs_leafnc)) +
+  geom_point()+geom_abline(intercept=0,slope=1)+geom_smooth(method = "lm", se = TRUE)+
+  xlab("Prediction")+ylab("Observation")+theme_classic()+My_Theme
+summary(lm(obs_leafnc~pred_leafnc,sitemean))
+
+#nuptake
+forest_site2$pred_nuptake <- forest_site2$pred_lnf + forest_site2$pred_bnf + forest_site2$pred_wnf
+forest_site2$obs_nuptake <- forest_site2$lnf_obs_org + forest_site2$bnf_obs_final + forest_site2$wnf_obs_final
+
+ggplot(data=forest_site2, aes(x=pred_nuptake, y=obs_nuptake)) +
+  geom_point()+geom_abline(intercept=0,slope=1)+geom_smooth(method = "lm", se = TRUE)+
+  xlab("Prediction")+ylab("Observation")+theme_classic()+My_Theme
+summary(lm(pred_nuptake~obs_nuptake,forest_site2))
+
+
 
 #fit a new model where C/N leaf 
-library(lme4)
-library(nlme)
-library(lmerTest)
-library("PerformanceAnalytics")
-library(MuMIn)
-r.squaredGLMM(lmer(CN_leaf_final ~ max_vcmax25+ LMA + (1|site),data=forest_site2))
-summary(lmer(CN_leaf_final ~ max_vcmax25+ LMA + (1|site),data=forest_site2))
-forest_site2$pred_fitted_leafcn <- 0.30275 * forest_site2$max_vcmax25 + 0.21866*forest_site2$LMA -4.92165
+#library(lme4)
+#library(nlme)
+#library(lmerTest)
+#library("PerformanceAnalytics")
+#library(MuMIn)
+#r.squaredGLMM(lmer(CN_leaf_final ~ max_vcmax25+ LMA + (1|site),data=forest_site2))
+#summary(lmer(CN_leaf_final ~ max_vcmax25+ LMA + (1|site),data=forest_site2))
+#forest_site2$pred_fitted_leafcn <- 0.30275 * forest_site2$max_vcmax25 + 0.21866*forest_site2$LMA -4.92165
 
-forest_site2$CN_leaf_final[forest_site2$CN_leaf_final>100] <- NA
-ggplot(data=forest_site2, aes(x=pred_fitted_leafcn, y=CN_leaf_final)) +
-  geom_point()+geom_abline(intercept=0,slope=1)+geom_smooth(method = "lm", se = TRUE)+
-  xlab("Prediction")+ylab("Observation")+theme_classic()
+#forest_site2$CN_leaf_final[forest_site2$CN_leaf_final>100] <- NA
+#ggplot(data=forest_site2, aes(x=pred_fitted_leafcn, y=CN_leaf_final)) +
+#  geom_point()+geom_abline(intercept=0,slope=1)+geom_smooth(method = "lm", se = TRUE)+
+#  xlab("Prediction")+ylab("Observation")+theme_classic()
 
-summary(lm(CN_leaf_final~pred_fitted_leafcn,forest_site2))
+#summary(lm(CN_leaf_final~pred_fitted_leafcn,forest_site2))
 
-forest_site2$pred_fit_lnf <- forest_site2$pred_lnpp/forest_site2$pred_fitted_leafcn
+#forest_site2$pred_fit_lnf <- forest_site2$pred_lnpp/forest_site2$pred_fitted_leafcn
 
-ggplot(data=forest_site2, aes(x=pred_fit_lnf, y=lnf_obs_final)) +
-  geom_point()+geom_abline(intercept=0,slope=1)+geom_smooth(method = "lm", se = TRUE)+
-  xlab("Prediction")+ylab("Observation")+theme_classic()
+#ggplot(data=forest_site2, aes(x=pred_fit_lnf, y=lnf_obs_final)) +
+#  geom_point()+geom_abline(intercept=0,slope=1)+geom_smooth(method = "lm", se = TRUE)+
+#  xlab("Prediction")+ylab("Observation")+theme_classic()
 
-summary(lm(lnf_obs_final~pred_fit_lnf,forest_site2))
+#summary(lm(lnf_obs_final~pred_fit_lnf,forest_site2))
 
 #nre
 #check mean of NRE

@@ -44,6 +44,78 @@ library(spgwr)
 #load image directly, for working process please Forest_site_check.R in the same file
 load(file = "/Users/yunpeng/yunkepeng/nimpl_sofun_inputs/forest/Forest_site_check.Rdata")
 
+
+####Firstly, output all site simulation maps
+#1. In our path (with multiple years data), identify which is the first year and end year of those files
+firstyr_data <- 1982 # In data file, which is the first year
+endyr_data <- 2011 # In data file, which is the last year
+location <- "/Users/yunpeng/data/output/latest_noNRE_forest/"
+alloutput_list <- list.files(location,full.names = T)
+
+#input elevation nc file, which will be cbind with global df directly
+elev_nc <- read_nc_onefile("~/data/watch_wfdei/WFDEI-elevation.nc")
+#elev_nc <- read_nc_onefile("D:/PhD/nimpl_sofun_inputs/Data/Elevation/WFDEI-elevation.nc")
+elev <- as.data.frame(nc_to_df(elev_nc, varnam = "elevation"))
+head(elev) # this is consistent with df coord below
+
+#2. Create a function to specify path, loop many years nc file and output a dataframe (lon, lat, var).
+inputnc <- function(name,start_year,end_year){
+  #-----------------------------------------------------------------------
+  # Input: 
+  # name: gpp, npp, anpp, vcmax25, leafcn, nuptake...
+  # start_year: e.g. 1981
+  # end_year: e.g. 2016
+  # location: e.g "D:/PhD/nimpl_sofun_inputs/Data/output/" or in Euler: "~/yunkebranch_units/outputnc/"
+  #-----------------------------------------------------------------------
+  output_allyears <- data.frame(matrix(NA))
+  # first, include all years annual data into a daframe
+  for (i in firstyr_data:endyr_data){
+    if (name == "npp"){
+      nc <- read_nc_onefile(alloutput_list[grepl("a.npp.nc", list.files(location,full.names = T))][i-firstyr_data+1]) #we only rely this to filter npp.nc file...
+    } else {
+      nc <- read_nc_onefile(alloutput_list[grepl(name, list.files(location,full.names = T))][i-firstyr_data+1]) #Input nc
+    }
+    output_year <- nc_to_df(nc, varnam = name)[,3] #Yearly output
+    output_allyears[1:259200,i-firstyr_data+1] <- output_year #here first column represents first year of data file 's output
+  }
+  names(output_allyears) <- paste(name,firstyr_data:endyr_data,sep="")
+  #this variable above (output_allyears), could be end of the function, which is variable at multiple years. But for our purporses, we need mean of select years
+  #then, only calculate means of selected years
+  output_selected_yrs <- rowMeans(output_allyears[,(start_year-firstyr_data+1):(end_year-firstyr_data+1)],na.rm = TRUE) # only calculated means based on selected start and end year (see function)
+  coord <- nc_to_df(nc, varnam = name)[,1:2] # obtain lon and lat
+  final_output <- cbind(coord,elev[,3],output_selected_yrs) # combine lon, lat,z with rowmeans variable
+  names(final_output) <- c("lon","lat","z",name)
+  return(final_output)
+  #-----------------------------------------------------------------------
+  # Output: output_final: the output data (259200 * 3) including lon, lat and value
+  #-----------------------------------------------------------------------
+}
+
+#select data over 30 years, each df includes lon, lat, z, var
+gpp_df <- inputnc("gpp",1982,2011)
+
+npp_df <- inputnc("npp",1982,2011)
+
+anpp_df <- inputnc("anpp",1982,2011)
+
+bnpp_df <- inputnc("bnpp",1982,2011)
+
+lnpp_df <- inputnc("lnpp",1982,2011)
+
+wnpp_df <- inputnc("wnpp",1982,2011)
+
+leafcn_df <- inputnc("leafcn",1982,2011) # this is actually leaf n/c. 
+
+lnf_df <- inputnc("lnf",1982,2011) 
+
+wnf_df <- inputnc("wnf",1982,2011) 
+
+bnf_df <- inputnc("bnf",1982,2011) 
+
+nuptake_df <- inputnc("nuptake",1982,2011) 
+
+nre_df <- inputnc("nre",1982,2011)
+
 My_Theme = theme(
   axis.title.x = element_text(size = 14),
   axis.text.x = element_text(size = 20),
@@ -54,65 +126,299 @@ My_Theme = theme(
 
 #forest_site2 <- aggregate(forest_site,by=list(forest_site$lon,forest_site$lat,forest_site$z), FUN=mean, na.rm=TRUE) #site-mean
 
-#check
-#analyse_modobs2(forest_site2,"pred_gpp", "GPP",type = "points")
+
+####Secondly, show site validation and its distribution in global map
+#GPP
 ggplot(data=forest_site2, aes(x=pred_gpp, y=GPP)) +
   geom_point()+geom_abline(intercept=0,slope=1)+geom_smooth(method = "lm", se = TRUE)+
   xlab("Prediction")+ylab("Observation")+theme_classic()+My_Theme
 summary(lm(GPP~pred_gpp,forest_site2))
 
-#analyse_modobs2(forest_site2,"pred_npp", "TNPP_1",type = "points")
+gg <- plot_map3(gpp_df[,c(1,2,4)], 
+                varnam = "gpp",plot_title = " GPP (gC/m2/yr)",
+                latmin = -65, latmax = 85, combine = FALSE)
+
+gg$ggmap + geom_point(data=subset(forest_site2,GPP>0 & pred_gpp>0),aes(lon,lat),col="red")
+#gg$gglegend
+
+#NPP
 ggplot(data=forest_site2, aes(x=pred_npp, y=TNPP_1)) +
   geom_point()+geom_abline(intercept=0,slope=1)+geom_smooth(method = "lm", se = TRUE)+
   xlab("Prediction")+ylab("Observation")+theme_classic()+My_Theme
 summary(lm(TNPP_1~pred_npp,forest_site2))
 
+gg <- plot_map3(npp_df[,c(1,2,4)], 
+                varnam = "npp",plot_title = " NPP (gC/m2/yr)",
+                latmin = -65, latmax = 85, combine = FALSE)
 
-#analyse_modobs2(forest_site2,"pred_anpp", "ANPP_2",type = "points")
+gg$ggmap + geom_point(data=subset(forest_site2,pred_npp>0 & TNPP_1>0),aes(lon,lat),col="red")
+#gg$gglegend
+
+#ANPP
 ggplot(data=forest_site2, aes(x=pred_anpp, y=ANPP_2)) +
   geom_point()+geom_abline(intercept=0,slope=1)+geom_smooth(method = "lm", se = TRUE)+
   xlab("Prediction")+ylab("Observation")+theme_classic()+My_Theme
 summary(lm(ANPP_2~pred_anpp,forest_site2))
 
-#analyse_modobs2(forest_site2,"pred_lnpp", "NPP.foliage",type = "points")
+gg <- plot_map3(anpp_df[,c(1,2,4)], 
+                varnam = "anpp",plot_title = " ANPP (gC/m2/yr)",
+                latmin = -65, latmax = 85, combine = FALSE)
+
+gg$ggmap + geom_point(data=subset(forest_site2,pred_anpp>0 & ANPP_2>0),aes(lon,lat),col="red")
+#gg$gglegend
+
+#LNPP
 ggplot(data=forest_site2, aes(x=pred_lnpp, y=NPP.foliage)) +
   geom_point()+geom_abline(intercept=0,slope=1)+geom_smooth(method = "lm", se = TRUE)+
   xlab("Prediction")+ylab("Observation")+theme_classic()+My_Theme
 summary(lm(NPP.foliage~pred_lnpp,forest_site2))
 
-#analyse_modobs2(forest_site,"pred_wnpp", "NPP.wood",type = "points")
+gg <- plot_map3(lnpp_df[,c(1,2,4)], 
+                varnam = "lnpp",plot_title = " Leaf NPP (gC/m2/yr)",
+                latmin = -65, latmax = 85, combine = FALSE)
+
+gg$ggmap + geom_point(data=subset(forest_site2,pred_lnpp>0 & NPP.foliage>0),aes(lon,lat),col="red")
+#gg$gglegend
+
+#WNPP
 ggplot(data=forest_site2, aes(x=pred_wnpp, y=NPP.wood)) +
   geom_point()+geom_abline(intercept=0,slope=1)+geom_smooth(method = "lm", se = TRUE)+
   xlab("Prediction")+ylab("Observation")+theme_classic()+My_Theme
 summary(lm(NPP.wood~pred_wnpp,forest_site2))
 
-#analyse_modobs2(forest_site2,"pred_bnpp", "BNPP_1",type = "points")
+gg <- plot_map3(wnpp_df[,c(1,2,4)], 
+                varnam = "wnpp",plot_title = " Wood NPP (gC/m2/yr)",
+                latmin = -65, latmax = 85, combine = FALSE)
+
+gg$ggmap + geom_point(data=subset(forest_site2,pred_wnpp>0 & NPP.wood>0),aes(lon,lat),col="red")
+#gg$gglegend
+
+#BNPP
 ggplot(data=forest_site2, aes(x=pred_bnpp, y=BNPP_1)) +
   geom_point()+geom_abline(intercept=0,slope=1)+geom_smooth(method = "lm", se = TRUE)+
   xlab("Prediction")+ylab("Observation")+theme_classic()+My_Theme
 summary(lm(BNPP_1~pred_bnpp,forest_site2))
 
-ggplot(data=forest_site2, aes(x=pred_fitted_leafcn, y=CN_leaf_final)) +
-  geom_point()+geom_abline(intercept=0,slope=1)+geom_smooth(method = "lm", se = TRUE)+
-  xlab("Prediction")+ylab("Observation")+theme_classic()+My_Theme
-summary(lm(CN_leaf_final~pred_fitted_leafcn,forest_site2))
+gg <- plot_map3(bnpp_df[,c(1,2,4)], 
+                varnam = "bnpp",plot_title = " Belowground NPP (gC/m2/yr)",
+                latmin = -65, latmax = 85, combine = FALSE)
 
+gg$ggmap + geom_point(data=subset(forest_site2,pred_bnpp>0 & BNPP_1>0),aes(lon,lat),col="red")
+#gg$gglegend
+
+#NRE
 ggplot(data=NRE_df, aes(x=pred_nre, y=NRE)) +
   geom_point()+geom_abline(intercept=0,slope=1)+geom_smooth(method = "lm", se = TRUE)+
   xlab("Prediction")+ylab("Observation")+theme_classic()+My_Theme
 summary(lm(NRE~pred_nre,NRE_df))
 
-#analyse_modobs2(forest_site,"pred_lnf", "lnf_obs",type = "points") 
-ggplot(data=forest_site2, aes(x=pred_fit_lnf, y=lnf_obs_final)) +
+gg <- plot_map3(nre_df[,c(1,2,4)], 
+                varnam = "nre",plot_title = " Nitrogen resorption efficiency",
+                latmin = -65, latmax = 85, combine = FALSE)
+
+gg$ggmap + geom_point(data=subset(NRE_df,pred_nre>0 & NRE>0),aes(lon,lat),col="red")
+#gg$gglegend
+
+#leaf cn
+SP_input <- read_csv(file="~/data/CN_leaf/final_individuals.csv") #all individuals
+SP_input2 <- SP_input[,c("lat","lon","Elevation","Vcmax.25","narea","lma")]
+sitemean <- aggregate(SP_input2,by=list(SP_input2$lon,SP_input2$lat), FUN=mean, na.rm=TRUE) 
+dim(sitemean)
+
+sitemean$pred_leafnc <- (0.0161/0.5) + (0.0041/0.5)* sitemean$Vcmax.25/sitemean$lma
+sitemean$obs_leafnc <- sitemean$narea/sitemean$lma/0.5
+
+ggplot(data=sitemean, aes(x=pred_leafnc, y=obs_leafnc)) +
   geom_point()+geom_abline(intercept=0,slope=1)+geom_smooth(method = "lm", se = TRUE)+
   xlab("Prediction")+ylab("Observation")+theme_classic()+My_Theme
+summary(lm(obs_leafnc~pred_leafnc,sitemean))
+
+gg <- plot_map3(leafcn_df[,c(1,2,4)], 
+                varnam = "leafcn",plot_title = "Leaf N to C ratio",
+                latmin = -65, latmax = 85, combine = FALSE)
+
+gg$ggmap + geom_point(data=subset(sitemean,pred_leafnc>0 & obs_leafnc>0),aes(lon,lat),col="red")
+gg$gglegend # actually n/c ratio
+
+#leaf N flux
+ggplot(data=forest_site2, aes(x=pred_lnf, y=lnf_obs_final)) +
+  geom_point()+geom_abline(intercept=0,slope=1)+geom_smooth(method = "lm", se = TRUE)+
+  xlab("Prediction")+ylab("Observation")+theme_classic()
 summary(lm(lnf_obs_final~pred_lnf,forest_site2))
 
-#without secondary merging (36 less data)
-ggplot(data=forest_site2, aes(x=pred_fit_lnf, y=lnf_obs_org)) +
+#not including additional merge sites within 0.01 deg, with 36 less sites
+ggplot(data=forest_site2, aes(x=pred_lnf, y=lnf_obs_org)) +
   geom_point()+geom_abline(intercept=0,slope=1)+geom_smooth(method = "lm", se = TRUE)+
-  xlab("Prediction")+ylab("Observation")+theme_classic()+My_Theme
+  xlab("Prediction")+ylab("Observation")+theme_classic()
 summary(lm(lnf_obs_org~pred_lnf,forest_site2))
 
+gg <- plot_map3(lnf_df[,c(1,2,4)], 
+                varnam = "lnf",plot_title = " N uptake in leaf (gN/m2/yr)",
+                latmin = -65, latmax = 85, combine = FALSE)
+
+gg$ggmap + geom_point(data=subset(forest_site2,lnf_obs_org>0 & pred_lnf>0),aes(lon,lat),col="red")
+#gg$gglegend
+
+#wood N flux - assuming constant wood/cn = 97
+ggplot(data=forest_site2, aes(x=pred_wnf, y=wnf_obs_final)) +
+  geom_point()+geom_abline(intercept=0,slope=1)+geom_smooth(method = "lm", se = TRUE)+
+  xlab("Prediction")+ylab("Observation")+theme_classic()+My_Theme
+summary(lm(wnf_obs_final~pred_wnf,forest_site2))
+
+gg <- plot_map3(wnf_df[,c(1,2,4)], 
+                varnam = "wnf",plot_title = " N uptake in wood (gN/m2/yr)",
+                latmin = -65, latmax = 85, combine = FALSE)
+
+gg$ggmap + geom_point(data=subset(forest_site2,pred_wnf>0 & wnf_obs_final>0),aes(lon,lat),col="red")
+#gg$gglegend
+
+#belowground N flux - assuming constant root/cn = 122
+ggplot(data=forest_site2, aes(x=pred_bnf, y=bnf_obs_final)) +
+  geom_point()+geom_abline(intercept=0,slope=1)+geom_smooth(method = "lm", se = TRUE)+
+  xlab("Prediction")+ylab("Observation")+theme_classic()+My_Theme
+summary(lm(bnf_obs_final~pred_bnf,forest_site2))
+
+gg <- plot_map3(bnf_df[,c(1,2,4)], 
+                varnam = "bnf",plot_title = " N uptake in belowground (gN/m2/yr)",
+                latmin = -65, latmax = 85, combine = FALSE)
+
+gg$ggmap + geom_point(data=subset(forest_site2,pred_bnf>0 & bnf_obs_final>0),aes(lon,lat),col="red")
+#gg$gglegend
+
+#nuptake
+forest_site2$pred_nuptake <- forest_site2$pred_lnf + forest_site2$pred_bnf + forest_site2$pred_wnf
+forest_site2$obs_nuptake <- forest_site2$lnf_obs_org + forest_site2$bnf_obs_final + forest_site2$wnf_obs_final
+
+ggplot(data=forest_site2, aes(x=pred_nuptake, y=obs_nuptake)) +
+  geom_point()+geom_abline(intercept=0,slope=1)+geom_smooth(method = "lm", se = TRUE)+
+  xlab("Prediction")+ylab("Observation")+theme_classic()+My_Theme
+summary(lm(pred_nuptake~obs_nuptake,forest_site2))
+
+gg <- plot_map3(nuptake_df[,c(1,2,4)], 
+                varnam = "nuptake",plot_title = " Total Nitrogen uptake (gN/m2/yr)",
+                latmin = -65, latmax = 85, combine = FALSE)
+
+gg$ggmap + geom_point(data=subset(forest_site2,pred_nuptake>0 & obs_nuptake>0),aes(lon,lat),col="red")
+#gg$gglegend
+
+
+####Thirdly, quantify them
+#calculate percentage of each part
+all_nflux <- cbind(nuptake_df,lnf_df$lnf,wnf_df$wnf,bnf_df$bnf)
+
+all_nflux <- na.omit(all_nflux)
+summary(all_nflux)
+names(all_nflux) <- c("lon","lat","z","nuptake","lnf","wnf","bnf")
+dim(subset(all_nflux,lnf==0))
+dim(subset(all_nflux,wnf==0))
+dim(subset(all_nflux,bnf==0))
+#subset lnf_df >0
+all_nflux2 <- subset(all_nflux,lnf>0)
+summary(all_nflux2$lnf/all_nflux2$nuptake)
+summary(all_nflux2$wnf/all_nflux2$nuptake)
+summary(all_nflux2$bnf/all_nflux2$nuptake)
+
+
+#cue
+cue <- npp_df[,4]/gpp_df[,4]
+cue_df <- cbind(npp_df[,1:3],cue)
+cue_df$cue[cue_df$cue==0] <- NA
+gg <- plot_map3(cue_df[,c(1,2,4)], 
+                varnam = "cue",plot_title = "Carbon use efficiency",
+                latmin = -65, latmax = 85, combine = FALSE)
+gg$ggmap
+gg$gglegend
+
+#save.image(file = "/Users/yunpeng/yunkepeng/nimpl_sofun_inputs/forest/Forest_Global_check.Rdata")
+
+##lnf,bnf,wnf, quantify --> with NRE!!!! so using different files.
+calc_area <- function( lat, dx=1, dy=1 ){
+  r_earth <- 6370499.317638  # to be consistent with how Ferret calculates areas of spheres (https://www.pmel.noaa.gov/maillists/tmap/ferret_users/fu_2016/msg00155.html)
+  area <- 4 * r_earth^2 * 0.5 * dx * pi/180 * cos( abs(lat) * pi/180 ) * sin( 0.5 * dy * pi/180 )
+  return(area)
+}
+
+firstyr_data <- 1982 # In data file, which is the first year
+endyr_data <- 2011 # In data file, which is the last year
+location <- "/Users/yunpeng/data/output/latest_forest/"
+alloutput_list <- list.files(location,full.names = T)
+
+#input elevation nc file, which will be cbind with global df directly
+elev_nc <- read_nc_onefile("~/data/watch_wfdei/WFDEI-elevation.nc")
+#elev_nc <- read_nc_onefile("D:/PhD/nimpl_sofun_inputs/Data/Elevation/WFDEI-elevation.nc")
+elev <- as.data.frame(nc_to_df(elev_nc, varnam = "elevation"))
+head(elev) # this is consistent with df coord below
+
+#select data over 30 years, each df includes lon, lat, z, var
+lnf_df2 <- inputnc("lnf",1982,2011) 
+
+wnf_df2 <- inputnc("wnf",1982,2011) 
+
+bnf_df2 <- inputnc("bnf",1982,2011) 
+
+nuptake_df2 <- inputnc("nuptake",1982,2011) 
+
+calc_area <- function( lat, dx=1, dy=1 ){
+  r_earth <- 6370499.317638  # to be consistent with how Ferret calculates areas of spheres (https://www.pmel.noaa.gov/maillists/tmap/ferret_users/fu_2016/msg00155.html)
+  area <- 4 * r_earth^2 * 0.5 * dx * pi/180 * cos( abs(lat) * pi/180 ) * sin( 0.5 * dy * pi/180 )
+  return(area)
+}
+
+nc <- read_nc_onefile("/Users/yunpeng/data/fland/global.fland.nc") #Input nc
+output_fland <- nc_to_df(nc, varnam = "fland")
+final <- cbind(lnf_df2,wnf_df2$wnf,bnf_df2$bnf,nuptake_df2$nuptake,output_fland$myvar)
+
+names(final) <- c("lon","lat","z","lnf","wnf","bnf","nuptake","fland")
+
+summary(final)
+dim(final)
+final$area_m2 <- calc_area(final$lat,0.5,0.5)  #area convert to m2
+final$lnf_Pgyr <-  final$area_m2 * final$lnf * final$fland /1e+15 #  convert g to Pg
+final$wnf_Pgyr <-  final$area_m2 * final$wnf * final$fland /1e+15 #  convert g to Pg
+final$bnf_Pgyr <-  final$area_m2 * final$bnf * final$fland /1e+15 #  convert g to Pg
+final$nuptake_Pgyr <-  final$area_m2 * final$nuptake * final$fland /1e+15 #  convert g to Pg
+
+sum(final$nuptake_Pgyr,na.rm = TRUE)
+sum(final$lnf_Pgyr,na.rm = TRUE)/sum(final$nuptake_Pgyr,na.rm = TRUE)
+sum(final$wnf_Pgyr,na.rm = TRUE)/sum(final$nuptake_Pgyr,na.rm = TRUE)
+sum(final$bnf_Pgyr,na.rm = TRUE)/sum(final$nuptake_Pgyr,na.rm = TRUE)
+
+#calculate carbon part
+nc <- read_nc_onefile("/Users/yunpeng/data/fland/global.fland.nc") #Input nc
+output_fland <- nc_to_df(nc, varnam = "fland")
+
+final_gpp <- cbind(gpp_df,npp_df[,4],anpp_df[,4],lnpp_df[,4],wnpp_df[,4],bnpp_df[,4],output_fland$myvar)
+names(final_gpp) <- c("lon","lat","z","gpp","npp","anpp","lnpp","wnpp","bnpp","fland")
+
+#0.5 * 0.5 degree grided map
+summary(final_gpp$gpp) # in gC/m2/yr
+summary(final_gpp$fland)
+final_gpp$area_m2 <- calc_area(final_gpp$lat,0.5,0.5)  #area convert to m2
+final_gpp$gpp_Pgyr <-  final_gpp$area_m2 * final_gpp$gpp * final_gpp$fland /1e+15 # 1e+12 is to convert g to Pg
+final_gpp$npp_Pgyr <-  final_gpp$area_m2 * final_gpp$npp * final_gpp$fland /1e+15 # 1e+12 is to convert g to Pg
+final_gpp$anpp_Pgyr <-  final_gpp$area_m2 * final_gpp$anpp * final_gpp$fland /1e+15 # 1e+12 is to convert g to Pg
+final_gpp$lnpp_Pgyr <-  final_gpp$area_m2 * final_gpp$lnpp * final_gpp$fland /1e+15 # 1e+12 is to convert g to Pg
+final_gpp$wnpp_Pgyr <-  final_gpp$area_m2 * final_gpp$wnpp * final_gpp$fland /1e+15 # 1e+12 is to convert g to Pg
+final_gpp$bnpp_Pgyr <-  final_gpp$area_m2 * final_gpp$bnpp * final_gpp$fland /1e+15 # 1e+12 is to convert g to Pg
+sum(final_gpp$gpp_Pgyr,na.rm = TRUE)
+sum(final_gpp$npp_Pgyr,na.rm = TRUE)/sum(final_gpp$gpp_Pgyr,na.rm = TRUE)
+sum(final_gpp$anpp_Pgyr,na.rm = TRUE)/sum(final_gpp$npp_Pgyr,na.rm = TRUE)
+sum(final_gpp$lnpp_Pgyr,na.rm = TRUE)/sum(final_gpp$anpp_Pgyr,na.rm = TRUE)
+
+
+###map - with NRE###
+#(1) lnf2
+gg <- plot_map3(lnf_df2[,c(1,2,4)], 
+                varnam = "lnf",plot_title = " N uptake in leaf (gN/m2/yr)",
+                latmin = -65, latmax = 85, combine = FALSE)
+gg$ggmap + geom_point(data=subset(forest_site2,lnf_obs_org>0 & pred_lnf>0),aes(lon,lat),col="red")
+gg$gglegend
+
+#(4) nuptake2
+gg <- plot_map3(nuptake_df2[,c(1,2,4)], 
+                varnam = "nuptake",plot_title = " Total N uptake in ecosystem (gN/m2/yr)",
+                latmin = -65, latmax = 85, combine = FALSE)
+gg$ggmap + geom_point(data=subset(forest_site2,pred_nuptake>0 & obs_nuptake>0),aes(lon,lat),col="red")
+gg$gglegend
 
 ```
