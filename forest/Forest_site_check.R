@@ -383,8 +383,8 @@ NPP_Forest <- subset(NPP,pft2=="Forest")
 
 
 ########add sitename and sitename2, which was created when used for dowloading climate forcing and fapar forcing separately
-#for details about how to create this sitename, please run ~/yunkepeng/nimpl_sofun_inputs/forest/forest_sitename_preparation.R
-#for info about climate forcing and fapar code, please have a look at example in  ~/yunkepeng/nimpl_sofun_inputs/forest/forcing_fpar.R
+#for details about how to create this sitename, please run ~/yunkepeng/nimpl_sofun_inputs/forest/forest_sitename_preparation.R in Desktop and ~/data/yunkepeng/nimpl_sofun_inputs/forest/forest_sitename_preparation.R in Euler
+#for info about climate forcing and fapar code, please have a look at example in  ~/yunkepeng/nimpl_sofun_inputs/forest/forcing_fpar.R and  ~/data/yunkepeng/nimpl_sofun_inputs/forest/forcing_fpar.R in Euler
 
 NPP_final2 <- read.csv("~/data/forest_npp/forest_forcing_info_all.csv")
 #pass some sitename and sitename2 data

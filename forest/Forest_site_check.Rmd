@@ -43,6 +43,8 @@ library(spgwr)
 
 #load image directly, for working process please Forest_site_check.R in the same file
 load(file = "~/yunkepeng/nimpl_sofun_inputs/forest/Forest_site_check.Rdata")
+#!!!! in Euler this Rdata was saved to:
+#load(file = "~/data/yunkepeng/nimpl_sofun_inputs/forest/Forest_site_check.Rdata")
 
 
 ####Firstly, output all site simulation maps
