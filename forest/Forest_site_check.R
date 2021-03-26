@@ -22,11 +22,9 @@ library(cowplot)
 library(spgwr)
 
 
-#load(file = "/Users/yunpeng/yunkepeng/nimpl_sofun_inputs/forest/Forest_site_check.Rdata")
+#load(file = "~/yunkepeng/nimpl_sofun_inputs/forest/Forest_site_check.Rdata")
 #at the end of code...
 
-
-#read complete dataset for measurement, after L1-L352 in /Users/yunpeng/yunkepeng/nimpl_sofun_inputs/output_check/Forest_Global_check.Rmd
 # (1) pre-processing NPP
 # rbind data (more data details see https://github.com/yunkepeng/nimpl_sofun_inputs/blob/master/NPP/NPP_statistical_model.Rmd)
 NPP_SaraVicca <- read.csv(file="~/data/NPP_Yunke/NPP_SaraVicca/NPP_SaraVicca.csv")
@@ -140,7 +138,7 @@ Sara2_NPP$ANPP_2[Sara2_NPP$ANPP_2<=0] <- NA
 Sara2_NPP$NPP.foliage[Sara2_NPP$NPP.foliage<=0] <- NA
 Sara2_NPP$NPP.wood[Sara2_NPP$NPP.wood <=0] <- NA
 Sara2_NPP$Source <- "Sara Vicca Validation data"
-Sara2_NPP$file <- "/Users/yunpeng/data/NPP_Yunke/NPP_SaraVicca/orig/validation_data"
+Sara2_NPP$file <- "~/data/NPP_Yunke/NPP_SaraVicca/orig/validation_data"
 Sara2_NPP$pft<-"Forest"
 Sara2_NPP$pft2<-"Forest"
 summary(Sara2_NPP)
@@ -189,7 +187,7 @@ CN_Schulz2
 # (2) Add Malhi data - assume cmass as constant 0.48 g/g; narea in gm-2, lma in gm-2
 CN_Malhi <- read.csv(file="~/data/NPP_Yunke/npp_cn/CN_Malhi.csv")
 
-#No original data of cmass but we can assume cmass = 48%, because (1) it is consistent with what we find in mean values of /Users/yunpeng/data/CN_leaf/final_leafCN.csv, equals to 47% and (2) see Enquist et al. 2017 https://onlinelibrary.wiley.com/doi/full/10.1111/geb.12645 - fig.2, overall the cmass was within a very small variance through this elevation transect, and we can just assume this value as 0.48!
+#No original data of cmass but we can assume cmass = 48%, because (1) it is consistent with what we find in mean values of ~/data/CN_leaf/final_leafCN.csv, equals to 47% and (2) see Enquist et al. 2017 https://onlinelibrary.wiley.com/doi/full/10.1111/geb.12645 - fig.2, overall the cmass was within a very small variance through this elevation transect, and we can just assume this value as 0.48!
 
 #XXX information on this dataset lacking in README (~/data/NPP_Yunke/npp_cn/README.md). Original citation?
 #YYY: Done
@@ -335,7 +333,7 @@ NPP_final3$wnf_obs_final  <- NPP_final3$NPP.wood/NPP_final3$CN_wood_final
 
 summary(NPP_final3) 
 #Important!!!Input repeated data info
-rep_info <- read.csv("/Users/yunpeng/data/NPP_Yunke/NPP_final_rep.csv")
+rep_info <- read.csv("~/data/NPP_Yunke/NPP_final_rep.csv")
 summary(rep_info$lat-NPP_final3$lat)
 summary(rep_info$lon-NPP_final3$lon)
 summary(rep_info$z-NPP_final3$z)
@@ -363,7 +361,7 @@ tiandi_forest$ANPP_2 <- 100*tiandi_forest$ANPP_2
 tiandi_forest$NPP.foliage <- 100*tiandi_forest$NPP.foliage
 tiandi_forest$NPP.wood <- 100*tiandi_forest$NPP.wood
 tiandi_forest$BNPP_1 <- 100*tiandi_forest$BNPP_1
-tiandi_forest$file <- "/Users/yunpeng/data/npp_stoichiometry_forests_tiandi/"
+tiandi_forest$file <- "~/data/npp_stoichiometry_forests_tiandi/"
 tiandi_forest$Begin_year <- 2006
 tiandi_forest$End_year <- 2015
 tiandi_forest$Source <- "Fang, Wang, Tian Di prepared forest data in China"
@@ -385,10 +383,10 @@ NPP_Forest <- subset(NPP,pft2=="Forest")
 
 
 ########add sitename and sitename2, which was created when used for dowloading climate forcing and fapar forcing separately
-#for details about how to create this sitename, please run /Users/yunpeng/yunkepeng/nimpl_sofun_inputs/forest/forest_sitename_preparation.R
-#for info about climate forcing and fapar code, please have a look at example in  /Users/yunpeng/yunkepeng/nimpl_sofun_inputs/forest/forcing_fpar.R
+#for details about how to create this sitename, please run ~/yunkepeng/nimpl_sofun_inputs/forest/forest_sitename_preparation.R
+#for info about climate forcing and fapar code, please have a look at example in  ~/yunkepeng/nimpl_sofun_inputs/forest/forcing_fpar.R
 
-NPP_final2 <- read.csv("/Users/yunpeng/data/forest_npp/forest_forcing_info_all.csv")
+NPP_final2 <- read.csv("~/data/forest_npp/forest_forcing_info_all.csv")
 #pass some sitename and sitename2 data
 NPP_Forest$sitename <- NPP_final2$sitename
 NPP_Forest$sitename2 <- NPP_final2$sitename2
@@ -407,14 +405,14 @@ summary(NPP_Forest$NPP.foliage - NPP_final2$NPP.foliage)
 NPP_final2 <- NPP_Forest
 dim(NPP_final2)
 ####now, input forcing data from two times simulation
-forcing_df <- list.files("/Users/yunpeng/data/forest_npp/forcing/",full.names = T)
+forcing_df <- list.files("~/data/forest_npp/forcing/",full.names = T)
 length(forcing_df) # all data was included
 length(NPP_Forest$sitename) # all data was included
 
-fapar_df <- list.files("/Users/yunpeng/data/forest_npp/modis_subsets_all/",full.names = T)
+fapar_df <- list.files("~/data/forest_npp/modis_subsets_all/",full.names = T)
 length(fapar_df)
 
-fapar_org_df <- list.files("/Users/yunpeng/data/forest_npp/modis_orig/",full.names = T)
+fapar_org_df <- list.files("~/data/forest_npp/modis_orig/",full.names = T)
 length(fapar_org_df)
 
 #1. fapar - input - 12 samples were missing
@@ -1043,5 +1041,5 @@ ggplot(data=NRE_df, aes(x=pred_nre, y=NRE)) +
 
 summary(lm(NRE~pred_nre,NRE_df))
 
-save.image(file = "/Users/yunpeng/yunkepeng/nimpl_sofun_inputs/forest/Forest_site_check.Rdata")
+save.image(file = "~/yunkepeng/nimpl_sofun_inputs/forest/Forest_site_check.Rdata")
 
