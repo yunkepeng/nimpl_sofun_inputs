@@ -24,7 +24,7 @@ library(spgwr)
 load(file = "/Users/yunpeng/yunkepeng/nimpl_sofun_inputs/grassland/grassland_site_simulation.Rdata")
 
 #read complete dataset for measurement, after L1-L300 in /Users/yunpeng/yunkepeng/nimpl_sofun_inputs/forest/Forest_Global_check.Rmd
-NPP <- read.csv("/Users/yunpeng/data/forest_npp/NPP_final_all.csv")
+NPP <- read.csv("/Users/yunpeng/data/forest_npp/NPP_final_all[old version].csv")
 #extract forest only
 NPP_grassland <- subset(NPP,pft2=="Grassland")
 

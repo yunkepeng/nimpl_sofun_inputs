@@ -1,5 +1,5 @@
 rm(list=ls())
-library(ingestr)
+#library(ingestr)
 library(dplyr)
 library(tidyverse)  # depends
 library(ncmeta)
@@ -378,9 +378,18 @@ NPP_final4 <- dplyr::bind_rows(NPP_final3, tiandi_forest)
 
 NPP <- NPP_final4
 
-#extract forest only -->with corrected sitename in all (no NA)
-NPP_Forest <- subset(NPP,pft2=="Forest")
 
+###used for site simulation of grassland npp, including use ingestr for fapar and climate forcing, and rsofun (see relevant contents in grassland/)
+NPP_grassland <- subset(NPP,pft2=="Grassland")
+dim(NPP_grassland)
+csvfile <- paste("~/data/grassland_npp/NPP_grassland.csv")
+write_csv(NPP_grassland, path = csvfile)
+
+###used for site simulation of forest npp, including use ingestr for fapar and climate forcing, and rsofun (directly see below!!!)
+NPP_Forest <- subset(NPP,pft2=="Forest")
+dim(NPP_Forest)
+csvfile <- paste("~/data/forest_npp/NPP_forest.csv")
+write_csv(NPP_Forest, path = csvfile)
 
 ########add sitename and sitename2, which was created when used for dowloading climate forcing and fapar forcing separately
 #for details about how to create this sitename, please run ~/yunkepeng/nimpl_sofun_inputs/forest/forest_sitename_preparation.R in Desktop and ~/data/yunkepeng/nimpl_sofun_inputs/forest/forest_sitename_preparation.R in Euler
