@@ -1,5 +1,5 @@
 rm(list=ls())
-library(ingestr)
+#library(ingestr)
 library(dplyr)
 library(tidyverse)  # depends
 library(ncmeta)
@@ -9,7 +9,6 @@ library(LSD)
 library(yardstick)
 library(ggplot2)
 library(RColorBrewer)
-library(dplyr)
 library(gplots)
 library(tidyselect)
 library(extrafont)
@@ -20,6 +19,7 @@ library(maps)
 library(rworldmap)
 library(cowplot)
 library(spgwr)
+library(lubridate)
 
 load(file = "/Users/yunpeng/yunkepeng/nimpl_sofun_inputs/grassland/grassland_site_simulation.Rdata")
 
@@ -880,12 +880,17 @@ NPP_grassland_final11$pred_lnf <- NPP_grassland_final11$pred_anpp*NPP_grassland_
 NPP_grassland_final11$pred_bnf <- NPP_grassland_final11$pred_bnpp/46
 
 #Now, time to examine our data
+My_Theme = theme(
+  axis.title.x = element_text(size = 14),
+  axis.text.x = element_text(size = 20),
+  axis.title.y = element_text(size = 14),
+  axis.text.y = element_text(size = 20))
 
 analyse_modobs2(NPP_grassland_final11,
                 "pred_lnf", "lnf_obs_final",type = "points")
 ggplot(NPP_grassland_final11, aes(x=pred_lnf, y=lnf_obs_final)) +
   geom_point()+geom_abline(intercept=0,slope=1)+geom_smooth(method = "lm", se = TRUE)+ xlim(c(0,10))+
-  xlab("Prediction")+ylab("Observation")+theme_classic()
+  xlab("Prediction")+ylab("Observation")+theme_classic() + My_Theme
 
 
 analyse_modobs2(subset(NPP_grassland_final11,TNPP_1/weightedgpp_all > 0.2 & TNPP_1/weightedgpp_all <1),
@@ -894,26 +899,36 @@ analyse_modobs2(subset(NPP_grassland_final11,TNPP_1/weightedgpp_all > 0.2 & TNPP
 hist(NPP_grassland_final11$lnf_obs_final)
 
 analyse_modobs2(NPP_grassland_final11,"weightedgpp_all", "GPP",type = "points")
+
+
+
+#analyse_modobs2(subset(NPP_grassland_final11,TNPP_1/weightedgpp_all > 0.2 & TNPP_1/weightedgpp_all <1),"pred_npp", "TNPP_1",type = "points")
+#analyse_modobs2(NPP_grassland_final11,"pred_npp", "TNPP_1",type = "points")
+
+#NPP_grassland_final11$file[NPP_grassland_final11$file=="Tiandi"] <- "China Grassland"
+#NPP_grassland_final11$file[NPP_grassland_final11$file=="MCampioli"] <- "M.Campioli et al. 2015 Nature Geoscience"
+
 ggplot(NPP_grassland_final11, aes(x=weightedgpp_all, y=GPP)) +
-  geom_point()+geom_abline(intercept=0,slope=1)+geom_smooth(method = "lm", se = TRUE)+
-  xlab("Prediction")+ylab("Observation")+theme_classic()
-
-
-analyse_modobs2(subset(NPP_grassland_final11,TNPP_1/weightedgpp_all > 0.2 & TNPP_1/weightedgpp_all <1),"pred_npp", "TNPP_1",type = "points")
-analyse_modobs2(NPP_grassland_final11,"pred_npp", "TNPP_1",type = "points")
-
-NPP_grassland_final11$file[NPP_grassland_final11$file=="Tiandi"] <- "China Grassland"
-NPP_grassland_final11$file[NPP_grassland_final11$file=="MCampioli"] <- "M.Campioli et al. 2015 Nature Geoscience"
+  geom_point(aes(color=factor(file)))+geom_abline(intercept=0,slope=1)+geom_smooth(method = "lm", se = TRUE)+
+  xlab("Prediction")+ylab("Observation")+theme_classic()  + My_Theme
 
 ggplot(NPP_grassland_final11, aes(x=pred_npp, y=TNPP_1)) +
   geom_point(aes(color=factor(file)))+geom_abline(intercept=0,slope=1)+geom_smooth(method = "lm", se = TRUE)+
-  xlab("Prediction")+ylab("Observation")+theme_classic()  + ggtitle("Observed NPP vs. Predicted NPP")
+  xlab("Prediction")+ylab("Observation")+theme_classic()  + My_Theme
 
-My_Theme = theme(
-  axis.title.x = element_text(size = 14),
-  axis.text.x = element_text(size = 20),
-  axis.title.y = element_text(size = 14),
-  axis.text.y = element_text(size = 20))
+ggplot(NPP_grassland_final11, aes(x=pred_anpp, y=ANPP_2)) +
+  geom_point(aes(color=factor(file)))+geom_abline(intercept=0,slope=1)+geom_smooth(method = "lm", se = TRUE)+
+  xlab("Prediction")+ylab("Observation")+theme_classic()  + My_Theme
+
+ggplot(NPP_grassland_final11, aes(x=pred_lnf, y=lnf_obs_final)) +
+  geom_point(aes(color=factor(file)))+geom_abline(intercept=0,slope=1)+geom_smooth(method = "lm", se = TRUE)+ xlim(c(0,10))+
+  xlab("Prediction")+ylab("Observation")+theme_classic() + My_Theme
+
+hist(NPP_grassland_final11$TNPP_1/NPP_grassland_final11$weightedgpp_all)
+nrow(subset(NPP_grassland_final11,TNPP_1<weightedgpp_all))
+nrow(subset(NPP_grassland_final11,TNPP_1>=weightedgpp_all))
+
+29/(140+29)
 
 test <- subset(NPP_grassland_final11,file !="Keith")
 
@@ -944,7 +959,9 @@ ggplot(NPP_grassland_final12, aes(x=pred_anpp, y=ANPP_2)) +
   geom_point(aes(color=factor(file)))+geom_abline(intercept=0,slope=1)+geom_smooth(method = "lm", se = TRUE)+
   xlab("Predicted ANPP")+ylab("Measured ANPP")+theme_classic() + My_Theme +ggtitle("Observed ANPP vs. Predicted ANPP")
 
-
+ggplot(NPP_grassland_final12, aes(x=pred_npp, y=TNPP_1)) +
+  geom_point(aes(color=factor(file)))+geom_abline(intercept=0,slope=1)+geom_smooth(method = "lm", se = TRUE)+
+  xlab("Predicted ANPP")+ylab("Measured ANPP")+theme_classic() + My_Theme +ggtitle("Observed ANPP vs. Predicted ANPP")
 
 analyse_modobs2(NPP_grassland_final11,
                 "pred_bnpp", "BNPP_1",type = "points")

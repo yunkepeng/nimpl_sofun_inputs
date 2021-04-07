@@ -96,7 +96,7 @@ x0 <- foreach(i = c(1:485),.combine = "rbind") %dopar% {
 
 #some ingestr sites were (1) missing for csv or (2) all values for outputted csv's modisvar_filled in NA (due to n_focal = 0?).
 #Let's fill them
-fapar_df <- list.files("/Users/yunpeng/data/grassland_npp/reprocessing",full.names = T)
+fapar_df <- list.files("/Users/yunpeng/data/grassland_npp/reprocessing_fapar_old/reprocessing",full.names = T)
 length(fapar_df)-1
 
 #fapar

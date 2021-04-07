@@ -330,6 +330,14 @@ Predictors: Measured soil C/N, Measured stand-age(yrs), alpha (from SPLASH) and 
 ```{r}
 final_sites6 <- subset(final_sites5, CN>0 & age>0 & observedfAPAR>0  & alpha>0 & GPP>TNPP_1) # prevent one site when measured npp > gpp.
 
+#within final_site6:
+#Popface alba, Popface euamericana, Popface nigra --> these 3 sitenames have same lon, lat and z, but all other values different, even measurement year different
+#Thompson d12, Thompson d131, Thompson d20, Thompson d37, Thompson d41 --> these 5 sitenames have same lon, lat and z, but all other values different, even measurement year different.
+
+#This possible issue will cause different results in mixed-effects model. i.e. if aggregating based on (original) sitename, then number is 68; if aggregating based on lon+lat+z, then number is 60. 8 sites difference is due to above.
+
+#To respect the original data (since all other values and measurement year is different) we still asssume them as different sites, and we still use original sitename in our statistical model. I guess this difference is due to resolution of coordinates, in their records they are all within 0.01 resolution. Therefore it has a possibility when they are actually 3 or 5 different sites, but coordinates is exactly the same due to 0.01 resolution limitation.
+
 ## save model object and write to file
 mod_npp <- lmer(log((TNPP_1/GPP)/(1-(TNPP_1/GPP))) ~ log(CN) + log(age) + alpha + observedfAPAR + (1|site), data = final_sites6)
 save(mod_npp, file = "~/nimpl_sofun_inputs/data/mod_npp.RData")

@@ -48,10 +48,10 @@ dim(siteinfo_final) #485 sites to be obtained
 stopifnot( all(siteinfo_final$year_start == floor(siteinfo_final$year_start)) )
 stopifnot( all(siteinfo_final$year_end == floor(siteinfo_final$year_end)) )
 
-#1. ingest fpar
+#1. ingest fpar based on n_focal = 0
 settings_modis <- get_settings_modis(
   bundle            = "modis_fpar",
-  data_path         = "~/data/grassland_npp/reprocessing_fapar_01_15/",
+  data_path         = "~/data/grassland_npp/reprocessing_fapar_01_15/nfocal_0/",
   method_interpol   = "loess",
   keep              = TRUE,
   overwrite_raw     = FALSE,
@@ -65,7 +65,7 @@ library(doSNOW)
 NumberOfCluster <- 8
 cl <- makeCluster(NumberOfCluster, type='SOCK')
 registerDoSNOW(cl)
-x0 <- foreach(i = c(235:485),.combine = "rbind") %dopar% {
+x0 <- foreach(i = c(1:485),.combine = "rbind") %dopar% {
   devtools::load_all(".")
   library(dplyr)
   df_modis_fpar <- ingest_bysite(
@@ -82,13 +82,13 @@ x0 <- foreach(i = c(235:485),.combine = "rbind") %dopar% {
 stopCluster(cl)
 
 
-#some ingestr sites were (1) missing for csv or (2) all values for outputted csv's modisvar_filled in NA (due to n_focal = 0?).
+#some ingestr sites were (1) missing for csv (2) by-passing or (3) all values for outputted csv's modisvar_filled in NA (due to n_focal = 0?).
 #Let's fill them
-fapar_df <- list.files("/Users/yunpeng/data/grassland_npp/reprocessing",full.names = T)
+fapar_df <- list.files("~/data/grassland_npp/reprocessing_fapar_01_15/nfocal_0/",full.names = T)
 length(fapar_df)-1
 
 #fapar
-for (i in 1:length(fapar_df)){
+for (i in 1:(length(fapar_df)-1)){
   df1 <- read.csv(fapar_df[i])
   df1$date <- as.Date(df1$date)
   df1 <- df1[!(format(df1$date,"%m") == "02" & format(df1$date, "%d") == "29"), , drop = FALSE]
@@ -99,7 +99,7 @@ for (i in 1:length(fapar_df)){
   assign(substr(sub('.*daily_', '', fapar_df[i]),1,nchar(sub('.*daily_', '', fapar_df[i]))-4), df2) 
 }
 
-#fapar - check missing csv and output it into ingestr1, check if na happens within csv and output it as na_ingestr1.
+#fapar - check missing csv and output it into ingestr1,2,3... check if na happens within csv and output it as na_ingestr1.
 for (i in 1:nrow(siteinfo_final)){
   siteinfo_final$fpar_avil[i] <- exists(paste("ingestr",i,sep = ""))
   if (siteinfo_final$fpar_avil[i] == TRUE) {
@@ -115,22 +115,56 @@ subset(siteinfo_final,fpar_avil=="FALSE")
 dim(subset(siteinfo_final,fpar_avil=="FALSE")) #missing csv
 
 subset(siteinfo_final,na_avil=="NaN")
-dim(subset(siteinfo_final,na_avil=="NaN")) #missing csv and csv's value are NA (due to n_focal) --> 38 sites!
+dim(subset(siteinfo_final,na_avil=="NaN")) #missing csv and csv's value are NA (due to n_focal) --> 42 sites!
 
 #find such row name (list of number that will be used next round fapar ingestr)
 siteinfo_final$no <- c(1:485)
 na_number <- (subset(siteinfo_final,na_avil=="NaN")$no)
 na_number
 
-#now, now n_focal = 1, to fill such na values from csv!
+#now, re-ingesting fapar --> n_focal = 0 again, just have a double check (if anyone was wrongly by-passing)!
+stopCluster(cl)
 library(doSNOW)
-NumberOfCluster <- 4
+NumberOfCluster <- 8
 cl <- makeCluster(NumberOfCluster, type='SOCK')
 registerDoSNOW(cl)
 
 settings_modis <- get_settings_modis(
   bundle            = "modis_fpar",
-  data_path         = "~/data/grassland_npp/reprocessing_nfocal1/",
+  data_path         = "~/data/grassland_npp/reprocessing_fapar_01_15/nfocal_0_again/",
+  method_interpol   = "loess",
+  keep              = TRUE,
+  overwrite_raw     = FALSE,
+  overwrite_interpol= TRUE,
+  n_focal = 0
+)
+
+x0 <- foreach(i = na_number,.combine = "rbind") %dopar% {
+  devtools::load_all(".")
+  library(dplyr)
+  df_modis_fpar <- ingest_bysite(
+    sitename  = siteinfo_final[i,c("sitename")],
+    source    = "modis",
+    year_start = 2001,
+    year_end  = 2015,
+    lon       = siteinfo_final[i,c("lon")],
+    lat       = siteinfo_final[i,c("lat")],
+    settings  = settings_modis,
+    verbose   = FALSE
+  )
+}
+stopCluster(cl)
+
+
+#now, now n_focal = 1, to fill such na values from csv!
+library(doSNOW)
+NumberOfCluster <- 8
+cl <- makeCluster(NumberOfCluster, type='SOCK')
+registerDoSNOW(cl)
+
+settings_modis <- get_settings_modis(
+  bundle            = "modis_fpar",
+  data_path         = "~/data/grassland_npp/reprocessing_fapar_01_15/nfocal_1/",
   method_interpol   = "loess",
   keep              = TRUE,
   overwrite_raw     = FALSE,
@@ -144,41 +178,8 @@ x0 <- foreach(i = na_number,.combine = "rbind") %dopar% {
   df_modis_fpar <- ingest_bysite(
     sitename  = siteinfo_final[i,c("sitename")],
     source    = "modis",
-    year_start = siteinfo_final[i,c("year_start")],
-    year_end  = siteinfo_final[i,c("year_end")],
-    lon       = siteinfo_final[i,c("lon")],
-    lat       = siteinfo_final[i,c("lat")],
-    settings  = settings_modis,
-    verbose   = FALSE
-  )
-}
-
-#now, re-ingesting fapar --> n_focal = 0, just have a double check (if anyone was wrongly passed)!
-stopCluster(cl)
-
-library(doSNOW)
-NumberOfCluster <- 4
-cl <- makeCluster(NumberOfCluster, type='SOCK')
-registerDoSNOW(cl)
-
-settings_modis <- get_settings_modis(
-  bundle            = "modis_fpar",
-  data_path         = "~/data/grassland_npp/reprocessing_nfocal0_again/",
-  method_interpol   = "loess",
-  keep              = TRUE,
-  overwrite_raw     = FALSE,
-  overwrite_interpol= TRUE,
-  n_focal = 0
-)
-
-x0 <- foreach(i = na_number,.combine = "rbind") %dopar% {
-  devtools::load_all(".")
-  library(dplyr)
-  df_modis_fpar <- ingest_bysite(
-    sitename  = siteinfo_final[i,c("sitename")],
-    source    = "modis",
-    year_start = siteinfo_final[i,c("year_start")],
-    year_end  = siteinfo_final[i,c("year_end")],
+    year_start = 2001,
+    year_end  = 2015,
     lon       = siteinfo_final[i,c("lon")],
     lat       = siteinfo_final[i,c("lat")],
     settings  = settings_modis,
@@ -189,13 +190,13 @@ stopCluster(cl)
 
 #now, now n_focal = 2 (after we still see some NA from csvs when n_focal =1), to fill such na values from csv!
 library(doSNOW)
-NumberOfCluster <- 4
+NumberOfCluster <- 8
 cl <- makeCluster(NumberOfCluster, type='SOCK')
 registerDoSNOW(cl)
 
 settings_modis <- get_settings_modis(
   bundle            = "modis_fpar",
-  data_path         = "~/data/grassland_npp/reprocessing_nfocal2/",
+  data_path         = "~/data/grassland_npp/reprocessing_fapar_01_15/nfocal_2/",
   method_interpol   = "loess",
   keep              = TRUE,
   overwrite_raw     = FALSE,
@@ -203,165 +204,14 @@ settings_modis <- get_settings_modis(
   n_focal = 2
 )
 
-x0 <- foreach(i = c(333,224,274,223,214,160,317,81,375,41,416,13),.combine = "rbind") %dopar% {
-  devtools::load_all(".")
-  library(dplyr)
-  df_modis_fpar <- ingest_bysite(
-    sitename  = siteinfo_final[i,c("sitename")],
-    source    = "modis",
-    year_start = siteinfo_final[i,c("year_start")],
-    year_end  = siteinfo_final[i,c("year_end")],
-    lon       = siteinfo_final[i,c("lon")],
-    lat       = siteinfo_final[i,c("lat")],
-    settings  = settings_modis,
-    verbose   = FALSE
-  )
-}
-stopCluster(cl)
-
-#now, examine and re-collected our study sites for collecting fapar
-#primarily - based on n_focal = 0, loacated in /Users/yunpeng/data/grassland_npp/reprocessing (the additional files from /Users/yunpeng/data/grassland_npp/reprocessing_nfocal0_again have already been re-saved in /Users/yunpeng/data/grassland_npp/reprocessing/)
-#secondly - based on n_focal = 1, located in /Users/yunpeng/data/grassland_npp/reprocessing_nfocal1
-#thirdly - based on n_focal = 2, located in /Users/yunpeng/data/grassland_npp/reprocessing_nfocal2
-
-#fapar
-fapar_df <- list.files("/Users/yunpeng/data/grassland_npp/reprocessing",full.names = T)
-length(fapar_df)-1
-
-for (i in 1:(length(fapar_df)-1)){
-  df1 <- read.csv(fapar_df[i])
-  df1$date <- as.Date(df1$date)
-  df1 <- df1[!(format(df1$date,"%m") == "02" & format(df1$date, "%d") == "29"), , drop = FALSE]
-  df2 <- df1 %>% mutate(ymonth = month(date),
-                        yday = day(date)) %>% 
-    group_by(ymonth, yday) %>% 
-    summarise(fpar = mean(modisvar_filled, na.rm = TRUE))
-  assign(substr(sub('.*daily_', '', fapar_df[i]),1,nchar(sub('.*daily_', '', fapar_df[i]))-4), df2) 
-}
-
-#fapar - check missing csv and output it into ingestr1, check if na happens within csv and output it as na_ingestr1.
-for (i in 1:nrow(siteinfo_final)){
-  siteinfo_final$fpar_avil[i] <- exists(paste("ingestr",i,sep = ""))
-  if (siteinfo_final$fpar_avil[i] == TRUE) {
-    na_check <- (eval(parse(text=(paste("ingestr",i,sep = "")))))
-    siteinfo_final$na_avil[i] <- mean(na_check$fpar)
-  } else {
-    siteinfo_final$na_avil[i] <- "NaN"
-  }
-}
-
-#SEE n_focal = 0 's missing info
-subset(siteinfo_final,fpar_avil=="FALSE")
-dim(subset(siteinfo_final,fpar_avil=="FALSE")) #missing csv
-
-subset(siteinfo_final,na_avil=="NaN")
-dim(subset(siteinfo_final,na_avil=="NaN")) #missing csv and csv's value are NA (due to n_focal) --> 33 sites!
-siteinfo_final$no <- c(1:485)
-na_number <- (subset(siteinfo_final,na_avil=="NaN")$no)
-na_number
-length(na_number)
-
-#see n_focal =1 's missing info
-fapar_df2 <- list.files("/Users/yunpeng/data/grassland_npp/reprocessing_nfocal1",full.names = T)
-length(fapar_df2)-1
-
-#update
-for (i in 1:(length(fapar_df2)-1)){
-  df1 <- read.csv(fapar_df2[i])
-  df1$date <- as.Date(df1$date)
-  df1 <- df1[!(format(df1$date,"%m") == "02" & format(df1$date, "%d") == "29"), , drop = FALSE]
-  df2 <- df1 %>% mutate(ymonth = month(date),
-                        yday = day(date)) %>% 
-    group_by(ymonth, yday) %>% 
-    summarise(fpar = mean(modisvar_filled, na.rm = TRUE))
-  assign(substr(sub('.*daily_', '', fapar_df2[i]),1,nchar(sub('.*daily_', '', fapar_df2[i]))-4), df2) 
-}
-
-#fapar - check missing csv and output it into ingestr1, check if na happens within csv and output it as na_ingestr1.
-for (i in na_number){
-  siteinfo_final$fpar_avil[i] <- exists(paste("ingestr",i,sep = ""))
-  if (siteinfo_final$fpar_avil[i] == TRUE) {
-    na_check <- (eval(parse(text=(paste("ingestr",i,sep = "")))))
-    siteinfo_final$na_avil[i] <- mean(na_check$fpar)
-  } else {
-    siteinfo_final$na_avil[i] <- "NaN"
-  }
-}
-
-#SEE n_focal = 0, 1 's missing info
-subset(siteinfo_final,fpar_avil=="FALSE")
-dim(subset(siteinfo_final,fpar_avil=="FALSE")) #missing csv
-
-subset(siteinfo_final,na_avil=="NaN")
-dim(subset(siteinfo_final,na_avil=="NaN")) #missing csv and csv's value are NA (due to n_focal) --> 33 sites!
-na_number2 <- (subset(siteinfo_final,na_avil=="NaN")$no)
-na_number2
-length(na_number2)
-
-
-#see n_focal =2 's missing info
-fapar_df3 <- list.files("/Users/yunpeng/data/grassland_npp/reprocessing_nfocal2",full.names = T)
-length(fapar_df3)-1
-
-#update
-for (i in 1:(length(fapar_df3)-1)){
-  df1 <- read.csv(fapar_df3[i])
-  df1$date <- as.Date(df1$date)
-  df1 <- df1[!(format(df1$date,"%m") == "02" & format(df1$date, "%d") == "29"), , drop = FALSE]
-  df2 <- df1 %>% mutate(ymonth = month(date),
-                        yday = day(date)) %>% 
-    group_by(ymonth, yday) %>% 
-    summarise(fpar = mean(modisvar_filled, na.rm = TRUE))
-  assign(substr(sub('.*daily_', '', fapar_df3[i]),1,nchar(sub('.*daily_', '', fapar_df3[i]))-4), df2) 
-}
-
-#fapar - check missing csv and output it into ingestr1, check if na happens within csv and output it as na_ingestr1.
-for (i in na_number2){
-  siteinfo_final$fpar_avil[i] <- exists(paste("ingestr",i,sep = ""))
-  if (siteinfo_final$fpar_avil[i] == TRUE) {
-    na_check <- (eval(parse(text=(paste("ingestr",i,sep = "")))))
-    siteinfo_final$na_avil[i] <- mean(na_check$fpar)
-  } else {
-    siteinfo_final$na_avil[i] <- "NaN"
-  }
-}
-
-#SEE n_focal = 0, 1, 2 's missing info
-subset(siteinfo_final,fpar_avil=="FALSE")
-dim(subset(siteinfo_final,fpar_avil=="FALSE")) #missing csv
-
-subset(siteinfo_final,na_avil=="NaN")
-dim(subset(siteinfo_final,na_avil=="NaN")) #missing csv and csv's value are NA (due to n_focal) --> 33 sites!
-na_number3 <- (subset(siteinfo_final,na_avil=="NaN")$no)
-na_number3
-
-
-#comparing with last time's fapar ingestr (with n_focal = 3, 10 years measurement) --> 96-102 were missing, others were under expectation
-siteinfo_final[96:102,]
-#it is due to we applied measurement year here, and therefore, not available results. So we changed it to 2001 - 2010 at this stage.
-library(doSNOW)
-NumberOfCluster <- 4
-cl <- makeCluster(NumberOfCluster, type='SOCK')
-registerDoSNOW(cl)
-
-settings_modis <- get_settings_modis(
-  bundle            = "modis_fpar",
-  data_path         = "~/data/grassland_npp/reprocessing_nfocal0_10yrs_96to102/",
-  method_interpol   = "loess",
-  keep              = TRUE,
-  overwrite_raw     = FALSE,
-  overwrite_interpol= TRUE,
-  n_focal = 0
-)
-
-x0 <- foreach(i = 96:102,.combine = "rbind") %dopar% {
+x0 <- foreach(i = na_number,.combine = "rbind") %dopar% {
   devtools::load_all(".")
   library(dplyr)
   df_modis_fpar <- ingest_bysite(
     sitename  = siteinfo_final[i,c("sitename")],
     source    = "modis",
     year_start = 2001,
-    year_end  = 2010,
+    year_end  = 2015,
     lon       = siteinfo_final[i,c("lon")],
     lat       = siteinfo_final[i,c("lat")],
     settings  = settings_modis,
@@ -369,6 +219,22 @@ x0 <- foreach(i = 96:102,.combine = "rbind") %dopar% {
   )
 }
 stopCluster(cl)
+
+#now, examine and re-collected our study sites for collecting fapar (all from 2001-2015)
+#primarily - based on n_focal_0, and n_focal_0_again (some sites were by-passed due to internet): /Users/yunpeng/data/grassland_npp/reprocessing_fapar_01_15/nfocal_0
+#secondly - based on n_focal = 1: /Users/yunpeng/data/grassland_npp/reprocessing_fapar_01_15/nfocal_1
+#thirdly - based on n_focal = 2: /Users/yunpeng/data/grassland_npp/reprocessing_fapar_01_15/nfocal_2
+
+######The site information below has already been carefully checked in its separate original file (see above), to make sure that it strictly follows n_focal =0, then 1, then 2, then missing (10 points left)
+
+#n_focal_again includes addtional site (15): 68, 69, 74, 75, 76, 77, 78, 80, 83, 84, 85, 86, 87, 89, 130
+#n_focal1 includes addtional site (14): 29, 48, 57, 73, 79, 102, 128, 161, 172, 227, 282, 301, 348, 369, 373
+#n_focal2 includes addtional site (2) : 41, 160
+#Missing sites (from n_focal = 0, 1, 2 all not works; 10 points): 13, 81, 214, 223, 224, 274, 317, 333, 375, 416
+#All others are n_focal0
+
+#The final file was saved as: /Users/yunpeng/data/grassland_npp/reprocessing_fapar_final, with a README
+
 
 ##################
 #now, for climate forcing
@@ -438,14 +304,14 @@ x0 <- foreach(i = 1:485,.combine = "rbind") %dopar% {
     siteinfo  = siteinfo_final[i,],
     source    = "watch_wfdei",
     getvars   = c("temp", "prec", "ppfd", "vpd", "patm"), 
-    dir       = "/Volumes/Seagate Backup Plus Drive/data/watch_wfdei/",
-    settings  = list(correct_bias = "worldclim", dir_bias = "~/data/worldclim"))
+    dir       = "/Volumes/My Passport/data/watch_wfdei/",
+    settings  = list(correct_bias = "worldclim", dir_bias = "/Volumes/My Passport/data/worldclim/"))
   
   df_cru <- ingest(
     siteinfo  = siteinfo_final[i,],
     source    = "cru",
     getvars   = "ccov",
-    dir       = "/Volumes/Seagate Backup Plus Drive/data/cru/ts_4.01/")
+    dir       = "/Volumes/My Passport/data/cru/ts_4.01/")
   
   df_co2 <- ingest(
     siteinfo  = siteinfo_final[i,],
