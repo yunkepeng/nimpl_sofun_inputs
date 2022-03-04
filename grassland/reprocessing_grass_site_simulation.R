@@ -20,7 +20,10 @@ library(rworldmap)
 library(cowplot)
 library(spgwr)
 library(lubridate)
-load(file = "/Users/yunpeng/yunkepeng/nimpl_sofun_inputs/grassland/reprocessing_grassland_site_simulation.Rdata")
+library(lme4)
+library(MuMIn)
+library(lmerTest)
+#load(file = "/Users/yunpeng/yunkepeng/nimpl_sofun_inputs/grassland/reprocessing_grassland_site_simulation.Rdata")
 
 NPP_grassland  <- read.csv("/Users/yunpeng/data/grassland_npp/NPP_grassland.csv")
 
@@ -38,6 +41,7 @@ siteinfo <- data.frame(
   year_start = NPP_grassland$Begin_year,
   year_end = NPP_grassland$End_year
 )
+
 siteinfo$no <- c(1:nrow(siteinfo))
 
 siteinfo$year_start[siteinfo$year_start<=1980] <- 1980
@@ -45,6 +49,7 @@ siteinfo$year_end[siteinfo$year_start<=1980] <- 1989
 
 siteinfo <-  siteinfo %>% dplyr::mutate(date_start = lubridate::ymd(paste0(year_start, "-01-01"))) %>%
   dplyr::mutate(date_end = lubridate::ymd(paste0(year_end, "-12-31"))) 
+
 
 #aggregate by lon, lat, z, year_start, year_end
 siteinfo2 <- aggregate(siteinfo,by=list(siteinfo$lon,siteinfo$lat,siteinfo$elv,siteinfo$year_start,siteinfo$year_end), FUN=mean, na.rm=TRUE) #site-mean
@@ -716,13 +721,25 @@ NPP_grassland_final9$GPP[NPP_grassland_final9$site=="US-osg-D01"] <- 1890
 NPP_grassland_final9$GPP[NPP_grassland_final9$site=="CG-tch-D01"] <- 1572
 NPP_grassland_final9$GPP[NPP_grassland_final9$site=="US-Spe-D01"] <- 829
 
-#interpolate gpp from keith's source
-#NPP_grassland_final9$GPP[NPP_grassland_final9$site=="CN-Inn-F01"] <- 204 #considering two below, don't interpolate firstly
-#NPP_grassland_final9$GPP[NPP_grassland_final9$site=="KZ-shr-D01"] <- 357 #incosistent between keith and cambiopli's data!
-#NPP_grassland_final9$GPP[NPP_grassland_final9$site=="RU-ha2-F01"] <- 648 #incosistent between keith and cambiopli's data!
+#interpolate gpp to Cambioli's data from keith's source (with same site name)
+NPP_grassland_final9$GPP[NPP_grassland_final9$site=="CN-Inn-F01"] <- 204 #this value is reasonable comparing with NPP/GPP
+#NPP_grassland_final9$GPP[NPP_grassland_final9$site=="KZ-shr-D01"] <- 357 #incosistent between keith and cambiopli's data! (i.e. leading to unreasonable values with GPP < TNPP)
+#NPP_grassland_final9$GPP[NPP_grassland_final9$site=="RU-ha2-F01"] <- 648 #incosistent between keith and cambiopli's data!  (i.e. leading to unreasonable values with GPP slightly higher than TNPP - CUE =94%)
 
 #remove repeated data from keith (that has already been inputted in Cambioli's dataset - about its npp, anpp, bnpp)
+NPP_grassland_old  <- read.csv("/Users/yunpeng/data/grassland_npp/NPP_grassland.csv")
+NPP_grassland_final9$rep_info <- NPP_grassland_old$rep_info
+subset(NPP_grassland_final9,rep_info=="rep" | rep_info=="rep2"| rep_info=="rep3")
+
 NPP_grassland_final10 <- subset(NPP_grassland_final9,rep_info!="rep" & rep_info!="rep1"& rep_info!="rep3")
+
+#add more data from /Users/yunpeng/data/NPP_Yunke/NPP_Keith/orig/Bremer and Ham 2010.pdf from keith's grassland data
+#based on its Table 3 - GPP, for example, at the site below, was calculated as averages of 2 values (at 2 period) from site BA, so does site BB. 
+NPP_grassland_final10$TNPP_1[NPP_grassland_final10$site=="US-Kon-D02"] <- ((1669-1354) + (2269-1666))/2
+NPP_grassland_final10$TNPP_1[NPP_grassland_final10$site=="US-Kon-D03"] <- ((1368-1185) + (1997-1495))/2
+
+NPP_grassland_final10$BNPP_1[NPP_grassland_final10$site=="US-Kon-D02"] <- NPP_grassland_final10$TNPP_1[NPP_grassland_final10$site=="US-Kon-D02"] - NPP_grassland_final10$ANPP_2[NPP_grassland_final10$site=="US-Kon-D02"]
+NPP_grassland_final10$BNPP_1[NPP_grassland_final10$site=="US-Kon-D03"] <- NPP_grassland_final10$TNPP_1[NPP_grassland_final10$site=="US-Kon-D03"] - NPP_grassland_final10$ANPP_2[NPP_grassland_final10$site=="US-Kon-D03"]
 
 summary(NPP_grassland_final10)
 
@@ -733,55 +750,160 @@ dim(subset(NPP_grassland_final10,TNPP_1>weightedgpp_all))
 NPP_grassland_final10$filter2[NPP_grassland_final10$biome_MCampioli == "marsh"] <- "removal2"
 NPP_grassland_final10$filter2[NPP_grassland_final10$biome_MCampioli == "savannah"] <- "removal2"
 
-NPP_grassland_final11 <- subset(NPP_grassland_final10,is.na(filter2)==TRUE)
+NPP_grassland_final10a <- subset(NPP_grassland_final10,is.na(filter2)==TRUE) # remove savanna and marsh from Mcampioli data
+
+NPP_grassland_final10b <- subset(NPP_grassland_final10a,pft!="Plantation") # remove non-grassland from Keith
+NPP_grassland_final11 <- subset(NPP_grassland_final10b,pft!="Cropland") # remove non-grassland from Keith
 
 dim(subset(NPP_grassland_final11,TNPP_1<weightedgpp_all))
 dim(subset(NPP_grassland_final11,TNPP_1>weightedgpp_all))
 
-#20% points are outlier 1
-outlier1 <- subset(NPP_grassland_final11,TNPP_1>weightedgpp_all)
-library(rworldmap)
-newmap <- getMap(resolution = "low")
-plot(newmap, xlim = c(-180, 180), ylim = c(-75, 75), asp = 1)
-points(outlier1$lon,outlier1$lat, col="red", pch=16,cex=1)
-title("Outlier plots where measured NPP > predicted GPP")
+NPP_grassland_final11$BNPP_1 <- NPP_grassland_final11$TNPP_1 - NPP_grassland_final11$ANPP_2
 
-hist(outlier1$BNPP_1/outlier1$TNPP_1,main="bnpp/npp in those outlier plots")
+subset(NPP_grassland_final11,file=="Keith" & pft=="Grassland")
+#manually fill management in these 7 sites from keith, according to ABPE.csv
+NPP_grassland_final11$management_MCampioli[NPP_grassland_final11$site=="CN-du2-D01"] <- "T"
+NPP_grassland_final11$management_MCampioli[NPP_grassland_final11$site=="FR-Lq1-F01"] <- "T"
+NPP_grassland_final11$management_MCampioli[NPP_grassland_final11$site=="FR-Lq2-F01"] <- "SN"
+NPP_grassland_final11$management_MCampioli[NPP_grassland_final11$site=="IE-dri-D01"] <- "N"
+NPP_grassland_final11$management_MCampioli[NPP_grassland_final11$site=="US-Kon-D02"] <- "SN"
+NPP_grassland_final11$management_MCampioli[NPP_grassland_final11$site=="US-Kon-D03"] <- "SN"
+NPP_grassland_final11$management_MCampioli[NPP_grassland_final11$site=="US-osg-D02"] <- "SN"
+
+#20% points are outlier 1
+#outlier1 <- subset(NPP_grassland_final11,TNPP_1>weightedgpp_all)
+#library(rworldmap)
+#newmap <- getMap(resolution = "low")
+#plot(newmap, xlim = c(-180, 180), ylim = c(-75, 75), asp = 1)
+#points(outlier1$lon,outlier1$lat, col="red", pch=16,cex=1)
+#title("Outlier plots where measured NPP > predicted GPP")
+
+#hist(outlier1$BNPP_1/outlier1$TNPP_1,main="bnpp/npp in those outlier plots")
 
 #12% points are outlier 2
-outlier2 <- subset(NPP_grassland_final11,TNPP_1/weightedgpp_all<0.2)
-library(rworldmap)
-newmap <- getMap(resolution = "low")
-plot(newmap, xlim = c(-180, 180), ylim = c(-75, 75), asp = 1)
-points(outlier2$lon,outlier2$lat, col="red", pch=16,cex=1)
-title("Outlier plots where measured NPP / predicted GPP < 0.2")
+#outlier2 <- subset(NPP_grassland_final11,TNPP_1/weightedgpp_all<0.2)
+#library(rworldmap)
+#newmap <- getMap(resolution = "low")
+#plot(newmap, xlim = c(-180, 180), ylim = c(-75, 75), asp = 1)
+#points(outlier2$lon,outlier2$lat, col="red", pch=16,cex=1)
+#title("Outlier plots where measured NPP / predicted GPP < 0.2")
 
-hist(outlier2$BNPP_1/outlier2$TNPP_1,main="bnpp/npp in those outlier plots")
+#hist(outlier2$BNPP_1/outlier2$TNPP_1,main="bnpp/npp in those outlier plots")
 
 #make models to have a look --> CUE = 0.40462 --> reasonable
-library(lme4)
-library(MuMIn)
-library(lmerTest)
 
+#firstly, gpp
+#replace 3 sites predicted GPP to stocker et al. 2020 GMD GPP (where using fluxnet measured climate data)
+#the spatial based gpp prediction was available in /Users/yunpeng/data/gpp_gmd/gpp_pmodel_fluxnet2015_stocker19gmd_spatial.csv
+#...and also in zenedo: https://zenodo.org/record/3559850#.YHgs4pMzaqA
+#Stocker et al. 2019 GMD: Difference between ORG (Wang et al. 2017), BRC (newly have temperature-dependent phio) and FULL (BRC + soil moisture correction).
+#our rsofun is FULL (T-dependent phio + soil moisture correction) so we replace it also to FULL version data
+#our current simulation
+NPP_grassland_final11$weightedgpp_all[NPP_grassland_final11$site=="CN-du2-D01"]
+NPP_grassland_final11$weightedgpp_all[NPP_grassland_final11$site=="RU-ha1-F01"]
+NPP_grassland_final11$weightedgpp_all[NPP_grassland_final11$site=="DE-gri-D01"]
+#change to (see csv location - site-name at FULL setup - not changing too much!)
+NPP_grassland_final11$weightedgpp_all[NPP_grassland_final11$site=="CN-du2-D01"] <- 541.8902364
+NPP_grassland_final11$weightedgpp_all[NPP_grassland_final11$site=="RU-ha1-F01"] <- 536.0214562
+NPP_grassland_final11$weightedgpp_all[NPP_grassland_final11$site=="DE-gri-D01"] <- 1491.184888
+
+#using NPP/GPP model all from measurements?
 summary(lmer((TNPP_1)~-1+(weightedgpp_all)+(1|site),data=NPP_grassland_final11))
-
 r.squaredGLMM(lmer((TNPP_1)~-1+(weightedgpp_all)+(1|site),data=NPP_grassland_final11))
+#slope = 0.46, R2 = 0.21
 
-#summary(lmer((TNPP_1)~-1+(weightedgpp_all)+(1|site_xyz),data=NPP_grassland_final11))
 
+summary(lm((TNPP_1)~-1+(weightedgpp_all),data=NPP_grassland_final12))
+
+
+ggplot(NPP_grassland_final11, aes(x=weightedgpp_all, y=GPP)) +
+  geom_point(aes(color=factor(file)))+geom_abline(intercept=0,slope=1)+geom_smooth(method = "lm", se = TRUE)+
+  xlab("Predicted GPP")+ylab("Measured GPP")+theme_classic() + My_Theme +ggtitle("Observed GPP vs. Predicted GPP")
+summary(lm(GPP~weightedgpp_all,data=NPP_grassland_final11)) # r2 =0.24
+
+#there are 2 sites, including 2 samples in each site
+#one is due to "T" and "N" - at this stage - just removing "T"
+subset(NPP_grassland_final11,weightedgpp_all>0 & GPP>0)$site[2:3]
+subset(NPP_grassland_final11,weightedgpp_all>0 & GPP>0)$management_MCampioli[2:3]
+subset(NPP_grassland_final11,weightedgpp_all>0 & GPP>0)$lon[2:3]
+subset(NPP_grassland_final11,weightedgpp_all>0 & GPP>0)$lat[2:3]
+
+#another is just because they have two very closed sites - see ~/data/NPP_Yunke/NPP_Keith/orig/Bremer and Ham 2010.pdf -  see their abstract - just two closed sites 
+subset(NPP_grassland_final11,weightedgpp_all>0 & GPP>0)$site[5:6]
+subset(NPP_grassland_final11,weightedgpp_all>0 & GPP>0)$management_MCampioli[5:6]
+subset(NPP_grassland_final11,weightedgpp_all>0 & GPP>0)$lon[5:6]
+subset(NPP_grassland_final11,weightedgpp_all>0 & GPP>0)$lat[5:6]
+
+NPP_grassland_final12 <- subset(NPP_grassland_final11,file!="Tiandi" & management_MCampioli!="M" & management_MCampioli!="T")
+
+#remove "FR-Lq1-F01" - due to "T" in the same site.
+ggplot(subset(NPP_grassland_final11,site!="FR-Lq1-F01"), aes(x=weightedgpp_all, y=GPP)) +
+  geom_point()+geom_abline(intercept=0,slope=1)+geom_smooth(method = "lm", se = TRUE)+
+  xlab("Predicted GPP")+ylab("Measured GPP")+theme_classic() + My_Theme
+summary(lm(GPP~weightedgpp_all,data=subset(NPP_grassland_final11,site!="FR-Lq1-F01")))
+
+# a wide test for best npp model - removing China's database for examination
+NPP_grassland_final11$pred_npp <- NPP_grassland_final11$weightedgpp_all * 0.46
+
+ggplot(NPP_grassland_final11, aes(x=pred_npp, y=TNPP_1)) +
+  geom_point(aes(color=factor(file)))+geom_abline(intercept=0,slope=1)+geom_smooth(method = "lm", se = TRUE)+
+  xlab("Predicted NPP")+ylab("Measured NPP")+theme_classic() + My_Theme
+
+ggplot(subset(NPP_grassland_final11,file!="Tiandi"), aes(x=pred_npp, y=TNPP_1)) +
+  geom_point(aes(color=factor(file)))+geom_abline(intercept=0,slope=1)+geom_smooth(method = "lm", se = TRUE)+
+  xlab("Predicted NPP")+ylab("Measured NPP")+theme_classic() + My_Theme
+
+ggplot(subset(NPP_grassland_final11,file!="Tiandi"), aes(x=pred_npp, y=TNPP_1)) +
+  geom_point(aes(color=factor(management_MCampioli)))+geom_abline(intercept=0,slope=1)+geom_smooth(method = "lm", se = TRUE)+
+  xlab("Predicted NPP")+ylab("Measured NPP")+theme_classic() + My_Theme + theme(legend.title = element_blank())
+
+ggplot(subset(NPP_grassland_final11,file!="Tiandi" & management_MCampioli!="M" & management_MCampioli!="T"), aes(x=pred_npp, y=TNPP_1)) +
+  geom_point(aes(color=factor(management_MCampioli)))+geom_abline(intercept=0,slope=1)+geom_smooth(method = "lm", se = TRUE)+
+  xlab("Predicted NPP")+ylab("Measured NPP")+theme_classic() + My_Theme + theme(legend.title = element_blank())
+
+summary(lm(TNPP_1~pred_npp,subset(NPP_grassland_final11,file!="Tiandi")))
+
+summary(lm(TNPP_1~pred_npp,subset(NPP_grassland_final11,file!="Tiandi" & management_MCampioli!="M" & management_MCampioli!="T"))) # r2=0.11
+
+#now, vairous test for anpp/npp model
+
+#everything - current model (with Tg and alpha, not specifying management)
 summary(lmer(log((ANPP_2/TNPP_1)/(1-(ANPP_2/TNPP_1)))~Tg+alpha+(1|site),data=NPP_grassland_final11))
 r.squaredGLMM(lmer(log((ANPP_2/TNPP_1)/(1-(ANPP_2/TNPP_1)))~Tg+alpha+(1|site),data=NPP_grassland_final11))
+
+summary(lm(log((ANPP_2/TNPP_1)/(1-(ANPP_2/TNPP_1)))~fapar,data=subset(NPP_grassland_final11,file!="Tiandi")))
+
+summary(lm(ANPP_2~-1+TNPP_1,data=subset(NPP_grassland_final11,file!="Tiandi")))
+#r2 = 0.49
+
+
+summary(lmer((ANPP_2/weightedgpp_all)~fapar+Tg+(1|site),data=(NPP_grassland_final11)))
+r.squaredGLMM(lmer((ANPP_2/weightedgpp_all)~fapar+Tg+(1|site),data=NPP_grassland_final11))
+
+#now, without tiandi, M and T
+NPP_grassland_final12 <- subset(NPP_grassland_final11,file!="Tiandi" & management_MCampioli!="M" & management_MCampioli!="T")
+
+summary(lm((ANPP_2/weightedgpp_all)~Tg+CNrt,data=subset(NPP_grassland_final11,management_MCampioli!="M" & management_MCampioli!="T")))
+
+summary(lm((ANPP_2)~-1+weightedgpp_all,data=NPP_grassland_final12))
+
+#using constant directly??
+NPP_grassland_final12$pred_anpp <- NPP_grassland_final12$pred_npp * 0.20858
+
+#or pridicted from fapar and Tg
+NPP_grassland_final12$pred_anpp <- NPP_grassland_final12$weightedgpp_all*(NPP_grassland_final12$Tg * 0.018309 -0.080201)
+
+ggplot(NPP_grassland_final12, aes(x=pred_anpp, y=ANPP_2)) +
+  geom_point(aes(color=factor(management_MCampioli)))+
+  geom_abline(intercept=0,slope=1)+geom_smooth(method = "lm", se = TRUE)+
+  xlab("Predicted ANPP")+ylab("Measured ANPP")+theme_classic() + My_Theme+theme(legend.title = element_blank())
+
+
+summary(lm(ANPP_2~pred_anpp,NPP_grassland_final12)) # r2 = 0.24 
 
 #calculate weighted MAX vcmax25 from max_vcmax25_c3 and max_vcmax25_c4, based on final measured c3/c4 percentage.
 NPP_grassland_final11$maxvcmax25_all <- (NPP_grassland_final11$max_vcmax25_c3 * NPP_grassland_final11$c3_percentage_final)+
   (NPP_grassland_final11$max_vcmax25_c4 * (1-NPP_grassland_final11$c3_percentage_final))
-
-
-NPP_grassland_final11$pred_npp <- NPP_grassland_final11$weightedgpp_all * 0.46322
-NPP_grassland_final11$pred_anpp <- NPP_grassland_final11$pred_npp * 
-  (1/(1+exp(-(1.8720 * NPP_grassland_final11$alpha + 0.0385 * NPP_grassland_final11$Tg + -2.5642))))
-
-NPP_grassland_final11$pred_bnpp <- NPP_grassland_final11$pred_npp - NPP_grassland_final11$pred_anpp
 
 #input max vcmax25
 firstyr_data <- 1982 # In data file, which is the first year
@@ -860,13 +982,41 @@ for (i in 1:nrow(NPP_grassland_final11)) {
   }, error=function(e){})} 
 
 #using simulated vcmax25
-NPP_grassland_final11$pred_leafnc <- (0.0161/0.5) + (0.0041/0.5) * NPP_grassland_final11$Vcmax25/NPP_grassland_final11$LMA 
+#NPP_grassland_final11$pred_leafnc <- (0.0161/0.5) + (0.0041/0.5) * NPP_grassland_final11$Vcmax25/NPP_grassland_final11$LMA 
+
+#fit a new leafnc model?
+summary(lm(CN_leaf_final~maxvcmax25_all+LMA,data=NPP_grassland_final11))
+NPP_grassland_final11$nc_leaf <- 1/NPP_grassland_final11$CN_leaf_final
+NPP_grassland_final11$vc25_lma <- NPP_grassland_final11$maxvcmax25_all/NPP_grassland_final11$LMA
+summary(lm(nc_leaf~vc25_lma,data=NPP_grassland_final11))
+
 
 #using weighted max vcmax25 from rsofun, from c3/c4 measured info
-NPP_grassland_final11$pred_leafnc <- (0.0161/0.5) + (0.0041/0.5) * NPP_grassland_final11$maxvcmax25_all/NPP_grassland_final11$LMA 
+NPP_grassland_final11$pred_leafnc <- (0.0162/0.5) + (0.0039/0.5) * NPP_grassland_final11$maxvcmax25_all/NPP_grassland_final11$LMA 
 
-NPP_grassland_final11$pred_lnf <- NPP_grassland_final11$pred_anpp*NPP_grassland_final11$pred_leafnc
+NPP_grassland_final11$pred_lnf <- NPP_grassland_final11$pred_leafnc*(NPP_grassland_final11$weightedgpp_all*(NPP_grassland_final11$Tg * 0.018309 -0.080201))
+#NPP_grassland_final11$pred_bnf <- NPP_grassland_final11$pred_bnpp/46
+
+NPP_grassland_final12 <- subset(NPP_grassland_final11,file!="Tiandi" & management_MCampioli!="M" & management_MCampioli!="T")
+
+ggplot(NPP_grassland_final11, aes(x=pred_lnf, y=lnf_obs_final)) +
+  geom_point()+geom_abline(intercept=0,slope=1)+geom_smooth(method = "lm", se = TRUE)+ xlim(c(0,10))+
+  xlab("Predicted leaf N flux")+ylab("Measured leaf N flux")+theme_classic() + My_Theme
+
+summary(lm(pred_lnf~lnf_obs_final,data=NPP_grassland_final11))
+
+NPP_grassland_final11$pred_bnpp <- NPP_grassland_final11$pred_npp - NPP_grassland_final11$pred_anpp
 NPP_grassland_final11$pred_bnf <- NPP_grassland_final11$pred_bnpp/46
+
+
+ggplot(subset(NPP_grassland_final11,file!="Tiandi"), aes(x=pred_bnpp, y=BNPP_1)) +
+  geom_point()+geom_abline(intercept=0,slope=1)+geom_smooth(method = "lm", se = TRUE)+ 
+  xlab("Predicted BNPP")+ylab("Measured BNPP")+theme_classic() + My_Theme
+
+ggplot(NPP_grassland_final11, aes(x=pred_bnf, y=bnf_obs_final)) +
+  geom_point()+geom_abline(intercept=0,slope=1)+geom_smooth(method = "lm", se = TRUE)+ 
+  xlab("Predicted BNF")+ylab("Measured BNF")+theme_classic() + My_Theme
+
 
 #Now, time to examine our data
 My_Theme = theme(
@@ -882,26 +1032,33 @@ ggplot(NPP_grassland_final11, aes(x=weightedgpp_all, y=GPP)) +
 summary(lm(GPP~weightedgpp_all,NPP_grassland_final11))
 
 #check gpp
-aaa <- subset(NPP_grassland_final11,GPP>0)[,c("site","lon","lat","ANPP_2","GPP","file","Source")]
-
+aaa <- subset(NPP_grassland_final11,GPP>0 & lon ==-85.40000)[,c("site","lon","lat","ANPP_2","GPP","file","Source")]
+aaa
 
 NPP_grassland_final11a <- aggregate(NPP_grassland_final11,by=list(NPP_grassland_final11$lon,NPP_grassland_final11$lat), FUN=mean, na.rm=TRUE)
+
 ggplot(NPP_grassland_final11a, aes(x=weightedgpp_all, y=GPP)) +
   geom_point()+geom_abline(intercept=0,slope=1)+geom_smooth(method = "lm", se = TRUE)+
   xlab("Prediction")+ylab("Observation")+theme_classic()  + My_Theme
+
+summary(lm(GPP~weightedgpp_all,NPP_grassland_final11a))
 
 ggplot(NPP_grassland_final11, aes(x=pred_npp, y=TNPP_1)) +
   geom_point(aes(color=factor(file)))+geom_abline(intercept=0,slope=1)+geom_smooth(method = "lm", se = TRUE)+
   xlab("Prediction")+ylab("Observation")+theme_classic()  + My_Theme
 
-summary(lm(TNPP_1~pred_npp,NPP_grassland_final11))
+NPP_grassland_final11b <- subset(NPP_grassland_final11,file!="Tiandi" & pft=="Grassland")
+ggplot(NPP_grassland_final11b, aes(x=pred_anpp, y=ANPP_2)) +
+  geom_point(aes(color=factor(file)))+geom_abline(intercept=0,slope=1)+geom_smooth(method = "lm", se = TRUE)+
+  xlab("Prediction")+ylab("Observation")+theme_classic()  + My_Theme
 
+summary(lm(ANPP_2~pred_anpp,NPP_grassland_final11b))
 
 ggplot(NPP_grassland_final11, aes(x=pred_anpp, y=ANPP_2)) +
   geom_point(aes(color=factor(file)))+geom_abline(intercept=0,slope=1)+geom_smooth(method = "lm", se = TRUE)+
   xlab("Prediction")+ylab("Observation")+theme_classic()  + My_Theme
 
-summary(lm(ANPP_2~pred_anpp,NPP_grassland_final11))
+
 
 ggplot(NPP_grassland_final11, aes(x=pred_lnf, y=lnf_obs_final)) +
   geom_point(aes(color=factor(file)))+geom_abline(intercept=0,slope=1)+geom_smooth(method = "lm", se = TRUE)+ xlim(c(0,10))+

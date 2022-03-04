@@ -47,7 +47,13 @@ library(cowplot)
 #1. Input a large dataset (at least includes Narea, Vcmax25, lma)
 #For author's unpublished data purpose, this data is not avaiable now and only saved in desktop.
 
-SP_input <- read.csv(file="~/data/CN_leaf/final_individuals.csv") #all individuals
+#SP_input <- read.csv(file="~/data/CN_leaf/final_individuals.csv") #old one
+#SP_input <- read.csv(file="/Users/yunpeng/yunkepeng/VcmaxMS/individuals_v4.csv") #new one 
+SP_input <- read.csv(file="/Users/yunpeng/data/leaf_traits/combined_leaf_traits.csv") #new one 
+
+SP_input$Vcmax.25 <- SP_input$Vcmax25
+SP_input$Elevation <- SP_input$z
+
 SP_input2 <- SP_input[,c("lat","lon","Elevation","Vcmax.25","narea","lma")]
 sitemean <- aggregate(SP_input2,by=list(SP_input2$lon,SP_input2$lat), FUN=mean, na.rm=TRUE) #site-mean
 
@@ -84,9 +90,9 @@ summary(lmer(nmass~vcmax25_lma + (1|sitename)+(1|species),data=sitespecies_final
 
 r.squaredGLMM(lmer(nmass~vcmax25_lma + (1|sitename) +(1|species),data=sitespecies_final))
 
-# r2 = 0.177
-#intercept = 0.0161 (Ns)
-#slope = 0.0041 (Nr)
+# r2 = 0.177 --> 0.167 --> 0.2020332
+#intercept = 0.0161 (Ns) --> 0.0162 --> 0.01599
+#slope = 0.0041 (Nr) --> 0.0039 --> 0.005992
 
 #compare crossed and nested design
 #crossed <- lmer(nmass~vcmax25_lma + (1|sitename)+(1|species),data=sitespecies_final)
@@ -99,9 +105,9 @@ sitemean$nmass <- sitemean$narea/sitemean$lma
 sitemean$vcmax25_lma <- sitemean$Vcmax.25/sitemean$lma
 
 summary(lm(nmass~vcmax25_lma ,data=sitemean))
-#R2 = 0.26
-#intercept = 0.0144 (Ns)
-#slope = 0.0050 (Nr)
+#R2 = 0.3911
+#intercept = 0.0135240 (Ns)
+#slope = 0.0082435 (Nr)
 
 #Narea/LMA (Nmass,unitness) * C/N ratio (as shown in /Users/yunpeng/data/CN_leaf/final_leafCN.csv) = Cmass (unitness) 
 #This value below was therefore used in nimpl simulation: Cmass (unitness) = 0.47

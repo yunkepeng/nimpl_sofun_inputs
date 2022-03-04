@@ -19,10 +19,9 @@ library(spgwr)
 library(maps)
 library(rworldmap)
 library(cowplot)
-library(spgwr)
 
 
-#load(file = "~/yunkepeng/nimpl_sofun_inputs/forest/Forest_site_check.Rdata")
+load(file = "~/yunkepeng/nimpl_sofun_inputs/forest/reprocessing_forest_site_simulation.Rdata")
 #at the end of code...
 
 # (1) pre-processing NPP
@@ -194,7 +193,7 @@ CN_Malhi <- read.csv(file="~/data/NPP_Yunke/npp_cn/CN_Malhi.csv")
 
 #XXX Why not use the value of cmass provided in that same dataset (0.4638)?
 #YYY: Done. See below.  
-  
+
 CN_Malhi$CN_leaf_alt_malhi <- 0.4638/(CN_Malhi$narea/CN_Malhi$lma) # use CN_leaf_alt as a new and alternative variable, by storing data when Cmass or (c%) is lacking.
 
 CN_Malhi <- na.omit(CN_Malhi)
@@ -405,116 +404,139 @@ plot(newmap, xlim = c(-180, 180), ylim = c(-75, 75), asp = 1)
 points(NPP_Forest$lon,NPP_Forest$lat, col="red", pch=16,cex=1)
 points(NPP_Forest_corrected$lon,NPP_Forest_corrected$lat, col="blue", pch=16,cex=1) 
 
+NPP_Forest <- NPP_Forest_corrected
 
-csvfile <- paste("~/data/forest_npp/NPP_Forest_corrected_Malhi_coord.csv")
-write_csv(NPP_Forest_corrected, path = csvfile)
+#csvfile <- paste("~/data/forest_npp/NPP_Forest_corrected_Malhi_coord.csv")
+#write_csv(NPP_Forest_corrected, path = csvfile)
 
-########add sitename and sitename2, which was created when used for dowloading climate forcing and fapar forcing separately
-#for details about how to create this sitename, please run ~/yunkepeng/nimpl_sofun_inputs/forest/forest_sitename_preparation.R in Desktop and ~/data/yunkepeng/nimpl_sofun_inputs/forest/forest_sitename_preparation.R in Euler
-#for info about climate forcing and fapar code, please have a look at example in  ~/yunkepeng/nimpl_sofun_inputs/forest/forcing_fpar.R and  ~/data/yunkepeng/nimpl_sofun_inputs/forest/forcing_fpar.R in Euler
+########add sitename (same in current df) and sitename_fapar (lon + lat), which will be used in rsofun
+#for info about how to create sitename_fapar, check: /Users/yunpeng/yunkepeng/nimpl_sofun_inputs/forest/Reprocessing_fpar_climates_forest.R
 
-NPP_final2 <- read.csv("~/data/forest_npp/forest_forcing_info_all.csv")
+NPP_final2 <- read.csv("~/data/forest_npp/NPP_Forest_corrected_Malhi_coord.csv")
 #pass some sitename and sitename2 data
 NPP_Forest$sitename <- NPP_final2$sitename
-NPP_Forest$sitename2 <- NPP_final2$sitename2
+NPP_Forest$sitename_fpar <- NPP_final2$sitename_fpar
 
 #check two df is consistent..
-summary(NPP_Forest$lat-NPP_final2$lat)
-summary(NPP_Forest$lon-NPP_final2$lon)
-summary(NPP_Forest$z-NPP_final2$z)
-summary(NPP_Forest$Begin_year-NPP_final2$Begin_year)
-summary(NPP_Forest$End_year-NPP_final2$End_year)
-summary(NPP_Forest$GPP-NPP_final2$GPP)
-summary(NPP_Forest$TNPP_1 - NPP_final2$TNPP_1)
-summary(NPP_Forest$ANPP_2 - NPP_final2$ANPP_2)
-summary(NPP_Forest$NPP.foliage - NPP_final2$NPP.foliage)
+#summary(NPP_Forest$lat-NPP_final2$lat)
+#summary(NPP_Forest$lon-NPP_final2$lon)
+#summary(NPP_Forest$z-NPP_final2$z)
+#summary(NPP_Forest$Begin_year-NPP_final2$Begin_year)
+#summary(NPP_Forest$End_year-NPP_final2$End_year)
+#summary(NPP_Forest$GPP-NPP_final2$GPP)
+#summary(NPP_Forest$TNPP_1 - NPP_final2$TNPP_1)
+#summary(NPP_Forest$ANPP_2 - NPP_final2$ANPP_2)
+#summary(NPP_Forest$NPP.foliage - NPP_final2$NPP.foliage)
 
-NPP_final2 <- NPP_Forest
-dim(NPP_final2)
+#before start everything - convert the measurement year before 1980 to 1980-1989 (which is consistent with what we set in climate forcing), so that we can run them sucessfully in rsofun later on.
+NPP_Forest$year_start <-NPP_Forest$Begin_year
+NPP_Forest$year_end <-NPP_Forest$End_year
+
+NPP_Forest$year_start[NPP_Forest$Begin_year<=1980] <- 1980
+NPP_Forest$year_end[NPP_Forest$End_year<=1980] <- 1989
+
 ####now, input forcing data from two times simulation
-forcing_df <- list.files("~/data/forest_npp/forcing/",full.names = T)
-length(forcing_df) # all data was included
-length(NPP_Forest$sitename) # all data was included
+forcing_df <- list.files("~/data/forest_npp/reprocessing_climates/",full.names = T)
+length(forcing_df)
 
-fapar_df <- list.files("~/data/forest_npp/modis_subsets_all/",full.names = T)
+fapar_df <- list.files("~/data/forest_npp/reprocessing_fpar/",full.names = T)
 length(fapar_df)
 
-fapar_org_df <- list.files("~/data/forest_npp/modis_orig/",full.names = T)
+fapar_org_df <- list.files("~/data/forest_npp/reprocessing_fpar_raw/",full.names = T)
 length(fapar_org_df)
 
-#1. fapar - input - 12 samples were missing
+#1. fapar - input
+
+#1. fpar - check missing data - and also, input all years fapar (2001-2015), which will be selected in measurement year only later on 
 for (i in 1:length(fapar_df)){
   df1 <- read.csv(fapar_df[i])
   df1$date <- as.Date(df1$date)
   df1 <- df1[!(format(df1$date,"%m") == "02" & format(df1$date, "%d") == "29"), , drop = FALSE]
-  df2 <- df1 %>% mutate(ymonth = month(date),
-                        yday = day(date)) %>% 
-    group_by(ymonth, yday) %>% 
-    summarise(fpar = mean(modisvar_filled, na.rm = TRUE))
+  df2 <- df1[,c("date","modisvar_filled")]
   assign(substr(sub('.*daily_', '', fapar_df[i]),1,nchar(sub('.*daily_', '', fapar_df[i]))-4), df2) 
 }
 
-for (i in 1:nrow(NPP_final2)){
-  NPP_final2$forcing_avil[i] <- exists(paste(NPP_final2$sitename2[i]))
+#check fapar missing data
+for (i in 1:nrow(NPP_Forest)){
+  NPP_Forest$forcing_avil[i] <- exists(paste(NPP_Forest$sitename_fpar[i]))
 }
 
-na_fapar <- (subset(NPP_final2,forcing_avil=="FALSE" ))
-summary(na_fapar)
-na_fapar$sitename2
+na_fapar <- (subset(NPP_Forest,forcing_avil=="FALSE" ))
 dim(na_fapar)
+na_fapar$sitename
 
-
-
-#12 sitename2 (plots), but 13 samples were missing
-#I have checked the literatures, and data is all originally correct. It might be because the literatures have confused lon/lat in their data from (Malhi et al. 2011).
-#However, there is no way to just change their lon and lat. Therefore, we just disregard this points, and I confirmed that we have also already disregarded those points in statistical model of anpp.leaf/anpp and in output check.
 library(rworldmap)
 newmap <- getMap(resolution = "low")
 plot(newmap, xlim = c(-180, 180), ylim = c(-75, 75), asp = 1)
 points(na_fapar$lon,na_fapar$lat, col="red", pch=16,cex=1)
-points(na_fapar$lon[c(4,6,7)],na_fapar$lat[c(4,6,7)], col="yellow", pch=16,cex=1) # not accurate coordinates from Malhi et al. 2011 - leading to wrong climate data
-points(na_fapar$lon[c(1,2,3,5,8,9,10)],na_fapar$lat[c(1,2,3,5,8,9,10)], col="blue", pch=16,cex=1) #sea sites - wrong coordinates according to the paper
-points(na_fapar$lat[c(1,2,3,5,8,9,10)],na_fapar$lon[c(1,2,3,5,8,9,10)], col="black", pch=16,cex=1) #corrected it by flipping them
+#3 samples were missing fapar in the edge, which was expected.
 
-#13 samples were missing fapar, which was expected.
+#check climate forcing missing data
+empty_vec <- c()
 
-#we correct such problem sites (with overturned issue) this time?
-na_fapar[c(1,2,3,5,8,9,10),]$sitename
-na_fapar[c(1,2,3,5,8,9,10),]$site
+#check existed climate files
+for (i in 1:(length(forcing_df))){
+  empty_vec[i] <- as.numeric(gsub("[^0-9]", "",  forcing_df[i]))
+}
 
-NPP_final2_corrected <- NPP_final2
-NPP_final2_corrected$lon[NPP_final2$site=="BCI Plateau, Panama?"]
+diff <- setdiff(1:935, empty_vec)
+diff
+NPP_Forest[diff,]
 
-NPP_final2_corrected$lon[NPP_final2$site=="BCI Plateau, Panama?"] <- NPP_final2$lat[NPP_final2$site=="BCI Plateau, Panama?"] ; NPP_final2_corrected$lat[NPP_final2$site=="BCI Plateau, Panama?"] <- NPP_final2$lon[NPP_final2$site=="BCI Plateau, Panama?"]
-NPP_final2_corrected$lon[NPP_final2$site=="BDFFP Fazenda"] <- NPP_final2$lat[NPP_final2$site=="BDFFP Fazenda"] ; NPP_final2_corrected$lat[NPP_final2$site=="BDFFP Fazenda"] <- NPP_final2$lon[NPP_final2$site=="BDFFP Fazenda"]
-NPP_final2_corrected$lon[NPP_final2$site=="Bionte, Brazil"] <- NPP_final2$lat[NPP_final2$site=="Bionte, Brazil"] ; NPP_final2_corrected$lat[NPP_final2$site=="Bionte, Brazil"] <- NPP_final2$lon[NPP_final2$site=="Bionte, Brazil"]
-NPP_final2_corrected$lon[NPP_final2$site=="Mocambo, Brazil"] <- NPP_final2$lat[NPP_final2$site=="Mocambo, Brazil"] ; NPP_final2_corrected$lat[NPP_final2$site=="Mocambo, Brazil"] <- NPP_final2$lon[NPP_final2$site=="Mocambo, Brazil"]
-NPP_final2_corrected$lon[NPP_final2$site== "San Carlos caatinga"] <- NPP_final2$lat[NPP_final2$site== "San Carlos caatinga"] ; NPP_final2_corrected$lat[NPP_final2$site== "San Carlos caatinga"] <- NPP_final2$lon[NPP_final2$site== "San Carlos caatinga"]
-NPP_final2_corrected$lon[NPP_final2$site== "San Carlos terra firme"] <- NPP_final2$lat[NPP_final2$site== "San Carlos terra firme"] ; NPP_final2_corrected$lat[NPP_final2$site== "San Carlos terra firme"] <- NPP_final2$lon[NPP_final2$site== "San Carlos terra firme"]
-NPP_final2_corrected$lon[NPP_final2$site=="Tapajo?s, Brazil"] <- NPP_final2$lat[NPP_final2$site=="Tapajo?s, Brazil"] ; NPP_final2_corrected$lat[NPP_final2$site=="Tapajo?s, Brazil"] <- NPP_final2$lon[NPP_final2$site=="Tapajo?s, Brazil"]
+points(NPP_Forest$lon[338],NPP_Forest$lat[338], col="blue", pch=16,cex=1)
+points(NPP_Forest$lon[390],NPP_Forest$lat[390], col="blue", pch=16,cex=1)
 
-#see the difference - now changed
-plot(newmap, xlim = c(-180, 180), ylim = c(-75, 75), asp = 1)
-points(NPP_final2$lon,NPP_final2$lat, col="red", pch=16,cex=1)
-points(NPP_final2_corrected$lon,NPP_final2_corrected$lat, col="blue", pch=16,cex=1) 
+#totally 5 sites were missing:
+na_fapar$sitename
+NPP_Forest[diff,]$sitename
+all_na_points <- c(na_fapar$sitename,NPP_Forest[diff,]$sitename)
+#NPP_F556, NPP_F697, NPP_F700 (due to fapar) and NPP_F338, NPP_F390 (due to climate forcing)
 
 
-
-#2. forcing - input - all 935 points were available
+#2. forcing - combing fapar and climates into a df.
 for (i in 1:length(forcing_df)){
-  tryCatch({
-    df1 <- read.csv(forcing_df[i])
-    df1$date <- as.Date(df1$date)
-    conveted_fpar_text <- NPP_final2$sitename2[NPP_final2$sitename==df1$sitename[1]] #convert forcing file name to fapar file name
-    fpar <- as.data.frame(eval(parse(text=conveted_fpar_text)))[,3]
-    fapar <- rep(fpar,nrow(df1)/365)
-    df2 <- cbind(df1,fapar)
-    df3 <- df2[,c("date","temp","prec","vpd","ppfd","patm","ccov_int","ccov","fapar","co2")]
+  df1 <- read.csv(forcing_df[i])
+  df1$date <- as.Date(df1$date)
+  
+  sitename_climate <- subset(NPP_Forest,NPP_Forest$sitename == df1$sitename[1])$sitename
+  sitename_fapar <- subset(NPP_Forest,NPP_Forest$sitename == df1$sitename[1])$sitename_fpar
+  # 5 points were missing - let's clarify them firstly
+  if (sitename_climate %in% all_na_points){
+    print (sitename_climate)
+    print ("this site is not available")
+  } else {
+    fapar <- (eval(parse(text=sitename_fapar)))
+    fapar$Year <- year(fapar$date)
+    
+    yr_start <- subset(NPP_Forest,NPP_Forest$sitename == df1$sitename[1])$year_start
+    yr_end <- subset(NPP_Forest,NPP_Forest$sitename == df1$sitename[1])$year_end
+    
+    if (yr_start<=2002) { # if measurement year before 2002 for a certain site --> calculating 2003-2012 average of MCD15A3H (since this product only available after the 2003, as entire year)
+      df1a <- fapar[fapar$date >= "2003-01-01" & fapar$date <= "2012-12-31",c("date","modisvar_filled")]
+      df1b <- df1a %>% mutate(ymonth = month(date),
+                              yday = day(date)) %>% 
+        group_by(ymonth, yday) %>% 
+        summarise(fpar = mean(modisvar_filled, na.rm = TRUE))
+      df1b <- as.data.frame(df1b)[,3] # averaged fapar from 2003 - 2012 (365 length of data)
+      df2 <- rep(df1b,(yr_end- yr_start+1)) # repeated it to multiple years, the number of years is consitent to what we collect climate forcing
+    } else { # if measurement year bewteen 2003 and 2015 --> use such years directly where consistent with climate forcing
+      df1a <- subset(fapar,Year>=yr_start & Year<=yr_end)
+      df2 <- df1a$modisvar_filled }
+    
+    fpar <- df2
+    
+    df3 <- cbind(df1,fpar)
+    df3 <- df3[,c("date","temp","prec","rain","snow","vpd","ppfd","patm","ccov_int","ccov","fpar","co2")]
+    names(df3)[names(df3) == 'rain'] <- 'rainf'
+    names(df3)[names(df3) == 'snow'] <- 'snowf'
+    names(df3)[names(df3) == 'fpar'] <- 'fapar'
     assign(paste("final",df1$sitename[1],sep="_"), as_tibble(df3))
-  }, error=function(e){})} 
+  }
+}
 
-#predict gpp
 
+
+#3. rsofun to predict gpp
 df_soiltexture <- bind_rows(
   top    = tibble(layer = "top",    fsand = 0.4, fclay = 0.3, forg = 0.1, fgravel = 0.1),
   bottom = tibble(layer = "bottom", fsand = 0.4, fclay = 0.3, forg = 0.1, fgravel = 0.1))
@@ -523,26 +545,21 @@ params_modl <- list(
   soilm_par_a     = 0.33349283,
   soilm_par_b     = 1.45602286)
 
-NPP_final2$pred_gpp_c3 <- NA
+NPP_Forest$whc = 170
 
-siteinfo_final <- NPP_final2
+NPP_Forest$pred_gpp_c3 <- NA
+#NPP_Forest$pred_gpp_c4 <- NA
+NPP_Forest$max_vcmax25_c3 <- NA
+#NPP_Forest$max_vcmax25_c4 <- NA
 
-siteinfo_final$year_start <- siteinfo_final$Begin_year
-siteinfo_final$year_end <- siteinfo_final$End_year
-siteinfo_final$year_start[siteinfo_final$year_start<=1980] <- 1980
-siteinfo_final$year_end[siteinfo_final$year_start<=1980] <- 1989
 
-#using rsofun based on last commit of the year 2020. See below info from git log
-#commit d27871b91ea8b951bcfc65dec17f44ae0c340b4a (**HEAD -> master**, **upstream/master**)
-#Author: stineb <benjamin.stocker@gmail.comm>
-#Date:   Thu Dec 17 16:46:37 2020 +0100
-
-for (i in 1:nrow(siteinfo_final)) {
+#using rsofun
+for (i in 1:nrow(NPP_Forest)) {
   tryCatch({
     #c3
-    forcing <- (eval(parse(text=(paste("final",siteinfo_final$sitename[i],sep="_")))))
+    forcing <- (eval(parse(text=(paste("final",NPP_Forest$sitename[i],sep="_")))))
     modlist <- run_pmodel_f_bysite( 
-      siteinfo_final$sitename[i], 
+      NPP_Forest$sitename[i], 
       params_siml <- list(
         spinup             = TRUE,
         spinupyears        = 10,
@@ -560,28 +577,104 @@ for (i in 1:nrow(siteinfo_final)) {
         lgr3               = TRUE,
         lgn3               = FALSE,
         lgr4               = FALSE,
-        firstyeartrend = siteinfo_final$year_start[i],
-        nyeartrend = siteinfo_final$year_end[i]-siteinfo_final$year_start[i]+1), 
-      siteinfo = siteinfo_final[i,], 
+        firstyeartrend = NPP_Forest$year_start[i],
+        nyeartrend = NPP_Forest$year_end[i]-NPP_Forest$year_start[i]+1), 
+      siteinfo = NPP_Forest[i,], 
       forcing, 
       df_soiltexture, 
       params_modl = params_modl, 
       makecheck = TRUE)
     
     pred_gpp_list <- modlist %>% mutate(ymonth = month(date),yday = day(date)) %>% group_by(ymonth, yday) %>% summarise(gpp = mean(gpp, na.rm = TRUE))
+    max_vcmax25 <- max(modlist$vcmax25)*1000000
     
-    siteinfo_final[i,c("pred_gpp_c3")] <- sum(pred_gpp_list$gpp)
+    NPP_Forest[i,c("pred_gpp_c3")] <- sum(pred_gpp_list$gpp)
+    NPP_Forest[i,c("max_vcmax25_c3")] <- max_vcmax25
   }, error=function(e){})} 
 
-#for vcmax25
-siteinfo_final$max_vcmax25 <- NA
+#this sites have no gpp data - must because their fapar in n_focal = 0, we need to fill them by alternatively applying n_focal = 1, then 2...
+subset(NPP_Forest,pred_gpp_c3=="NaN")$sitename_fpar
 
-for (i in 1:nrow(siteinfo_final)) {
+#we have newly interpolate their fapar primarily based on n_focal = 1, then n_focal = 2, and saved it in "/Users/yunpeng/data/forest_npp/reprocessing_fpar_raw/"
+#the code of this is available at L90-110 in forest/Reprocessing_fpar_climates_forest.R
+
+#now, reprocessing such values - by updating such fapar 
+fapar_df_new <- list.files("~/data/forest_npp/reprocessing_fpar_raw/",full.names = T)
+
+for (i in 1:(length(fapar_df_new)-1)){
+  df1 <- read.csv(fapar_df_new[i])
+  df1$date <- as.Date(df1$date)
+  df1 <- df1[!(format(df1$date,"%m") == "02" & format(df1$date, "%d") == "29"), , drop = FALSE]
+  df2 <- df1[,c("date","modisvar_filled")]
+  assign(substr(sub('.*daily_', '', fapar_df_new[i]),1,nchar(sub('.*daily_', '', fapar_df_new[i]))-4), df2) 
+}
+
+
+#2. forcing - combing fapar and climates into a dataframe.
+for (i in 1:length(forcing_df)){
+  df1 <- read.csv(forcing_df[i])
+  df1$date <- as.Date(df1$date)
+  
+  sitename_climate <- subset(NPP_Forest,NPP_Forest$sitename == df1$sitename[1])$sitename
+  sitename_fapar <- subset(NPP_Forest,NPP_Forest$sitename == df1$sitename[1])$sitename_fpar
+  # 5 points were missing - let's clarify them firstly
+  if (sitename_climate %in% all_na_points){
+    print (sitename_climate)
+    print ("this site is not available")
+  } else {
+    fapar <- (eval(parse(text=sitename_fapar)))
+    fapar$Year <- year(fapar$date)
+    
+    yr_start <- subset(NPP_Forest,NPP_Forest$sitename == df1$sitename[1])$year_start
+    yr_end <- subset(NPP_Forest,NPP_Forest$sitename == df1$sitename[1])$year_end
+    
+    if (yr_start<=2002) { # if measurement year before 2002 for a certain site --> calculating 2003-2012 average of MCD15A3H (since this product only available after the 2003, as entire year)
+      df1a <- fapar[fapar$date >= "2003-01-01" & fapar$date <= "2012-12-31",c("date","modisvar_filled")]
+      df1b <- df1a %>% mutate(ymonth = month(date),
+                              yday = day(date)) %>% 
+        group_by(ymonth, yday) %>% 
+        summarise(fpar = mean(modisvar_filled, na.rm = TRUE))
+      df1b <- as.data.frame(df1b)[,3] # averaged fapar from 2003 - 2012 (365 length of data)
+      df2 <- rep(df1b,(yr_end- yr_start+1)) # repeated it to multiple years, the number of years is consitent to what we collect climate forcing
+    } else { # if measurement year bewteen 2003 and 2015 --> use such years directly where consistent with climate forcing
+      df1a <- subset(fapar,Year>=yr_start & Year<=yr_end)
+      df2 <- df1a$modisvar_filled }
+    
+    fpar <- df2
+    
+    df3 <- cbind(df1,fpar)
+    df3 <- df3[,c("date","temp","prec","rain","snow","vpd","ppfd","patm","ccov_int","ccov","fpar","co2")]
+    names(df3)[names(df3) == 'rain'] <- 'rainf'
+    names(df3)[names(df3) == 'snow'] <- 'snowf'
+    names(df3)[names(df3) == 'fpar'] <- 'fapar'
+    assign(paste("final",df1$sitename[1],sep="_"), as_tibble(df3))
+  }
+}
+
+#3. rsofun to predict gpp
+df_soiltexture <- bind_rows(
+  top    = tibble(layer = "top",    fsand = 0.4, fclay = 0.3, forg = 0.1, fgravel = 0.1),
+  bottom = tibble(layer = "bottom", fsand = 0.4, fclay = 0.3, forg = 0.1, fgravel = 0.1))
+params_modl <- list(
+  kphio           = 0.09423773,
+  soilm_par_a     = 0.33349283,
+  soilm_par_b     = 1.45602286)
+
+NPP_Forest$whc = 170
+
+NPP_Forest$pred_gpp_c3 <- NA
+#NPP_Forest$pred_gpp_c4 <- NA
+NPP_Forest$max_vcmax25_c3 <- NA
+#NPP_Forest$max_vcmax25_c4 <- NA
+
+
+#using rsofun
+for (i in 1:nrow(NPP_Forest)) {
   tryCatch({
     #c3
-    forcing <- (eval(parse(text=(paste("final",siteinfo_final$sitename[i],sep="_")))))
+    forcing <- (eval(parse(text=(paste("final",NPP_Forest$sitename[i],sep="_")))))
     modlist <- run_pmodel_f_bysite( 
-      siteinfo_final$sitename[i], 
+      NPP_Forest$sitename[i], 
       params_siml <- list(
         spinup             = TRUE,
         spinupyears        = 10,
@@ -599,21 +692,29 @@ for (i in 1:nrow(siteinfo_final)) {
         lgr3               = TRUE,
         lgn3               = FALSE,
         lgr4               = FALSE,
-        firstyeartrend = siteinfo_final$year_start[i],
-        nyeartrend = siteinfo_final$year_end[i]-siteinfo_final$year_start[i]+1), 
-      siteinfo = siteinfo_final[i,], 
+        firstyeartrend = NPP_Forest$year_start[i],
+        nyeartrend = NPP_Forest$year_end[i]-NPP_Forest$year_start[i]+1), 
+      siteinfo = NPP_Forest[i,], 
       forcing, 
       df_soiltexture, 
       params_modl = params_modl, 
       makecheck = TRUE)
     
-    max_vcmax25 <- max(modlist$vcmax25)
+    pred_gpp_list <- modlist %>% mutate(ymonth = month(date),yday = day(date)) %>% group_by(ymonth, yday) %>% summarise(gpp = mean(gpp, na.rm = TRUE))
+    max_vcmax25 <- max(modlist$vcmax25)*1000000
     
-    siteinfo_final[i,c("max_vcmax25")] <- max_vcmax25
+    NPP_Forest[i,c("pred_gpp_c3")] <- sum(pred_gpp_list$gpp)
+    NPP_Forest[i,c("max_vcmax25_c3")] <- max_vcmax25
   }, error=function(e){})} 
 
-siteinfo_final$max_vcmax25 <- siteinfo_final$max_vcmax25*1000000
-summary(siteinfo_final$max_vcmax25) #13 points were missing, as expected
+subset(NPP_Forest,is.na(pred_gpp_c3)==TRUE)$sitename_fpar
+
+plot(newmap, xlim = c(-180, 180), ylim = c(-75, 75), asp = 1)
+points(subset(NPP_Forest,is.na(pred_gpp_c3)==TRUE)$lon,subset(NPP_Forest,is.na(pred_gpp_c3)==TRUE)$lat, col="red", pch=16,cex=1)
+#these points were missing, either due to fapar or climate forcing missing
+
+NPP_Forest_all_flux <- NPP_Forest
+#stop at here and save - where "NPP_Forest_all_flux" can be used furtherly, without the need to re-load
 
 #now, extracting site values from Tg, alpha, c/n.....
 elev_nc <- read_nc_onefile("~/data/watch_wfdei/WFDEI-elevation.nc")
@@ -651,20 +752,6 @@ LMA <- as.data.frame(nc_to_df(read_nc_onefile(
   "~/data/nimpl_sofun_inputs/map/Final_ncfile/LMA.nc"),
   varnam = "LMA"))
 
-#Vcmax25 <- as.data.frame(nc_to_df(read_nc_onefile( "~/data/nimpl_sofun_inputs/map/Final_ncfile/Vcmax25.nc"),varnam = "Vcmax25"))
-
-#use max vcmax25 from nimpl output
-firstyr_data <- 1982 # In data file, which is the first year
-endyr_data <- 2011 # In data file, which is the last year
-location <- "~/data/output/latest_noNRE_forest/"
-alloutput_list <- list.files(location,full.names = T)
-
-#input elevation nc file, which will be cbind with global df directly
-elev_nc <- read_nc_onefile("~/data/watch_wfdei/WFDEI-elevation.nc")
-#elev_nc <- read_nc_onefile("D:/PhD/nimpl_sofun_inputs/Data/Elevation/WFDEI-elevation.nc")
-elev <- as.data.frame(nc_to_df(elev_nc, varnam = "elevation"))
-head(elev) # this is consistent with df coord below
-
 #2. Create a function to specify path, loop many years nc file and output a dataframe (lon, lat, var).
 inputnc <- function(name,start_year,end_year){
   output_allyears <- data.frame(matrix(NA))
@@ -691,18 +778,13 @@ inputnc <- function(name,start_year,end_year){
   #-----------------------------------------------------------------------
 }
 
-#vcmax25_df <- inputnc("annualvcmax25",1982,2011)
-vcmax25_df <- inputnc("vcmax25",1982,2011)
-leafcn_df <- inputnc("leafcn",1982,2011)
-
-
 #cbind all predictors, and its lon, lat, z
 all_predictors <- cbind(elev,Tg$myvar,PPFD$myvar,vpd$myvar,
                         alpha$myvar,fAPAR$myvar,age$myvar,
-                        CNrt$myvar,LMA$myvar,vcmax25_df$vcmax25,leafcn_df$leafcn)
+                        CNrt$myvar,LMA$myvar)
 
 names(all_predictors) <- c("lon","lat","z","Tg","PPFD","vpd",
-                           "alpha","fAPAR","age","CNrt","LMA","Vcmax25","leafcn")
+                           "alpha","fAPAR","age","CNrt","LMA")
 
 Tg_df <- all_predictors[,c("lon","lat","z","Tg")]
 PPFD_df <- all_predictors[,c("lon","lat","z","PPFD")]
@@ -712,291 +794,239 @@ fAPAR_df <- all_predictors[,c("lon","lat","z","fAPAR")]
 age_df <- all_predictors[,c("lon","lat","z","age")]
 CNrt_df <- all_predictors[,c("lon","lat","z","CNrt")]
 LMA_df <- all_predictors[,c("lon","lat","z","LMA")]
-Vcmax25_df <- all_predictors[,c("lon","lat","z","Vcmax25")]
-leafcn_df <- all_predictors[,c("lon","lat","z","leafcn")]
-
 
 #now, apply gwr to extract site predictors' value
-forest_site <- siteinfo_final[,c("lon","lat","z")]
-forest_site$Tg <- NA
-forest_site$PPFD <- NA
-forest_site$vpd <- NA
-forest_site$alpha <- NA
-forest_site$age <- NA
-forest_site$fAPAR <- NA
-forest_site$CNrt <- NA
-forest_site$LMA <- NA
-forest_site$Vcmax25 <- NA
+NPP_Forest$Tg <- NA
+NPP_Forest$PPFD <- NA
+NPP_Forest$vpd <- NA
+NPP_Forest$alpha <- NA
+NPP_Forest$fAPAR <- NA
+NPP_Forest$age <- NA
+NPP_Forest$CNrt <- NA
+NPP_Forest$LMA <- NA
 
 a <- 1.5 # which degree (distance) of grid when interpolating gwr from global grids
-dim(forest_site)
 #Extract Tg, PPFD, vpd, alpha,fAPAR,age,CNrt,LMA, max-vcmax25
-for (i in 1:nrow(forest_site)) {
+for (i in 1:nrow(NPP_Forest)) {
   tryCatch({
     #Tg
     Tg_global <- na.omit(Tg_df)
-    NRE_part <- subset(Tg_global,lon>(forest_site[i,1]-a)&lon<(forest_site[i,1]+a)&
-                         lat>(forest_site[i,2]-a)&lat<(forest_site[i,2]+a))
+    NRE_part <- subset(Tg_global,lon>(NPP_Forest[i,"lon"]-a)&lon<(NPP_Forest[i,"lon"]+a)&
+                         lat>(NPP_Forest[i,"lat"]-a)&lat<(NPP_Forest[i,"lat"]+a))
     coordinates(NRE_part) <- c("lon","lat")
     gridded(NRE_part) <- TRUE
-    NRE_coord <- forest_site[i,1:3]
+    NRE_coord <- NPP_Forest[i,c("lon","lat","z")]
     coordinates(NRE_coord) <- c("lon","lat")
-    forest_site[i,c("Tg")] <- (gwr(Tg ~ z, NRE_part, bandwidth = 1.06, fit.points =NRE_coord,predictions=TRUE))$SDF$pred
+    NPP_Forest[i,c("Tg")] <- (gwr(Tg ~ z, NRE_part, bandwidth = 1.06, fit.points =NRE_coord,predictions=TRUE))$SDF$pred
     #ppfd
     PPFD_global <- na.omit(PPFD_df)
-    NRE_part <- subset(PPFD_global,lon>(forest_site[i,1]-a)&lon<(forest_site[i,1]+a)&
-                         lat>(forest_site[i,2]-a)&lat<(forest_site[i,2]+a))
+    NRE_part <- subset(PPFD_global,lon>(NPP_Forest[i,"lon"]-a)&lon<(NPP_Forest[i,"lon"]+a)&
+                         lat>(NPP_Forest[i,"lat"]-a)&lat<(NPP_Forest[i,"lat"]+a))
     coordinates(NRE_part) <- c("lon","lat")
     gridded(NRE_part) <- TRUE
-    NRE_coord <- forest_site[i,1:3]
+    NRE_coord <- NPP_Forest[i,c("lon","lat","z")]
     coordinates(NRE_coord) <- c("lon","lat")
-    forest_site[i,c("PPFD")] <- (gwr(PPFD ~ z, NRE_part, bandwidth = 1.06, fit.points =NRE_coord,predictions=TRUE))$SDF$pred
+    NPP_Forest[i,c("PPFD")] <- (gwr(PPFD ~ z, NRE_part, bandwidth = 1.06, fit.points =NRE_coord,predictions=TRUE))$SDF$pred
     #vpd
     vpd_global <- na.omit(vpd_df)
-    NRE_part <- subset(vpd_global,lon>(forest_site[i,1]-a)&lon<(forest_site[i,1]+a)&
-                         lat>(forest_site[i,2]-a)&lat<(forest_site[i,2]+a))
+    NRE_part <- subset(vpd_global,lon>(NPP_Forest[i,"lon"]-a)&lon<(NPP_Forest[i,"lon"]+a)&
+                         lat>(NPP_Forest[i,"lat"]-a)&lat<(NPP_Forest[i,"lat"]+a))
     coordinates(NRE_part) <- c("lon","lat")
     gridded(NRE_part) <- TRUE
-    NRE_coord <- forest_site[i,1:3]
+    NRE_coord <- NPP_Forest[i,c("lon","lat","z")]
     coordinates(NRE_coord) <- c("lon","lat")
-    forest_site[i,c("vpd")] <- (gwr(vpd ~ z, NRE_part, bandwidth = 1.06, fit.points =NRE_coord,predictions=TRUE))$SDF$pred
+    NPP_Forest[i,c("vpd")] <- (gwr(vpd ~ z, NRE_part, bandwidth = 1.06, fit.points =NRE_coord,predictions=TRUE))$SDF$pred
     #alpha
     alpha_global <- na.omit(alpha_df)
-    NRE_part <- subset(alpha_global,lon>(forest_site[i,1]-a)&lon<(forest_site[i,1]+a)&
-                         lat>(forest_site[i,2]-a)&lat<(forest_site[i,2]+a))
+    NRE_part <- subset(alpha_global,lon>(NPP_Forest[i,"lon"]-a)&lon<(NPP_Forest[i,"lon"]+a)&
+                         lat>(NPP_Forest[i,"lat"]-a)&lat<(NPP_Forest[i,"lat"]+a))
     coordinates(NRE_part) <- c("lon","lat")
     gridded(NRE_part) <- TRUE
-    NRE_coord <- forest_site[i,1:3]
+    NRE_coord <- NPP_Forest[i,c("lon","lat","z")]
     coordinates(NRE_coord) <- c("lon","lat")
-    forest_site[i,c("alpha")]  <- (gwr(alpha ~ z, NRE_part, bandwidth = 1.06, fit.points =NRE_coord,predictions=TRUE))$SDF$pred
+    NPP_Forest[i,c("alpha")]  <- (gwr(alpha ~ z, NRE_part, bandwidth = 1.06, fit.points =NRE_coord,predictions=TRUE))$SDF$pred
     #fAPAR
     fAPAR_global <- na.omit(fAPAR_df)
-    NRE_part <- subset(fAPAR_global,lon>(forest_site[i,1]-a)&lon<(forest_site[i,1]+a)&
-                         lat>(forest_site[i,2]-a)&lat<(forest_site[i,2]+a))
+    NRE_part <- subset(fAPAR_global,lon>(NPP_Forest[i,"lon"]-a)&lon<(NPP_Forest[i,"lon"]+a)&
+                         lat>(NPP_Forest[i,"lat"]-a)&lat<(NPP_Forest[i,"lat"]+a))
     coordinates(NRE_part) <- c("lon","lat")
     gridded(NRE_part) <- TRUE
-    NRE_coord <- forest_site[i,1:3]
+    NRE_coord <- NPP_Forest[i,c("lon","lat","z")]
     coordinates(NRE_coord) <- c("lon","lat")
-    forest_site[i,c("fAPAR")]<- (gwr(fAPAR ~ z, NRE_part, bandwidth = 1.06, fit.points =NRE_coord,predictions=TRUE))$SDF$pred
+    NPP_Forest[i,c("fAPAR")]<- (gwr(fAPAR ~ z, NRE_part, bandwidth = 1.06, fit.points =NRE_coord,predictions=TRUE))$SDF$pred
     #age
     age_global <- na.omit(age_df)
-    NRE_part <- subset(age_global,lon>(forest_site[i,1]-a)&lon<(forest_site[i,1]+a)&
-                         lat>(forest_site[i,2]-a)&lat<(forest_site[i,2]+a))
+    NRE_part <- subset(age_global,lon>(NPP_Forest[i,"lon"]-a)&lon<(NPP_Forest[i,"lon"]+a)&
+                         lat>(NPP_Forest[i,"lat"]-a)&lat<(NPP_Forest[i,"lat"]+a))
     coordinates(NRE_part) <- c("lon","lat")
     gridded(NRE_part) <- TRUE
-    NRE_coord <- forest_site[i,1:3]
+    NRE_coord <- NPP_Forest[i,c("lon","lat","z")]
     coordinates(NRE_coord) <- c("lon","lat")
-    forest_site[i,c("age")]  <- (gwr(age ~ z, NRE_part, bandwidth = 1.06, fit.points =NRE_coord,predictions=TRUE))$SDF$pred
+    NPP_Forest[i,c("age")]  <- (gwr(age ~ z, NRE_part, bandwidth = 1.06, fit.points =NRE_coord,predictions=TRUE))$SDF$pred
     #CNrt
     CNrt_global <- na.omit(CNrt_df)
-    NRE_part <- subset(CNrt_global,lon>(forest_site[i,1]-a)&lon<(forest_site[i,1]+a)&
-                         lat>(forest_site[i,2]-a)&lat<(forest_site[i,2]+a))
+    NRE_part <- subset(CNrt_global,lon>(NPP_Forest[i,"lon"]-a)&lon<(NPP_Forest[i,"lon"]+a)&
+                         lat>(NPP_Forest[i,"lat"]-a)&lat<(NPP_Forest[i,"lat"]+a))
     coordinates(NRE_part) <- c("lon","lat")
     gridded(NRE_part) <- TRUE
-    NRE_coord <- forest_site[i,1:3]
+    NRE_coord <- NPP_Forest[i,c("lon","lat","z")]
     coordinates(NRE_coord) <- c("lon","lat")
-    forest_site[i,c("CNrt")]  <- (gwr(CNrt ~ z, NRE_part, bandwidth = 1.06, fit.points =NRE_coord,predictions=TRUE))$SDF$pred
+    NPP_Forest[i,c("CNrt")]  <- (gwr(CNrt ~ z, NRE_part, bandwidth = 1.06, fit.points =NRE_coord,predictions=TRUE))$SDF$pred
     #LMA
     LMA_global <- na.omit(LMA_df)
-    NRE_part <- subset(LMA_global,lon>(forest_site[i,1]-a)&lon<(forest_site[i,1]+a)&
-                         lat>(forest_site[i,2]-a)&lat<(forest_site[i,2]+a))
+    NRE_part <- subset(LMA_global,lon>(NPP_Forest[i,"lon"]-a)&lon<(NPP_Forest[i,"lon"]+a)&
+                         lat>(NPP_Forest[i,"lat"]-a)&lat<(NPP_Forest[i,"lat"]+a))
     coordinates(NRE_part) <- c("lon","lat")
     gridded(NRE_part) <- TRUE
-    NRE_coord <- forest_site[i,1:3]
+    NRE_coord <- NPP_Forest[i,c("lon","lat","z")]
     coordinates(NRE_coord) <- c("lon","lat")
-    forest_site[i,c("LMA")]  <- (gwr(LMA ~ z, NRE_part, bandwidth = 1.06, fit.points =NRE_coord,predictions=TRUE))$SDF$pred
-    #Vcmax25
-    Vcmax25_global <- na.omit(Vcmax25_df)
-    NRE_part <- subset(Vcmax25_global,lon>(forest_site[i,1]-a)&lon<(forest_site[i,1]+a)&
-                         lat>(forest_site[i,2]-a)&lat<(forest_site[i,2]+a))
-    coordinates(NRE_part) <- c("lon","lat")
-    gridded(NRE_part) <- TRUE
-    NRE_coord <- forest_site[i,1:3]
-    coordinates(NRE_coord) <- c("lon","lat")
-    forest_site[i,c("Vcmax25")]  <- (gwr(Vcmax25 ~ z, NRE_part, bandwidth = 1.06, fit.points =NRE_coord,predictions=TRUE))$SDF$pred
+    NPP_Forest[i,c("LMA")]  <- (gwr(LMA ~ z, NRE_part, bandwidth = 1.06, fit.points =NRE_coord,predictions=TRUE))$SDF$pred
   }, error=function(e){})} 
 
+summary(NPP_Forest)
+NPP_Forest$vpd[NPP_Forest$vpd<0] <- NA
+NPP_Forest$age[NPP_Forest$age<0] <- NA
+
+newmap <- getMap(resolution = "low")
+plot(newmap, xlim = c(-180, 180), ylim = c(-75, 75), asp = 1)
+points(subset(NPP_Forest,is.na(LMA)==TRUE)$lon,subset(NPP_Forest,is.na(LMA)==TRUE)$lat, col="red", pch=16,cex=1)
+#these sites have no data for LMA, CNrt age and fAPAR.
+
 #now, using several statistical models to predict npp, anpp, npp.leaf....
-forest_site$pred_gpp <- siteinfo_final$pred_gpp_c3
-forest_site$max_vcmax25 <- siteinfo_final$max_vcmax25
-  
-forest_site$pred_npp <- forest_site$pred_gpp * (1/(1 + exp(-(-0.3677 * log(forest_site$CNrt) +
-                                                               -0.1552 * log(forest_site$age) + 
-                                                               0.5791 * forest_site$fAPAR+
-                                                               1.9144 *forest_site$alpha + -1.1052))))
+NPP_Forest$pred_npp <- NPP_Forest$pred_gpp_c3 * (1/(1 + exp(-(-0.3677 * log(NPP_Forest$CNrt) +
+                                                               -0.1552 * log(NPP_Forest$age) + 
+                                                               0.5791 * NPP_Forest$fAPAR+
+                                                               1.9144 *NPP_Forest$alpha + -1.1052))))
 
-forest_site$pred_anpp <- forest_site$pred_gpp * (1/(1 + exp(-(-0.6075 * log(forest_site$CNrt) +
-                                                                -0.1798 * log(forest_site$age) + 
-                                                                0.8617 * forest_site$fAPAR+
-                                                                2.1287 *forest_site$alpha + -1.3528))))
+NPP_Forest$pred_anpp <- NPP_Forest$pred_gpp * (1/(1 + exp(-(-0.6075 * log(NPP_Forest$CNrt) +
+                                                                -0.1798 * log(NPP_Forest$age) + 
+                                                                0.8617 * NPP_Forest$fAPAR+
+                                                                2.1287 *NPP_Forest$alpha + -1.3528))))
 
-forest_site$pred_bnpp <- forest_site$pred_npp - forest_site$pred_anpp
+NPP_Forest$pred_bnpp <- NPP_Forest$pred_npp - NPP_Forest$pred_anpp
 
-#use a new model - based on new coefficients?
+NPP_Forest$pred_lnpp <- NPP_Forest$pred_anpp * (1/(1 + exp(-(1.2350* log(NPP_Forest$PPFD) +
+                                                                 0.0731 * (NPP_Forest$Tg) + 
+                                                                 -1.0192 * log(NPP_Forest$vpd) + -9.2375))))
 
-
-forest_site$pred_lnpp <- forest_site$pred_anpp * (1/(1 + exp(-(1.2350* log(forest_site$PPFD) +
-                                                                 0.0731 * (forest_site$Tg) + 
-                                                                 -1.0192 * log(forest_site$vpd) + -9.2375))))
-
-forest_site$pred_wnpp <- forest_site$pred_anpp - forest_site$pred_lnpp
-
+NPP_Forest$pred_wnpp <- NPP_Forest$pred_anpp - NPP_Forest$pred_lnpp
 
 #use rsofun - site-species
-forest_site$pred_leafnc <- (0.0161/0.5) + (0.0041/0.5) * forest_site$max_vcmax25/forest_site$LMA
+#NPP_Forest$pred_leafnc <- (0.0162/0.5) + (0.0039/0.5) * NPP_Forest$max_vcmax25/NPP_Forest$LMA
+NPP_Forest$pred_leafnc <- (0.01599/0.5) + (0.005992/0.5) * NPP_Forest$max_vcmax25/NPP_Forest$LMA
 
-
-forest_site$pred_lnf <- forest_site$pred_lnpp*forest_site$pred_leafnc
+NPP_Forest$pred_lnf <- NPP_Forest$pred_lnpp*NPP_Forest$pred_leafnc
 
 #summary(NPP_Forest$CN_wood_final)
-forest_site$pred_wnf <- forest_site$pred_wnpp/97
+NPP_Forest$pred_wnf <- NPP_Forest$pred_wnpp/97
 
 hist(NPP_Forest$CN_root_final)
 summary(NPP_Forest$CN_root_final)#using median of root.
 
-forest_site$pred_bnf <- forest_site$pred_bnpp/122
-
-forest_site$TNPP_1 <- siteinfo_final$TNPP_1
-forest_site$ANPP_2 <- siteinfo_final$ANPP_2
-forest_site$BNPP_1 <- siteinfo_final$BNPP_1
-forest_site$NPP.foliage <- siteinfo_final$NPP.foliage
-forest_site$NPP.wood <- siteinfo_final$NPP.wood
+NPP_Forest$pred_bnf <- NPP_Forest$pred_bnpp/122
 
 siteinfo_final$CN_leaf_final[siteinfo_final$CN_leaf_final>100] <- NA
 
-forest_site$CN_leaf_final <- siteinfo_final$CN_leaf_final
-forest_site$lnf_obs_final <- siteinfo_final$lnf_obs_final
-forest_site$lnf_obs_org <- (siteinfo_final$lnf_obs_org) # not including secondary merging from sara vicca (within 0.01 resolution), with 36 less sites
+#the difference between cn_leaf_org and cn_leaf_final is that the previous one has not include "repeated merge" (with 36 less sites)
 
-forest_site$wnf_obs_final <- siteinfo_final$wnf_obs_final
-forest_site$bnf_obs_final <- siteinfo_final$bnf_obs_final
-forest_site$GPP <- siteinfo_final$GPP
-
-forest_site$site <- siteinfo_final$site
-forest_site$file <- siteinfo_final$file
-
-forest_site$rep_info <- siteinfo_final$rep_info
 #correct new dataset's rep_info
-forest_site$rep_info[875:935] <- ""
-forest_site2 <- subset(forest_site,rep_info!="rep" & rep_info!="rep1"& rep_info!="rep3")
+NPP_Forest$rep_info[875:935] <- ""
+NPP_Forest2 <- subset(NPP_Forest,rep_info!="rep" & rep_info!="rep1"& rep_info!="rep3")
 
-forest_site3 <- aggregate(forest_site2,by=list(forest_site2$lon,forest_site2$lat,forest_site2$z), FUN=mean, na.rm=TRUE) #site-mean
+NPP_Forest2_sitemean <- aggregate(NPP_Forest2,by=list(NPP_Forest2$lon,NPP_Forest2$lat,NPP_Forest2$z), FUN=mean, na.rm=TRUE) #site-mean
+
+My_Theme = theme(
+  axis.title.x = element_text(size = 20),
+  axis.text.x = element_text(size = 20),
+  axis.title.y = element_text(size = 20),
+  axis.text.y = element_text(size = 20))
 
 #check
 #analyse_modobs2(forest_site2,"pred_gpp", "GPP",type = "points")
-ggplot(data=forest_site2, aes(x=pred_gpp, y=GPP)) +
+ggplot(data=NPP_Forest2, aes(x=pred_gpp_c3, y=GPP)) +
   geom_point()+geom_abline(intercept=0,slope=1)+geom_smooth(method = "lm", se = TRUE)+
-  xlab("Prediction")+ylab("Observation")+theme_classic()
-summary(lm(GPP~pred_gpp,forest_site2))
+  xlab("Prediction")+ylab("Observation")+theme_classic()+My_Theme
+summary(lm(GPP~pred_gpp_c3,NPP_Forest2))
+
 
 #analyse_modobs2(forest_site2,"pred_npp", "TNPP_1",type = "points")
-ggplot(data=forest_site2, aes(x=pred_npp, y=TNPP_1)) +
+ggplot(data=NPP_Forest2, aes(x=pred_npp, y=TNPP_1)) +
   geom_point()+geom_abline(intercept=0,slope=1)+geom_smooth(method = "lm", se = TRUE)+
-  xlab("Prediction")+ylab("Observation")+theme_classic()
-summary(lm(TNPP_1~pred_npp,forest_site2))
-
+  xlab("Prediction")+ylab("Observation")+theme_classic()+My_Theme
+summary(lm(TNPP_1~pred_npp,NPP_Forest2))
 
 #analyse_modobs2(forest_site2,"pred_anpp", "ANPP_2",type = "points")
-ggplot(data=forest_site2, aes(x=pred_anpp, y=ANPP_2)) +
+ggplot(data=NPP_Forest2, aes(x=pred_anpp, y=ANPP_2)) +
   geom_point()+geom_abline(intercept=0,slope=1)+geom_smooth(method = "lm", se = TRUE)+
-  xlab("Prediction")+ylab("Observation")+theme_classic()
-summary(lm(ANPP_2~pred_anpp,forest_site2))
+  xlab("Prediction")+ylab("Observation")+theme_classic()+My_Theme
+summary(lm(ANPP_2~pred_anpp,NPP_Forest2))
 
 #analyse_modobs2(forest_site2,"pred_lnpp", "NPP.foliage",type = "points")
-ggplot(data=forest_site2, aes(x=pred_lnpp, y=NPP.foliage)) +
+ggplot(data=NPP_Forest2, aes(x=pred_lnpp, y=NPP.foliage)) +
   geom_point()+geom_abline(intercept=0,slope=1)+geom_smooth(method = "lm", se = TRUE)+
-  xlab("Prediction")+ylab("Observation")+theme_classic()
-summary(lm(NPP.foliage~pred_lnpp,forest_site2))
+  xlab("Prediction")+ylab("Observation")+theme_classic()+My_Theme
+summary(lm(NPP.foliage~pred_lnpp,NPP_Forest2))
 
 #analyse_modobs2(forest_site,"pred_wnpp", "NPP.wood",type = "points")
-ggplot(data=forest_site2, aes(x=pred_wnpp, y=NPP.wood)) +
+ggplot(data=NPP_Forest2, aes(x=pred_wnpp, y=NPP.wood)) +
   geom_point()+geom_abline(intercept=0,slope=1)+geom_smooth(method = "lm", se = TRUE)+
-  xlab("Prediction")+ylab("Observation")+theme_classic()
-summary(lm(NPP.wood~pred_wnpp,forest_site2))
+  xlab("Prediction")+ylab("Observation")+theme_classic()+My_Theme
+summary(lm(NPP.wood~pred_wnpp,NPP_Forest2))
 
 #analyse_modobs2(forest_site2,"pred_bnpp", "BNPP_1",type = "points")
-ggplot(data=forest_site2, aes(x=pred_bnpp, y=BNPP_1)) +
+ggplot(data=NPP_Forest2, aes(x=pred_bnpp, y=BNPP_1)) +
   geom_point()+geom_abline(intercept=0,slope=1)+geom_smooth(method = "lm", se = TRUE)+
-  xlab("Prediction")+ylab("Observation")+theme_classic()
-summary(lm(BNPP_1~pred_bnpp,forest_site2))
+  xlab("Prediction")+ylab("Observation")+theme_classic()+My_Theme
+summary(lm(BNPP_1~pred_bnpp,NPP_Forest2))
 
 #analyse_modobs2(forest_site,"pred_lnf", "lnf_obs",type = "points") 
-ggplot(data=forest_site2, aes(x=pred_lnf, y=lnf_obs_final)) +
+ggplot(data=NPP_Forest2, aes(x=pred_lnf, y=lnf_obs_final)) +
   geom_point()+geom_abline(intercept=0,slope=1)+geom_smooth(method = "lm", se = TRUE)+
-  xlab("Prediction")+ylab("Observation")+theme_classic()
-summary(lm(lnf_obs_final~pred_lnf,forest_site2))
+  xlab("Prediction")+ylab("Observation")+theme_classic()+My_Theme
+summary(lm(lnf_obs_final~pred_lnf,NPP_Forest2))
 
-#not including additional merge sites within 0.01 deg, with 36 less sites
-
-ggplot(data=forest_site2, aes(x=pred_lnf, y=lnf_obs_org)) +
+#without second interpolation --> use this!
+ggplot(data=NPP_Forest2, aes(x=pred_lnf, y=lnf_obs_org)) +
   geom_point()+geom_abline(intercept=0,slope=1)+geom_smooth(method = "lm", se = TRUE)+
-  xlab("Prediction")+ylab("Observation")+theme_classic()
-summary(lm(lnf_obs_org~pred_lnf,forest_site2))
-
+  xlab("Prediction")+ylab("Observation")+theme_classic()+My_Theme
+summary(lm(lnf_obs_org~pred_lnf,NPP_Forest2))
 
 #wnf - assuming constant wood/cn = 97
-ggplot(data=forest_site2, aes(x=pred_wnf, y=wnf_obs_final)) +
+ggplot(data=NPP_Forest2, aes(x=pred_wnf, y=wnf_obs_final)) +
   geom_point()+geom_abline(intercept=0,slope=1)+geom_smooth(method = "lm", se = TRUE)+
-  xlab("Prediction")+ylab("Observation")+theme_classic()
-summary(lm(wnf_obs_final~pred_wnf,forest_site2))
+  xlab("Prediction")+ylab("Observation")+theme_classic()+My_Theme
+summary(lm(wnf_obs_final~pred_wnf,NPP_Forest2))
 
 #bnf - assuming constant root/cn = 122
-ggplot(data=forest_site2, aes(x=pred_bnf, y=bnf_obs_final)) +
+ggplot(data=NPP_Forest2, aes(x=pred_bnf, y=bnf_obs_final)) +
   geom_point()+geom_abline(intercept=0,slope=1)+geom_smooth(method = "lm", se = TRUE)+
-  xlab("Prediction")+ylab("Observation")+theme_classic()
-summary(lm(bnf_obs_final~pred_bnf,forest_site2))
+  xlab("Prediction")+ylab("Observation")+theme_classic()+My_Theme
+summary(lm(bnf_obs_final~pred_bnf,NPP_Forest2))
 
 #leaf cn
 #(9) leafcn
 #check leaf c/n
-SP_input <- read_csv(file="~/data/CN_leaf/final_individuals.csv") #all individuals
-SP_input2 <- SP_input[,c("lat","lon","Elevation","Vcmax.25","narea","lma")]
+SP_input <- read.csv(file="/Users/yunpeng/data/leaf_traits/combined_leaf_traits.csv") #new one 
+SP_input2 <- SP_input[,c("lat","lon","z","Vcmax25","narea","lma")]
 sitemean <- aggregate(SP_input2,by=list(SP_input2$lon,SP_input2$lat), FUN=mean, na.rm=TRUE) 
 dim(sitemean)
 
-sitemean$pred_leafnc <- (0.0161/0.5) + (0.0041/0.5)* sitemean$Vcmax.25/sitemean$lma
-sitemean$obs_leafnc <- sitemean$narea/sitemean$lma/0.5
+sitemean$pred_leafn <- (0.01599) + (0.005992)* sitemean$Vcmax25/sitemean$lma
+sitemean$obs_leafn <- sitemean$narea/sitemean$lma
 
-ggplot(data=sitemean, aes(x=pred_leafnc, y=obs_leafnc)) +
+ggplot(data=sitemean, aes(x=pred_leafn, y=obs_leafn)) +
   geom_point()+geom_abline(intercept=0,slope=1)+geom_smooth(method = "lm", se = TRUE)+
-  xlab("Prediction")+ylab("Observation")+theme_classic()+My_Theme
-summary(lm(obs_leafnc~pred_leafnc,sitemean))
+  xlab("Predicted Nmass (mg/g)")+ylab("Measured Nmass (mg/g)")+theme_classic()+My_Theme
+summary(lm(obs_leafn~pred_leafn,sitemean))
 
 #nuptake
-forest_site2$pred_nuptake <- forest_site2$pred_lnf + forest_site2$pred_bnf + forest_site2$pred_wnf
-forest_site2$obs_nuptake <- forest_site2$lnf_obs_org + forest_site2$bnf_obs_final + forest_site2$wnf_obs_final
+NPP_Forest2$pred_nuptake <- NPP_Forest2$pred_lnf + NPP_Forest2$pred_bnf + NPP_Forest2$pred_wnf
+NPP_Forest2$obs_nuptake <- NPP_Forest2$lnf_obs_org + NPP_Forest2$bnf_obs_final + NPP_Forest2$wnf_obs_final
 
-ggplot(data=forest_site2, aes(x=pred_nuptake, y=obs_nuptake)) +
+ggplot(data=NPP_Forest2, aes(x=pred_nuptake, y=obs_nuptake)) +
   geom_point()+geom_abline(intercept=0,slope=1)+geom_smooth(method = "lm", se = TRUE)+
   xlab("Prediction")+ylab("Observation")+theme_classic()+My_Theme
-summary(lm(pred_nuptake~obs_nuptake,forest_site2))
-
-
-
-#fit a new model where C/N leaf 
-#library(lme4)
-#library(nlme)
-#library(lmerTest)
-#library("PerformanceAnalytics")
-#library(MuMIn)
-#r.squaredGLMM(lmer(CN_leaf_final ~ max_vcmax25+ LMA + (1|site),data=forest_site2))
-#summary(lmer(CN_leaf_final ~ max_vcmax25+ LMA + (1|site),data=forest_site2))
-#forest_site2$pred_fitted_leafcn <- 0.30275 * forest_site2$max_vcmax25 + 0.21866*forest_site2$LMA -4.92165
-
-#forest_site2$CN_leaf_final[forest_site2$CN_leaf_final>100] <- NA
-#ggplot(data=forest_site2, aes(x=pred_fitted_leafcn, y=CN_leaf_final)) +
-#  geom_point()+geom_abline(intercept=0,slope=1)+geom_smooth(method = "lm", se = TRUE)+
-#  xlab("Prediction")+ylab("Observation")+theme_classic()
-
-#summary(lm(CN_leaf_final~pred_fitted_leafcn,forest_site2))
-
-#forest_site2$pred_fit_lnf <- forest_site2$pred_lnpp/forest_site2$pred_fitted_leafcn
-
-#ggplot(data=forest_site2, aes(x=pred_fit_lnf, y=lnf_obs_final)) +
-#  geom_point()+geom_abline(intercept=0,slope=1)+geom_smooth(method = "lm", se = TRUE)+
-#  xlab("Prediction")+ylab("Observation")+theme_classic()
-
-#summary(lm(lnf_obs_final~pred_fit_lnf,forest_site2))
+summary(lm(pred_nuptake~obs_nuptake,NPP_Forest2))
 
 #nre
 #check mean of NRE
@@ -1040,6 +1070,9 @@ siteinfo$date_end <- lubridate::ymd(paste0(2011, "-12-31"))
 siteinfo$sitename <- paste0("s", 1:nrow(siteinfo),sep="")
 siteinfo <- as_tibble(siteinfo)
 
+devtools::load_all("/Users/yunpeng/yunkepeng/Grassland_new_ingestr_rsofun_20210326/ingestr/")
+
+
 df_etopo <- ingest(
   siteinfo,
   source = "etopo1",
@@ -1062,7 +1095,7 @@ a <- 1.5
 
 for (i in 1:nrow(NRE_df)) {
   tryCatch({
-  #Tg
+    #Tg
     Tg_global <- na.omit(Tg_df)
     NRE_part <- subset(Tg_global,lon>(NRE_df[i,1]-a)&lon<(NRE_df[i,1]+a)&
                          lat>(NRE_df[i,2]-a)&lat<(NRE_df[i,2]+a))
@@ -1088,11 +1121,201 @@ NRE_df$pred_nre <- (1/(1+exp(-(-0.0679 *NRE_df$Tg + 0.4217 * log(NRE_df$vpd) + 1
 
 NRE_df$NRE <- NRE_df$NRE/100
 
-ggplot(data=NRE_df, aes(x=pred_nre, y=NRE)) +
+ggplot(data=NRE_df, aes(x=pred_nre, y=NRE)) + xlim(c(0.25,1))+ylim(c(0.25,1))+
   geom_point()+geom_abline(intercept=0,slope=1)+geom_smooth(method = "lm", se = TRUE)+
-  xlab("Prediction")+ylab("Observation")+theme_classic()
+  xlab("Prediction")+ylab("Observation")+theme_classic()+My_Theme
 
 summary(lm(NRE~pred_nre,NRE_df))
 
-save.image(file = "~/yunkepeng/nimpl_sofun_inputs/forest/Forest_site_check.Rdata")
+#now, newly adding fluxnet gpp sites
+fluxnet_site <- ingestr::siteinfo_fluxnet2015
+fluxnet_site$lat <- as.numeric(format(round(fluxnet_site$lat, 2), nsmall = 2))
+fluxnet_site$lon <- as.numeric(format(round(fluxnet_site$lon, 2), nsmall = 2))
 
+GMD_GPP <- read.csv(file="~/data/gpp_gmd/gpp_pmodel_fluxnet2015_stocker19gmd_spatial.csv")
+GMD_GPP <- subset(GMD_GPP,setup=="FULL")
+
+fluxnet_GPP <- merge(fluxnet_site,GMD_GPP,by=c("sitename"),all.x=TRUE)
+
+fluxnet_GPP2 <-fluxnet_GPP[,c("lon","lat","sitename","gpp")]
+fluxnet_GPP2 <- na.omit(fluxnet_GPP2)
+
+NPP_site <- NPP_Forest[,c("lon","lat","z","site")]
+NPP_site$lat <- as.numeric(format(round(NPP_site$lat, 2), nsmall = 2))
+NPP_site$lon <- as.numeric(format(round(NPP_site$lon, 2), nsmall = 2))
+
+
+NPP_test <- merge(NPP_site,fluxnet_GPP2,by=c("lon","lat"),all.x=TRUE)
+NPP_test<- na.omit(NPP_test)
+
+fluxnet_gpp_final <- aggregate(NPP_test,by=list(NPP_test$site), mean,na.rm=TRUE)
+fluxnet_gpp_final <- fluxnet_gpp_final[,c(1,7)]
+names(fluxnet_gpp_final) <- c("site","flux_gpp")
+fluxnet_gpp_final
+
+#now, interpolating 2nd version (with the inclusion of fluxnet predicted gpp)
+NPP_Forest_by_flux <- merge(NPP_Forest,fluxnet_gpp_final,by=c("site"),all.x=TRUE)
+
+NPP_Forest_by_flux$new_gpp <- NA
+
+for (i in 1:nrow(NPP_Forest_by_flux)){
+  if (is.na(NPP_Forest_by_flux$flux_gpp[i]) == TRUE){ 
+    NPP_Forest_by_flux$new_gpp[i] <- NPP_Forest_by_flux$pred_gpp_c3[i]
+  } else {
+    NPP_Forest_by_flux$new_gpp[i] <- NPP_Forest_by_flux$flux_gpp[i]
+  }
+}
+summary(NPP_Forest_by_flux$flux_gpp)
+
+#now, repeat
+
+
+#now, using several statistical models to predict npp, anpp, npp.leaf....
+NPP_Forest_by_flux$pred_npp <- NPP_Forest_by_flux$new_gpp * (1/(1 + exp(-(-0.3677 * log(NPP_Forest_by_flux$CNrt) +
+                                                                -0.1552 * log(NPP_Forest_by_flux$age) + 
+                                                                0.5791 * NPP_Forest_by_flux$fAPAR+
+                                                                1.9144 *NPP_Forest_by_flux$alpha + -1.1052))))
+
+NPP_Forest_by_flux$pred_anpp <- NPP_Forest_by_flux$pred_gpp * (1/(1 + exp(-(-0.6075 * log(NPP_Forest_by_flux$CNrt) +
+                                                              -0.1798 * log(NPP_Forest_by_flux$age) + 
+                                                              0.8617 * NPP_Forest_by_flux$fAPAR+
+                                                              2.1287 *NPP_Forest_by_flux$alpha + -1.3528))))
+
+NPP_Forest_by_flux$pred_bnpp <- NPP_Forest_by_flux$pred_npp - NPP_Forest_by_flux$pred_anpp
+
+NPP_Forest_by_flux$pred_lnpp <- NPP_Forest_by_flux$pred_anpp * (1/(1 + exp(-(1.2350* log(NPP_Forest_by_flux$PPFD) +
+                                                               0.0731 * (NPP_Forest_by_flux$Tg) + 
+                                                               -1.0192 * log(NPP_Forest_by_flux$vpd) + -9.2375))))
+
+NPP_Forest_by_flux$pred_wnpp <- NPP_Forest_by_flux$pred_anpp - NPP_Forest_by_flux$pred_lnpp
+
+#use rsofun - site-species
+#NPP_Forest_by_flux$pred_leafnc <- (0.0162/0.5) + (0.0039/0.5) * NPP_Forest_by_flux$max_vcmax25/NPP_Forest_by_flux$LMA
+NPP_Forest_by_flux$pred_leafnc <- (0.01599/0.5) + (0.005992/0.5) * NPP_Forest_by_flux$max_vcmax25/NPP_Forest_by_flux$LMA
+
+
+NPP_Forest_by_flux$pred_lnf <- NPP_Forest_by_flux$pred_lnpp*NPP_Forest_by_flux$pred_leafnc
+
+NPP_Forest_by_flux$pred_wnf <- NPP_Forest_by_flux$pred_wnpp/97
+
+NPP_Forest_by_flux$pred_bnf <- NPP_Forest_by_flux$pred_bnpp/122
+
+#correct new dataset's rep_info
+NPP_Forest_by_flux2 <- subset(NPP_Forest_by_flux,rep_info!="rep" & rep_info!="rep1"& rep_info!="rep3")
+
+NPP_Forest_by_flux2_sitemean <- aggregate(NPP_Forest_by_flux2,by=list(NPP_Forest_by_flux2$lon,NPP_Forest_by_flux2$lat,NPP_Forest_by_flux2$z), FUN=mean, na.rm=TRUE) #site-mean
+
+#check
+#analyse_modobs2(forest_site2,"pred_gpp", "GPP",type = "points")
+ggplot(data=NPP_Forest_by_flux2, aes(x=new_gpp, y=GPP)) +
+  geom_point()+geom_abline(intercept=0,slope=1)+geom_smooth(method = "lm", se = TRUE)+
+  xlab("Prediction")+ylab("Observation")+theme_classic()
+summary(lm(GPP~new_gpp,NPP_Forest_by_flux2))
+
+ggplot(data=subset(NPP_Forest_by_flux2,file!="Sara Vicca_stand level"), aes(x=new_gpp, y=GPP)) +
+  geom_point()+geom_abline(intercept=0,slope=1)+geom_smooth(method = "lm", se = TRUE)+
+  xlab("Prediction")+ylab("Observation")+theme_classic()
+#those data are somewhere repeated?
+summary(lm(GPP~new_gpp,NPP_Forest_by_flux2,file!="Sara Vicca_stand level"))
+
+#analyse_modobs2(forest_site2,"pred_npp", "TNPP_1",type = "points")
+ggplot(data=NPP_Forest_by_flux2, aes(x=pred_npp, y=TNPP_1)) +
+  geom_point()+geom_abline(intercept=0,slope=1)+geom_smooth(method = "lm", se = TRUE)+
+  xlab("Prediction")+ylab("Observation")+theme_classic()
+summary(lm(TNPP_1~pred_npp,NPP_Forest_by_flux2))
+
+#analyse_modobs2(forest_site2,"pred_anpp", "ANPP_2",type = "points")
+ggplot(data=NPP_Forest_by_flux2, aes(x=pred_anpp, y=ANPP_2)) +
+  geom_point()+geom_abline(intercept=0,slope=1)+geom_smooth(method = "lm", se = TRUE)+
+  xlab("Prediction")+ylab("Observation")+theme_classic()
+summary(lm(ANPP_2~pred_anpp,NPP_Forest_by_flux2))
+
+#analyse_modobs2(forest_site2,"pred_lnpp", "NPP.foliage",type = "points")
+ggplot(data=NPP_Forest_by_flux2, aes(x=pred_lnpp, y=NPP.foliage)) +
+  geom_point()+geom_abline(intercept=0,slope=1)+geom_smooth(method = "lm", se = TRUE)+
+  xlab("Prediction")+ylab("Observation")+theme_classic()
+summary(lm(NPP.foliage~pred_lnpp,NPP_Forest_by_flux2))
+
+#analyse_modobs2(forest_site,"pred_wnpp", "NPP.wood",type = "points")
+ggplot(data=NPP_Forest_by_flux2, aes(x=pred_wnpp, y=NPP.wood)) +
+  geom_point()+geom_abline(intercept=0,slope=1)+geom_smooth(method = "lm", se = TRUE)+
+  xlab("Prediction")+ylab("Observation")+theme_classic()
+summary(lm(NPP.wood~pred_wnpp,NPP_Forest_by_flux2))
+
+#analyse_modobs2(forest_site2,"pred_bnpp", "BNPP_1",type = "points")
+ggplot(data=NPP_Forest_by_flux2, aes(x=pred_bnpp, y=BNPP_1)) +
+  geom_point()+geom_abline(intercept=0,slope=1)+geom_smooth(method = "lm", se = TRUE)+
+  xlab("Prediction")+ylab("Observation")+theme_classic()
+summary(lm(BNPP_1~pred_bnpp,NPP_Forest_by_flux2))
+
+#analyse_modobs2(forest_site,"pred_lnf", "lnf_obs",type = "points") 
+ggplot(data=NPP_Forest_by_flux2, aes(x=pred_lnf, y=lnf_obs_final)) +
+  geom_point()+geom_abline(intercept=0,slope=1)+geom_smooth(method = "lm", se = TRUE)+
+  xlab("Prediction")+ylab("Observation")+theme_classic()
+summary(lm(lnf_obs_final~pred_lnf,NPP_Forest_by_flux2))
+
+#without second interpolation --> use this!
+ggplot(data=NPP_Forest_by_flux2, aes(x=pred_lnf, y=lnf_obs_org)) +
+  geom_point()+geom_abline(intercept=0,slope=1)+geom_smooth(method = "lm", se = TRUE)+
+  xlab("Prediction")+ylab("Observation")+theme_classic()+My_Theme
+summary(lm(lnf_obs_org~pred_lnf,NPP_Forest_by_flux2))
+
+#wnf - assuming constant wood/cn = 97
+ggplot(data=NPP_Forest_by_flux2, aes(x=pred_wnf, y=wnf_obs_final)) +
+  geom_point()+geom_abline(intercept=0,slope=1)+geom_smooth(method = "lm", se = TRUE)+
+  xlab("Prediction")+ylab("Observation")+theme_classic()
+summary(lm(wnf_obs_final~pred_wnf,NPP_Forest_by_flux2))
+
+#bnf - assuming constant root/cn = 122
+ggplot(data=NPP_Forest_by_flux2, aes(x=pred_bnf, y=bnf_obs_final)) +
+  geom_point()+geom_abline(intercept=0,slope=1)+geom_smooth(method = "lm", se = TRUE)+
+  xlab("Prediction")+ylab("Observation")+theme_classic()
+summary(lm(bnf_obs_final~pred_bnf,NPP_Forest_by_flux2))
+
+#bnf - assuming constant root/cn = 122
+NPP_Forest_by_flux2$pred_nuptake <- NPP_Forest_by_flux2$pred_lnf + NPP_Forest_by_flux2$pred_bnf + NPP_Forest_by_flux2$pred_wnf
+NPP_Forest_by_flux2$obs_nuptake <- NPP_Forest_by_flux2$lnf_obs_org + NPP_Forest_by_flux2$bnf_obs_final + NPP_Forest_by_flux2$wnf_obs_final
+
+ggplot(data=NPP_Forest_by_flux2, aes(x=pred_nuptake, y=obs_nuptake)) +
+  geom_point()+geom_abline(intercept=0,slope=1)+geom_smooth(method = "lm", se = TRUE)+
+  xlab("Prediction")+ylab("Observation")+theme_classic()
+summary(lm(obs_nuptake~pred_nuptake,NPP_Forest_by_flux2))
+
+save.image(file = "~/yunkepeng/nimpl_sofun_inputs/forest/reprocessing_forest_site_simulation.Rdata")
+
+#now, adding Nuptake from additional source
+NPP_Forest_by_flux2_Nuptake <- subset(NPP_Forest_by_flux2,obs_nuptake>0)
+NPP_Forest_by_flux2_Nuptake <- NPP_Forest_by_flux2_Nuptake[,c("lon","lat","pred_nuptake","obs_nuptake")]
+NPP_Forest_by_flux2_Nuptake$method <- "tissues C allocations and C/N"
+Nuptake_new <- read.csv("/Users/yunpeng/data/NPP_Yunke/Nuptake_gcme/All_Nuptake.csv")
+Nuptake_new <- Nuptake_new[,c("lon","lat","pred_nuptake","obs_nuptake","method")]
+
+Nuptake_final <- dplyr::bind_rows(NPP_Forest_by_flux2_Nuptake, Nuptake_new)
+
+ggplot(data=Nuptake_final, aes(x=pred_nuptake, y=obs_nuptake)) +
+  geom_point(aes(x=pred_nuptake, y=obs_nuptake,color=factor(method)))+geom_abline(intercept=0,slope=1)+geom_smooth(aes(x=pred_nuptake, y=obs_nuptake,color=factor(method)),method = "lm", se = TRUE)+
+  xlab("Predicted N uptake")+ylab("Measured N uptake")+theme_classic()+My_Theme
+
+ggplot(data=Nuptake_final, aes(x=pred_nuptake, y=obs_nuptake)) +
+  geom_point(aes(x=pred_nuptake, y=obs_nuptake,color=factor(method)))+geom_abline(intercept=0,slope=1)+geom_smooth(method = "lm", se = TRUE)+
+  xlab("Predicted N uptake")+ylab("Measured N uptake")+theme_classic()+My_Theme
+summary(lm(obs_nuptake~pred_nuptake,Nuptake_final))
+
+Nuptake_final_miner <- subset(Nuptake_final,method=="Net minerlization (Finzi paper)")
+ggplot(data=Nuptake_final_miner, aes(x=pred_nuptake, y=obs_nuptake)) +
+  geom_point(aes(x=pred_nuptake, y=obs_nuptake,color=factor(method)))+geom_abline(intercept=0,slope=1)+geom_smooth(method = "lm", se = TRUE)+
+  xlab("Predicted N uptake")+ylab("Measured N uptake")+theme_classic()+My_Theme
+summary(lm(obs_nuptake~pred_nuptake,Nuptake_final_miner))
+
+ggplot(data=Nuptake_final, aes(x=pred_nuptake, y=obs_nuptake)) +
+  geom_point(aes(x=pred_nuptake, y=obs_nuptake,color=factor(method)))+geom_abline(intercept=0,slope=1)+geom_smooth(method = "lm", se = TRUE)+
+  xlab("Predicted N uptake")+ylab("Measured N uptake")+theme_classic()+My_Theme
+summary(lm(obs_nuptake~pred_nuptake,Nuptake_final))
+
+newmap <- getMap(resolution = "low")
+plot(newmap, xlim = c(-180, 180), ylim = c(-75, 75), asp = 1)
+
+#net minerlization
+points(Nuptake_final$lon,Nuptake_final$lat, col="red", pch=16,cex=1)
+points(Nuptake_final$lon[1:18],Nuptake_final$lat[1:18], col="green", pch=16,cex=1)
+points(Nuptake_final$lon[259:346],Nuptake_final$lat[259:346], col="blue", pch=16,cex=1)

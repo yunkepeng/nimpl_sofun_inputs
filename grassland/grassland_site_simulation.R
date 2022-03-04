@@ -933,12 +933,12 @@ nrow(subset(NPP_grassland_final11,TNPP_1>=weightedgpp_all))
 test <- subset(NPP_grassland_final11,file !="Keith")
 
 ggplot(test, aes(x=weightedgpp_all, y=TNPP_1)) +
-  geom_point(aes(color=factor(file)))+geom_abline(intercept=0,slope=0.8)+
+  geom_point(aes(color=factor(file)))+geom_abline(intercept=0,slope=1)+
   geom_abline(intercept=0,slope=0.2)+
   xlab(" Predicted GPP (gC/m2/yr)")+ylab("Measured NPP (gC/m2/yr)")+theme_classic() +My_Theme +
   ggtitle("Measured NPP vs. Predicted GPP
           
-      Two lines are NPP/GPP = 0.8 and 0.2 separately")
+      Two lines are NPP/GPP = 1 and 0.2 separately")
 
 sara <- subset(NPP_grassland_final11,file != "China Grassland")
 outlier_sara <- subset(sara,TNPP_1/weightedgpp_all >= 0.8 |
