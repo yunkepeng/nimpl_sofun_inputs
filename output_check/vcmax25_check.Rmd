@@ -44,7 +44,7 @@ library(dplyr)
 library(gplots)
 library(tidyselect)
 library(extrafont)
-library(rbeni)
+devtools::load_all("/Users/yunpeng/yunkepeng/rbeni/")
 library(raster)
 library(spgwr)
 library(maps)
@@ -146,58 +146,51 @@ vcmax25_input2 <- merge(vcmax25_max,elev,by=c("lat","lon"),all.x=TRUE)
 names(vcmax25_input2) <- c("lat","lon","vcmax25","z")
 
 #7. input site vcmax25 from Global Vcmax25 MS paper (Peng et al. unpublished).
-species_vc25 <- read.csv(file="~/data/VcmaxMS/final_individuals.csv")
+species_vc25 <- read.csv(file="~/data/leaf_traits/combined_leaf_traits_updated.csv")
+species_vc25 <- subset(species_vc25,Vcmax25>0 & narea>0 & parea>0)
 sites_vc25 <- aggregate(species_vc25,by=list(species_vc25$lon,species_vc25$lat), FUN=mean, na.rm=TRUE)
 dim(sites_vc25)
-sites_vc25 <- sites_vc25[,c("lon","lat","Elevation","Vcmax.25")]
+sites_vc25 <- sites_vc25[,c("lon","lat","z","Vcmax25")]
 head(sites_vc25) #lon, lat, Elevation, obs_vcmax25 (umol/m2/s)
 samples <- sites_vc25[,1:3] #this only includes x,y,z now, which is prepared for gwr then.
 names(samples) <- c("lon","lat","z")
 
-# create empty list and dataframe for gwr
-mylist <- vector(mode = "list", length = nrow(sites_vc25)) # for specifying gridded data at certain degrees
-mylist2 <- vector(mode = "list", length = nrow(sites_vc25)) # for interpolating sites
-site_vcmax25 <- data.frame(matrix(NA)) # for final sites climate data
-
 # prepare for gridded vcmax25 only > 0. 
 vcmax25_input1 <- subset(vcmax25_input1,vcmax25>0)
-
-#apply weighted sums
-for (i in c(1:186,191:266)){ 
-  mylist[[i]]<- subset(vcmax25_input1,lon>(samples[i,1]-a)&lon<(samples[i,1]+a)&lat>(samples[i,2]-a)&lat<(samples[i,2]+a))
-  coordinates(mylist[[i]]) <- c("lon","lat")
-  gridded(mylist[[i]]) <- TRUE
-  mylist2[[i]] <- samples[i,1:3]
-  coordinates(mylist2[[i]]) <- c("lon","lat")
-  samples$vcmax25_weighted[i] <- (gwr(vcmax25 ~ z, mylist[[i]], bandwidth = 1.06, fit.points = mylist2[[i]],predictions=TRUE))$SDF$pred
-  #print(i)
-}
-
+summary(vcmax25_input1)
 #apply max (same above)
 vcmax25_input2 <- subset(vcmax25_input2,vcmax25>0)
-samples2 <- sites_vc25[,1:3] 
-names(samples2) <- c("lon","lat","z")
-site_vcmax25 <- data.frame(matrix(NA)) # for final sites climate data
+summary(vcmax25_input2)
+a = 1.5
 
-mylist <- vector(mode = "list", length = nrow(sites_vc25)) # for specifying gridded data at certain degrees
-mylist2 <- vector(mode = "list", length = nrow(sites_vc25)) # for sites
+samples$weighted_vcmax25 <- NA
+samples$max_vcmax25 <- NA
 
-for (i in c(1:186,191:266)){
-  mylist[[i]]<- subset(vcmax25_input2,lon>(samples2[i,1]-a)&lon<(samples2[i,1]+a)&lat>(samples2[i,2]-a)&lat<(samples2[i,2]+a))
-  coordinates(mylist[[i]]) <- c("lon","lat")
-  gridded(mylist[[i]]) <- TRUE
-  mylist2[[i]] <- samples2[i,1:3]
-  coordinates(mylist2[[i]]) <- c("lon","lat")
-  samples2$vcmax25_max[i] <- (gwr(vcmax25 ~ z, mylist[[i]], bandwidth = 1.06, fit.points = mylist2[[i]],predictions=TRUE))$SDF$pred
-  #print(i)
-}
+for (i in 1:nrow(samples)) {
+  tryCatch({
+    #weighted
+    vcmax25_input1 <- na.omit(vcmax25_input1)
+    vcmax25_input1_part <- subset(vcmax25_input1,lon>(samples[i,"lon"]-a)&lon<(samples[i,"lon"]+a)&
+                                    lat>(samples[i,"lat"]-a)&lat<(samples[i,"lat"]+a))
+    coordinates(vcmax25_input1_part) <- c("lon","lat")
+    gridded(vcmax25_input1_part) <- TRUE
+    samples_coord <- samples[i,c("lon","lat","z")]
+    coordinates(samples_coord) <- c("lon","lat")
+    samples[i,c("weighted_vcmax25")] <- (gwr(vcmax25 ~ z, vcmax25_input1_part, bandwidth = 1.06, fit.points =samples_coord,predictions=TRUE))$SDF$pred
+    #max
+    vcmax25_input2 <- na.omit(vcmax25_input2)
+    vcmax25_input2_part <- subset(vcmax25_input2,lon>(samples[i,"lon"]-a)&lon<(samples[i,"lon"]+a)&
+                                    lat>(samples[i,"lat"]-a)&lat<(samples[i,"lat"]+a))
+    coordinates(vcmax25_input2_part) <- c("lon","lat")
+    gridded(vcmax25_input2_part) <- TRUE
+    samples_coord <- samples[i,c("lon","lat","z")]
+    coordinates(samples_coord) <- c("lon","lat")
+    samples[i,c("max_vcmax25")] <- (gwr(vcmax25 ~ z, vcmax25_input2_part, bandwidth = 1.06, fit.points =samples_coord,predictions=TRUE))$SDF$pred
+  }, error=function(e){})} 
 
-all_vcmax25 <- cbind(sites_vc25,samples[,c("vcmax25_weighted")],samples2[,c("vcmax25_max")])
-names(all_vcmax25) <- c("lon","lat","Elevation","obs_vcmax25","pred_vcmax25_weightsum","pred_vcmax25_max")
-
-
-analyse_modobs2(all_vcmax25,"obs_vcmax25","pred_vcmax25_weightsum", type = "points")
-analyse_modobs2(all_vcmax25,"obs_vcmax25","pred_vcmax25_max", type = "points")
+samples$obs_vcmax25 <- sites_vc25$Vcmax25
+analyse_modobs2(samples,"obs_vcmax25","weighted_vcmax25", type = "points")
+analyse_modobs2(samples,"obs_vcmax25","max_vcmax25", type = "points")
 #it is no doubt that max method performs better(no underestimation)!
 
 gg<- plot_map3(subset(vcmax25_weightedsum,vcmax25>0), 
