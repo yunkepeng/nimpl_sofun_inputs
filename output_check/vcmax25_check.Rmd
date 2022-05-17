@@ -51,99 +51,26 @@ library(maps)
 library(rworldmap)
 library(cowplot)
 
-######Test 1: Vcmax25 using weighted sum method 
-#1. input nc files for vcmax25 over 20 yrs.
-name <- "vcmax25"
-max <- 999999 #this number presents the max value we would like to subset. 
+#vcmax25_max and vcmax25_mean were reprocessing for 30 years in /Users/yunpeng/yunkepeng/nimpl_sofun_inputs_final/submission_newphytol/preprocessing/Vcmax25.Rmd
 
-outputdata <- function(name,year,min,max,path){
-  #-----------------------------------------------------------------------
-  # Input: name: variable vcmax25
-  # Input: min,max: minimum and maximum value in the map.
-  #-----------------------------------------------------------------------
-  ncin <- nc_open(paste (path, "global.",year,".a." ,name, ".nc", sep=""))
-  #ncin <- nc_open(paste ("~/data/sofun_outputs/output_nc/global/", "global.2004.a." ,name, ".nc", sep=""))
-  lon <- ncvar_get(ncin,"lon")
-  lat<-ncvar_get(ncin,"lat")
-  variable <- ncvar_get(ncin,name)
-  nc_close(ncin)
-  
-  variabelist <- as.vector(variable)
-  lonlat <- expand.grid(lon, lat)
-  output_final <- as.data.frame(cbind(lonlat,variabelist))
-  names(output_final) <- c("lon","lat",name)
-  output_final2 <- subset(output_final,output_final[,3]>min & output_final[,3]<max) # to make map easy to follow, it subset a reasonable value here.
-  coordinates(output_final2) <- ~lon+lat 
-  gridded(output_final2) <- TRUE
-  rmap <- raster(output_final2, name) 
-  #plot(rmap,main=name)
-  return(output_final)
-  #-----------------------------------------------------------------------
-  # Output: plot(rmap): the presentation of global map (after subsetting max of data)
-  # Output: output_final: the output data (259200 * 3) including lon, lat and value
-  #-----------------------------------------------------------------------
-}
-
-#2. output them in a dataframe (dim: 259200 rows * 20 years)
-vcmax25_20yrs <- data.frame(matrix(NA))
-
-for (i in 1991:2005){
-  vcmax25_20yrs[1:259200,i-1991+1] <- outputdata("vcmax25",i,-999999,999999,"~/data/output_vcmax25/weight/")[,3]
-}
-
-#3. convert unit from mol/m2/s to umol/m2/s
-vcmax25_final <- (vcmax25_20yrs)
-
-#4. construct coordinates (lon, lat)
-lonlat <- outputdata("vcmax25",i,-999999,999999,"~/data/output_vcmax25/weight/")[,1:2]
-
-#5. calculate vcmax25 average of 20yrs, cbind, rename and plot map
-vcmax25_weightedsum <- cbind(lonlat,rowMeans(vcmax25_final,na.rm = TRUE))
+vcmax25_weightedsum <- as.data.frame(nc_to_df(read_nc_onefile("~/data/nimpl_sofun_inputs/map/Final_ncfile/vcmax25_weighted.nc"), varnam = "vcmax25"))
+summary(vcmax25_weightedsum)
 names(vcmax25_weightedsum) <- c("lon","lat","vcmax25")
 
-coordinates(vcmax25_weightedsum) <- ~lon+lat 
-gridded(vcmax25_weightedsum) <- TRUE
-rweighted <- raster(vcmax25_weightedsum, "vcmax25") 
-plot(rweighted)
-title("Fig.1a Vcmax25 using 'weighted-sum GPP' method in 1991-2010 (umol m-2 s-1) ")
-
-######Test 2: Vcmax25 using max daily vcmax25
-vcmax25max_20yrs <- data.frame(matrix(NA)) # for final sites climate data
-for (i in 1991:2005){
-  vcmax25max_20yrs[1:259200,i-1991+1] <- outputdata("annualvcmax25",i,-999999,999999,"~/data/output_vcmax25/max/")[,3]
-}
-
-vcmax25finalmax <- vcmax25max_20yrs
-vcmax25_max <- cbind(lonlat,rowMeans(vcmax25finalmax,na.rm = TRUE))
-names(vcmax25_max) <- c("lon","lat","annualvcmax25")
-coordinates(vcmax25_max) <- ~lon+lat 
-gridded(vcmax25_max) <- TRUE
-rmax <- raster(vcmax25_max, "annualvcmax25") 
-plot(rmax)
-title("Fig.1b Vcmax25 using daily maximum vcmax25 of year in 1991-2010 (umol m-2 s-1) ")
-
-
-#6. applying geographically weighted regression (gwr) to extract site vcmax25 from grids data
-i <- 1 # sites started from 1 to n.
-a <- 1.5 # how many distance (in degrees) to be considered when interpolating values in gwr. This value has been examined in advance, and considered as the optimum value (with highest R2).
-
-#merge weighted-sum vcmax25 with 0.5*0.5 grid elevation
-vcmax25_weightedsum <- cbind(lonlat,rowMeans(vcmax25_final,na.rm = TRUE))
-names(vcmax25_weightedsum) <- c("lon","lat","vcmax25")
+vcmax25_max <- as.data.frame(nc_to_df(read_nc_onefile("~/data/nimpl_sofun_inputs/map/Final_ncfile/vcmax25.nc"), varnam = "vcmax25"))
+summary(vcmax25_max)
+names(vcmax25_max) <- c("lon","lat","vcmax25")
 
 elev_nc <- read_nc_onefile("~/data/watch_wfdei/WFDEI-elevation.nc")
 #elev_nc <- read_nc_onefile("D:/PhD/nimpl_sofun_inputs/Data/Elevation/WFDEI-elevation.nc")
 elev <- as.data.frame(nc_to_df(elev_nc, varnam = "elevation"))
 head(elev) # this is consistent with df coord below
 
-#elev <- read.csv(file="D:/PhD/yunkebranch_units/vc25/elev.csv")#include elevation data of 0.5 grids
-vcmax25_input1 <- merge(vcmax25_weightedsum,elev,by=c("lat","lon"),all.x=TRUE) #merge with z
-names(vcmax25_input1) <- c("lat","lon","vcmax25","z")
+vcmax25_weightedsum$z <- elev$myvar
+vcmax25_max$z <- elev$myvar
 
-#merge max vcmax25 with 0.5*0.5 grid elevation
-vcmax25_max <- cbind(lonlat,rowMeans(vcmax25finalmax,na.rm = TRUE))
-vcmax25_input2 <- merge(vcmax25_max,elev,by=c("lat","lon"),all.x=TRUE)
-names(vcmax25_input2) <- c("lat","lon","vcmax25","z")
+#6. applying geographically weighted regression (gwr) to extract site vcmax25 from grids data
+a <- 1.5 # how many distance (in degrees) to be considered when interpolating values in gwr. This value has been examined in advance, and considered as the optimum value (with highest R2).
 
 #7. input site vcmax25 from Global Vcmax25 MS paper (Peng et al. unpublished).
 species_vc25 <- read.csv(file="~/data/leaf_traits/combined_leaf_traits_updated.csv")
@@ -156,10 +83,10 @@ samples <- sites_vc25[,1:3] #this only includes x,y,z now, which is prepared for
 names(samples) <- c("lon","lat","z")
 
 # prepare for gridded vcmax25 only > 0. 
-vcmax25_input1 <- subset(vcmax25_input1,vcmax25>0)
+vcmax25_input1 <- subset(vcmax25_weightedsum,vcmax25>0)
 summary(vcmax25_input1)
 #apply max (same above)
-vcmax25_input2 <- subset(vcmax25_input2,vcmax25>0)
+vcmax25_input2 <- subset(vcmax25_max,vcmax25>0)
 summary(vcmax25_input2)
 a = 1.5
 
@@ -189,18 +116,18 @@ for (i in 1:nrow(samples)) {
   }, error=function(e){})} 
 
 samples$obs_vcmax25 <- sites_vc25$Vcmax25
-analyse_modobs2(samples,"obs_vcmax25","weighted_vcmax25", type = "points")
-analyse_modobs2(samples,"obs_vcmax25","max_vcmax25", type = "points")
+analyse_modobs2(samples,"weighted_vcmax25","obs_vcmax25", type = "points")
+analyse_modobs2(samples,"max_vcmax25","obs_vcmax25", type = "points")
 #it is no doubt that max method performs better(no underestimation)!
 
-gg<- plot_map3(subset(vcmax25_weightedsum,vcmax25>0), 
+gg<- plot_map3(vcmax25_input1, 
                varnam = "vcmax25",plot_title = "weighted-sum vcmax25",
                latmin = -65, latmax = 85) 
 gg
-names(vcmax25_max) <- c("lon","lat","vcmax25")
-gg<- plot_map3(subset(vcmax25_max,vcmax25>0), 
+gg<- plot_map3(vcmax25_input2, 
                varnam = "vcmax25",plot_title = "Max vcmax25",
                latmin = -65, latmax = 85) 
 gg
+
 
 ```
